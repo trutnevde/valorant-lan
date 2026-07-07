@@ -34,6 +34,7 @@ const G = {
   map: null, player: null,
   weapons: null, abilities: null, fx: null, sfx: new Sfx(), hud: null,
   spikePos: null, spikeFx: null,
+  spikeCarrier: 0, spikeDroppedPos: null, spikeDropFx: null,
   pulled: null, stunnedUntil: 0, slowMul: 1, blindUntil: 0, blindStink: false, shake: 0,
   boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
   banquets: [], cloneMode: false, clonedIds: new Set(),
@@ -315,6 +316,7 @@ function onMessage(msg) {
     case 'planted':
       G.phase = PHASES.PLANTED;
       G.deadline = now() + msg.tLeft;
+      G.spikeCarrier = 0;
       G.spikePos = msg.pos;
       G.spikeFx = G.fx.spikeMesh(new THREE.Vector3(msg.pos[0], msg.pos[1] || 0, msg.pos[2]));
       G.hud.progress('', -1);
@@ -330,6 +332,34 @@ function onMessage(msg) {
         G.hud.progress('ОБЕЗВРЕЖИВАНИЕ', msg.pct);
         if (now() - (G._lastTickSnd || 0) > 0.25) { G._lastTickSnd = now(); G.sfx.plantTick(); }
       }
+      break;
+    case 'spikeDrop': {
+      G.spikeCarrier = 0;
+      G.spikeDroppedPos = msg.pos;
+      if (G.spikeDropFx) G.spikeDropFx.kill();
+      G.spikeDropFx = G.fx.spikeMesh(new THREE.Vector3(msg.pos[0], msg.pos[1] || 0, msg.pos[2]), 'dropped');
+      G.hud.announce('', G.side === 'attack' ? 'ШИП НА ЗЕМЛЕ — ПОДБЕРИ ЕГО!' : 'НОСИТЕЛЬ ШИПА УБИТ', 2.5);
+      break;
+    }
+    case 'spikePick': {
+      G.spikeCarrier = msg.id;
+      G.spikeDroppedPos = null;
+      if (G.spikeDropFx) { G.spikeDropFx.kill(); G.spikeDropFx = null; }
+      if (msg.id === G.myId) G.hud.announce('', 'ШИП У ТЕБЯ — ДОНЕСИ И ПОСТАВЬ (4)', 2);
+      G.sfx.buy();
+      break;
+    }
+    case 'noSpike':
+      G.sfx.error();
+      G.hud.announce('', 'ШИП НЕ У ТЕБЯ', 1.5);
+      break;
+    case 'defuseBusy':
+      G.sfx.error();
+      G.hud.announce('', 'ШИП УЖЕ РАЗМИНИРУЮТ', 1.5);
+      break;
+    case 'defuseHalf':
+      G.hud.announce('', 'ПОЛОВИНА ЗАФИКСИРОВАНА', 1.5);
+      G.sfx.defused();
       break;
     case 'defused':
       G.hud.progress('', -1);
@@ -445,6 +475,9 @@ function onRoundStart(msg) {
   G.spottedUntil.clear(); G.revealed.clear();
   G.spikePos = null;
   if (G.spikeFx) { G.spikeFx.kill(); G.spikeFx = null; }
+  G.spikeCarrier = msg.spikeCarrier || 0;
+  G.spikeDroppedPos = null;
+  if (G.spikeDropFx) { G.spikeDropFx.kill(); G.spikeDropFx = null; }
   G.shootables = [];
 
   const st = msg.status[G.myId];
@@ -470,7 +503,7 @@ function onRoundStart(msg) {
   G.hud.setRound(G.round);
   G.hud.setRole(G.side === 'attack' ? '— АТАКА —' : '— ЗАЩИТА —');
   G.hud.progress('', -1);
-  G.hud.announce(`РАУНД ${G.round}`, roleHint(), 3);
+  G.hud.announce(`РАУНД ${G.round}`, G.spikeCarrier === G.myId ? 'ШИП У ТЕБЯ — ДОНЕСИ И ПОСТАВЬ (4)' : roleHint(), 3);
   G.hud.openBuy();
 }
 
@@ -646,6 +679,11 @@ function bindGameKeys() {
       case 'KeyE': G.abilities && G.abilities.use('E'); break;
       case 'KeyX': G.abilities && G.abilities.use('X'); break;
       case 'Digit4':
+        if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive && G.spikeCarrier !== G.myId) {
+          G.sfx.error();
+          G.hud.announce('', 'ШИП НЕ У ТЕБЯ', 1.2);
+          break;
+        }
         if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive && inSite(G.player.pos) && G.player.grounded) {
           G.holdAction = 'plant';
           G.net.send({ t: 'plantStart' });
@@ -747,7 +785,13 @@ function frame(tms) {
   }
 
   if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive) {
-    G.hud.setRole(inSite(G.player.pos) ? '⯁ ТЫ НА САЙТЕ — ДЕРЖИ [4], ЧТОБЫ ПОСТАВИТЬ ШИП' : '— АТАКА —');
+    if (G.spikeCarrier === G.myId) {
+      G.hud.setRole(inSite(G.player.pos) ? '⯁ ТЫ НА САЙТЕ — ДЕРЖИ [4], ЧТОБЫ ПОСТАВИТЬ ШИП' : '— АТАКА — ШИП У ТЕБЯ');
+    } else if (G.spikeDroppedPos) {
+      G.hud.setRole('— АТАКА — ШИП НА ЗЕМЛЕ, ПОДБЕРИ!');
+    } else {
+      G.hud.setRole('— АТАКА — шип у ' + nameOf(G.spikeCarrier));
+    }
   }
 
   if (t - lastAbHud > 0.2) {

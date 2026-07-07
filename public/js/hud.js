@@ -342,10 +342,16 @@ export class HUD {
       c.fillStyle = 'rgba(160,175,190,0.55)';
       c.beginPath(); c.arc(sx, sy, s.r * this.mmScaleX, 0, 7); c.fill();
     }
-    // шип
+    // шип установлен — красная мигающая
     if (G.spikePos) {
       const [sx, sy] = this.mmPt(G.spikePos[0], G.spikePos[2]);
       c.fillStyle = (t % 0.8 < 0.4) ? '#ff2233' : '#881122';
+      c.beginPath(); c.arc(sx, sy, 4, 0, 7); c.fill();
+    }
+    // шип на земле — янтарная мигающая (подбери!)
+    if (G.spikeDroppedPos) {
+      const [sx, sy] = this.mmPt(G.spikeDroppedPos[0], G.spikeDroppedPos[2]);
+      c.fillStyle = (t % 0.6 < 0.3) ? '#ffb020' : '#7a5510';
       c.beginPath(); c.arc(sx, sy, 4, 0, 7); c.fill();
     }
     // игроки

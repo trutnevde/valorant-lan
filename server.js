@@ -53,6 +53,9 @@ const match = {
   defusing: null,     // {by, start}
   defuseAccum: 0,
   spike: null,        // {pos, boomAt}
+  spikeCarrier: null, // id игрока с шипом (плантить может только он)
+  spikeDropped: null, // {pos} — шип лежит на земле (носитель погиб)
+  defuseHalfDone: false,
   smokes: [],         // {pos:[x,y,z], r, until} — для LOS ботов
   zones: [],          // {type, pos|a/b, r, dps, from, until, owner} — урон ботам
   healZones: [],      // {kind, team, a?/b?/pos?/r?, rate, until} — хилки Иры
@@ -151,6 +154,12 @@ function startRound() {
   match.deadline = now() + RULES.BUY_TIME;
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
+  match.spikeDropped = null; match.defuseHalfDone = false;
+  // шип получает ОДИН случайный атакер (людям — приоритет)
+  const attackers = teamOf(match.attackTeam);
+  const humanAtt = attackers.filter(a => !a.bot);
+  const pool = humanAtt.length ? humanAtt : attackers;
+  match.spikeCarrier = pool.length ? pool[Math.floor(Math.random() * pool.length)].id : null;
 
   const spawnIdx = { A: 0, B: 0 };
   for (const p of players.values()) {
@@ -175,6 +184,7 @@ function startRound() {
   broadcast({
     t: 'roundStart', round: match.round, score: match.score,
     sides: { A: sideOfTeam('A'), B: sideOfTeam('B') },
+    spikeCarrier: match.spikeCarrier,
     buyTime: RULES.BUY_TIME, credits, status,
   });
 }
@@ -261,6 +271,11 @@ function onDeath(victim, killerId, weapon, part) {
     broadcast({ t: 'cocoonEnd', victim: victim.id, freed: false });
     match.cocoon = null;
   }
+  if (match.state === PHASES.LIVE && match.spikeCarrier === victim.id) {
+    match.spikeCarrier = null;
+    match.spikeDropped = { pos: [...victim.lastPos] };
+    broadcast({ t: 'spikeDrop', pos: match.spikeDropped.pos });
+  }
   broadcast({ t: 'death', id: victim.id, by: killerId, weapon, part });
   // исход раунда
   if (match.state === PHASES.LIVE) {
@@ -280,7 +295,10 @@ function heal(p, amt) {
 
 function stopDefuse() {
   if (!match.defusing) return;
-  match.defuseAccum += now() - match.defusing.start;
+  // сохранение прогресса — только по половинкам: перевалил за 50% — остаёшься на 50%, нет — с нуля
+  const total = match.defuseAccum + (now() - match.defusing.start);
+  const half = RULES.DEFUSE_TIME / 2;
+  match.defuseAccum = total >= half ? half : 0;
   match.defusing = null;
   broadcast({ t: 'defuseProg', pct: -1 });
 }
@@ -455,6 +473,7 @@ function onMessage(p, msg) {
     case 'ability': onAbility(p, msg); break;
     case 'plantStart': {
       if (match.state !== PHASES.LIVE || sideOfTeam(p.team) !== 'attack' || !p.alive) return;
+      if (p.id !== match.spikeCarrier) { send(p, { t: 'noSpike' }); return; }
       const site = inSite(p.lastPos);
       if (!site || match.planting) return;
       match.planting = { by: p.id, start: now(), pos: [...p.lastPos] };
@@ -466,8 +485,9 @@ function onMessage(p, msg) {
       break;
     case 'defuseStart': {
       if (match.state !== PHASES.PLANTED || sideOfTeam(p.team) !== 'defend' || !p.alive || !match.spike) return;
+      if (match.defusing) { send(p, { t: 'defuseBusy' }); return; } // шип разминирует ОДИН
       const d = Math.hypot(p.lastPos[0] - match.spike.pos[0], p.lastPos[2] - match.spike.pos[2]);
-      if (d > 2.8 || match.defusing) return;
+      if (d > 2.8) return;
       match.defusing = { by: p.id, start: now() };
       broadcast({ t: 'defuseProg', pct: match.defuseAccum / RULES.DEFUSE_TIME });
       break;
@@ -820,14 +840,33 @@ function tickBot(bot, dt) {
   // --- назначение цели по фазе ---
   if (side === 'attack') {
     if (match.state === PHASES.LIVE) {
-      if (!ai.site) { ai.site = Math.random() < 0.5 ? 'A' : 'B'; botSetGoal(bot, botPlantNode(ai.site), 'plant'); }
-      if (ai.goal === 'plant' && ai.pathIdx >= ai.path.length && inSite(bot.lastPos)) {
+      const isCarrier = match.spikeCarrier === bot.id;
+      // шип лежит на земле — свободные атакеры бегут подбирать
+      if (match.spikeDropped && !isCarrier) {
+        if (ai.goal !== 'fetch') botSetGoal(bot, navNearest(match.spikeDropped.pos), 'fetch');
+        if (ai.pathIdx >= ai.path.length) {
+          moveToward(bot, [match.spikeDropped.pos[0], match.spikeDropped.pos[1], match.spikeDropped.pos[2]], dt, combat);
+          return;
+        }
+      } else if (ai.goal === 'fetch' && !match.spikeDropped) {
+        // шип подобрали — возвращаемся к плану
+        ai.goal = null; ai.site = null; ai.path = []; ai.pathIdx = 0;
+      }
+      if (!ai.site) {
+        ai.site = Math.random() < 0.5 ? 'A' : 'B';
+        botSetGoal(bot, botPlantNode(ai.site), isCarrier ? 'plant' : 'hold');
+      }
+      // подобрал шип по пути — теперь его очередь плантить
+      if (isCarrier && ai.goal === 'hold') ai.goal = 'plant';
+      if (ai.goal === 'plant' && isCarrier && ai.pathIdx >= ai.path.length && inSite(bot.lastPos)) {
         if (!match.planting && !combat) { // при враге рядом сначала отбиться
           match.planting = { by: bot.id, start: t, pos: [...bot.lastPos] };
           broadcast({ t: 'plantProg', pct: 0 });
         }
         if (match.planting && match.planting.by === bot.id) { if (!combat) return; }
         else if (!combat) { bot.yaw += dt * 0.8; return; }
+      } else if (ai.goal === 'hold' && ai.pathIdx >= ai.path.length) {
+        if (!combat) { bot.yaw += dt * 0.8; return; } // прикрывает носителя на сайте
       }
     } else if (match.state === PHASES.PLANTED) {
       if (ai.goal !== 'holdSpike') botSetGoal(bot, navNearest(match.spike.pos), 'holdSpike');
@@ -895,6 +934,7 @@ setInterval(() => {
         if (pct >= 1) {
           const planter = players.get(match.planting.by);
           match.spike = { pos: [...match.planting.pos], boomAt: t + RULES.SPIKE_TIME };
+          match.spikeCarrier = null;
           match.planting = null;
           match.state = PHASES.PLANTED;
           match.deadline = match.spike.boomAt;
@@ -912,12 +952,28 @@ setInterval(() => {
           broadcast({ t: 'plantProg', pct });
         }
       }
+      // подбор лежащего шипа любым живым атакером
+      if (match.spikeDropped) {
+        for (const q of players.values()) {
+          if (!q.alive || sideOfTeam(q.team) !== 'attack') continue;
+          if (Math.hypot(q.lastPos[0] - match.spikeDropped.pos[0], q.lastPos[2] - match.spikeDropped.pos[2]) < 1.5) {
+            match.spikeCarrier = q.id;
+            match.spikeDropped = null;
+            broadcast({ t: 'spikePick', id: q.id });
+            break;
+          }
+        }
+      }
       if (match.state === PHASES.LIVE && t >= match.deadline) endRound(enemyTeam(match.attackTeam), 'time');
       break;
     }
     case PHASES.PLANTED: {
       if (match.defusing) {
         const total = match.defuseAccum + (t - match.defusing.start);
+        if (!match.defuseHalfDone && total >= RULES.DEFUSE_TIME / 2) {
+          match.defuseHalfDone = true;
+          broadcast({ t: 'defuseHalf' });
+        }
         const pct = total / RULES.DEFUSE_TIME;
         if (pct >= 1) {
           const defuser = players.get(match.defusing.by);
@@ -1073,6 +1129,11 @@ wss.on('connection', (ws) => {
   });
 
   ws.on('close', () => {
+    if (match.running && match.state === PHASES.LIVE && match.spikeCarrier === id) {
+      match.spikeCarrier = null;
+      match.spikeDropped = { pos: [...p.lastPos] };
+      broadcast({ t: 'spikeDrop', pos: match.spikeDropped.pos });
+    }
     players.delete(id);
     console.log(`[-] Игрок ${id} отключился`);
     if (humans().length === 0) {

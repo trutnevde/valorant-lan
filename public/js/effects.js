@@ -323,33 +323,89 @@ export class Effects {
     });
   }
 
-  spikeMesh(pos) {
+  // Шип: чёрный металл, пульсирующее энерго-ядро, вращающиеся кольца, три плавника.
+  // variant: 'planted' — стоит и заряжается; 'dropped' — лежит на боку, тускло тлеет
+  spikeMesh(pos, variant = 'planted') {
     const g = new THREE.Group();
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.22, 0.3, 0.5, 6),
-      new THREE.MeshLambertMaterial({ color: '#3a2f4f' })
-    );
-    body.position.y = 0.25;
+    const metal = new THREE.MeshStandardMaterial({ color: 0x23272f, metalness: 0.75, roughness: 0.35 });
+    const finMat = new THREE.MeshStandardMaterial({ color: 0x3c4454, metalness: 0.6, roughness: 0.4 });
+
+    // основание-опора
+    const base = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.4, 0.14, 8), metal);
+    base.position.y = 0.07;
+    base.castShadow = true;
+    g.add(base);
+    // восьмигранный корпус
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.24, 0.5, 8), metal);
+    body.position.y = 0.4;
+    body.castShadow = true;
     g.add(body);
-    const lamp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.07),
-      new THREE.MeshBasicMaterial({ color: 0xff2233 })
-    );
-    lamp.position.y = 0.55;
-    g.add(lamp);
-    const light = new THREE.PointLight(0xff2233, 0, 6);
-    light.position.y = 0.7;
+    // три плавника
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.55, 0.18), finMat);
+      const a = (i / 3) * Math.PI * 2;
+      fin.position.set(Math.cos(a) * 0.24, 0.35, Math.sin(a) * 0.24);
+      fin.rotation.y = -a;
+      fin.rotation.z = 0.16;
+      fin.castShadow = true;
+      g.add(fin);
+    }
+    // энерго-ядро
+    const coreMat = new THREE.MeshStandardMaterial({ color: 0xff3344, emissive: 0xff1133, emissiveIntensity: 2, roughness: 0.25 });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.11, 14, 12), coreMat);
+    core.position.y = 0.72;
+    g.add(core);
+    // ореол вокруг ядра
+    const halo = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.sparkTex, color: 0xff3344, transparent: true, opacity: 0.5, depthWrite: false, blending: THREE.AdditiveBlending }));
+    halo.position.y = 0.72;
+    halo.scale.setScalar(0.55);
+    g.add(halo);
+    // два вращающихся кольца
+    const ringMat = new THREE.MeshStandardMaterial({ color: 0x8a93a6, metalness: 0.7, roughness: 0.3, emissive: 0xff2233, emissiveIntensity: 0.25 });
+    const ring1 = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.02, 8, 28), ringMat);
+    ring1.position.y = 0.72;
+    g.add(ring1);
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.016, 8, 24), ringMat);
+    ring2.position.y = 0.72;
+    g.add(ring2);
+    const light = new THREE.PointLight(0xff2233, 0.5, 9);
+    light.position.y = 0.9;
     g.add(light);
+
     g.position.copy(pos);
+    if (variant === 'dropped') {
+      g.rotation.z = 1.25; // лежит на боку
+      g.position.y += 0.18;
+    }
     this.scene.add(g);
+
     let t = 0, alive = true;
     const handle = {
       blinkRate: 1,
       update: (dt) => {
         t += dt;
-        const on = (t % handle.blinkRate) < handle.blinkRate * 0.35;
-        lamp.material.color.setHex(on ? 0xff2233 : 0x441111);
-        light.intensity = on ? 1.5 : 0;
+        if (variant === 'dropped') {
+          // тлеет медленно, ждёт подбора
+          const p = 0.5 + 0.3 * Math.sin(t * 3);
+          coreMat.emissiveIntensity = p * 1.2;
+          halo.material.opacity = p * 0.35;
+          light.intensity = p * 0.8;
+        } else {
+          ring1.rotation.x += dt * 1.6;
+          ring1.rotation.y += dt * 0.9;
+          ring2.rotation.y -= dt * 2.2;
+          ring2.rotation.z += dt * 1.2;
+          const on = (t % handle.blinkRate) < handle.blinkRate * 0.35;
+          coreMat.emissiveIntensity = on ? 3.2 : 0.7;
+          halo.material.opacity = on ? 0.75 : 0.2;
+          halo.scale.setScalar(on ? 0.8 : 0.5);
+          light.intensity = on ? 2.5 : 0.4;
+          core.scale.setScalar(1 + (on ? 0.12 : 0));
+          // редкие искры при быстром бипе (последние секунды)
+          if (on && handle.blinkRate < 0.3 && Math.random() < dt * 20) {
+            this.burst(g.position.clone().add(new THREE.Vector3(0, 0.75, 0)), { n: 4, color: 0xff4455, speed: 1.5, life: 0.3, size: 0.08 });
+          }
+        }
         return alive;
       },
       dispose: () => this.scene.remove(g),

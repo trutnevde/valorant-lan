@@ -362,6 +362,24 @@ export class RemotePlayer {
     group.add(cocoon);
     this.cocoonMesh = cocoon;
 
+    // шип за спиной у носителя (виден всем)
+    const spikePack = new THREE.Group();
+    const spBody = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.13, 0.34, 8),
+      std('#23272f', { metalness: 0.7, roughness: 0.35 })
+    );
+    spikePack.add(spBody);
+    const spCoreMat = new THREE.MeshStandardMaterial({ color: 0xff3344, emissive: 0xff1133, emissiveIntensity: 1.6 });
+    const spCore = new THREE.Mesh(new THREE.SphereGeometry(0.06, 10, 8), spCoreMat);
+    spCore.position.y = 0.2;
+    spikePack.add(spCore);
+    spikePack.position.set(0, 1.3, 0.42); // спина (+Z)
+    spikePack.rotation.x = 0.2;
+    spikePack.visible = false;
+    group.add(spikePack);
+    this.spikePack = spikePack;
+    this.spikeCoreMat = spCoreMat;
+
     this.G.scene.add(group);
   }
 
@@ -526,6 +544,10 @@ export class RemotePlayer {
 
     this.cocoonMesh.visible = this.G.cocoonedId === this.pid;
     if (this.cocoonMesh.visible) this.cocoonMesh.rotation.y += dt * 3;
+
+    // шип за спиной у текущего носителя
+    this.spikePack.visible = this.G.spikeCarrier === this.pid;
+    if (this.spikePack.visible) this.spikeCoreMat.emissiveIntensity = 1.2 + Math.sin(t * 4) * 0.6;
   }
 
   // враг внутри своего командного банкета не подсвечивается детектом
