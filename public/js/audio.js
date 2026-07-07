@@ -260,6 +260,13 @@ export class Sfx {
   // ===== Фафик (бати) =====
   dadClones() { [440, 440, 440, 550].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.22, type: 'square', delay: i * 0.11 })); this.noise({ dur: 0.3, vol: 0.15, fc: 1000, fc2: 3000, delay: 0.3 }); }
   dadDeClone() { this.noise({ dur: 0.3, vol: 0.2, fc: 3000, fc2: 400 }); this.tone({ f: 600, f2: 200, dur: 0.2, vol: 0.2, type: 'triangle' }); }
+  // клон лопнул + станящий шоквейв
+  clonePop(vol = 1) {
+    this.crack({ vol: 0.4 * vol, fc: 2200, dur: 0.05, drive: 8 });
+    this.noise({ dur: 0.35, vol: 0.35 * vol, fc: 2600, fc2: 300, type: 'bandpass' }); // выброс
+    this.body({ f: 150, f2: 45, dur: 0.3, vol: 0.35 * vol, type: 'sine' });           // гулкий бас-удар
+    this.tone({ f: 1200, f2: 400, dur: 0.25, vol: 0.14 * vol, type: 'sine', delay: 0.03 }); // «звон» стана
+  }
 
   // ===== Ира (KFC-поддержка) =====
   throwLight() { this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 800, type: 'bandpass' }); }

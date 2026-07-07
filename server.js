@@ -171,7 +171,7 @@ function startRound() {
   match.deadline = now() + RULES.BUY_TIME;
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
-  match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = [];
+  match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = []; match._poppedClones = new Set();
   // шип получает ОДИН случайный атакер (людям — приоритет)
   const attackers = teamOf(match.attackTeam);
   const humanAtt = attackers.filter(a => !a.bot);
@@ -435,6 +435,25 @@ function onMessage(p, msg) {
       // владелец сообщил, где хлопнула вспышка — ослепляем смотрящих ботов
       if (!p.alive || !liveish()) return;
       blindBots(msg.pos);
+      break;
+    }
+    case 'clonePop': {
+      // лопнули клона Фафика — станит врагов ВЛАДЕЛЬЦА клона по области
+      if (!liveish() || !Array.isArray(msg.pos)) return;
+      const owner = players.get(msg.owner);
+      if (!owner) return;
+      if (!match._poppedClones) match._poppedClones = new Set();
+      if (match._poppedClones.has(msg.cloneId)) return; // уже лопнут (защита от дублей)
+      match._poppedClones.add(msg.cloneId);
+      const [px, pz] = msg.pos;
+      for (const e of players.values()) {
+        if (e.team === owner.team || !e.alive) continue;
+        if (Math.hypot(e.lastPos[0] - px, e.lastPos[2] - pz) < ABILITY.CLONE_POP_STUN_R) {
+          if (e.bot) e.ai.stunUntil = now() + ABILITY.CLONE_POP_STUN;
+          else send(e, { t: 'stun', dur: ABILITY.CLONE_POP_STUN });
+        }
+      }
+      broadcast({ t: 'clonePopped', cloneId: msg.cloneId, pos: msg.pos });
       break;
     }
     case 'buy': {

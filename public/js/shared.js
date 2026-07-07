@@ -216,6 +216,7 @@ export const ABILITY = {
   // Фафик (дуэлянт-обманщик)
   TWIN_DASH: 7, TWIN_DECOY_TIME: 5,
   SWAP_SPEED: 13, SWAP_LIFE: 7, SWAP_DECOY_RANGE: 16,
+  CLONE_POP_STUN_R: 4.5, CLONE_POP_STUN: 1.3, // лопнул клона — станит врагов вокруг
   // Денис (реворк C/Q)
   BLOODFEAST_INSTANT: 30, BLOODFEAST_FED: 62, BLOODFEAST_HOT: 7, BLOODFEAST_HOT_FED: 11,
   BLOODFEAST_HOT_TIME: 4, BLOODFEAST_FED_WINDOW: 6,

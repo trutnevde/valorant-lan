@@ -278,6 +278,10 @@ function onMessage(msg) {
       G.shake = Math.max(G.shake, 2);
       G.hud.announce('', 'ОГЛУШЕНИЕ', 1.2);
       break;
+    case 'clonePopped':
+      // клон лопнул у всех + шоквейв (стан приходит отдельным 'stun', если задело)
+      if (G.abilities) G.abilities.popClone(msg.cloneId, msg.pos);
+      break;
     case 'buyOk':
       G.me.credits = msg.credits;
       G.me.armor = msg.armor;

@@ -33,8 +33,8 @@ export class Abilities {
     this.cloneSets = new Map(); // ownerId -> {clones:[{h,pos,target,phase}], born}
     this.decoys = [];       // {owner, h, pos, dir?, kind:'stand'|'run', until, phase, traveled}
     this.swapDecoy = null;  // активный клон для рокировки (только у владельца)
-    this.shootMap = new Map(); // shootId -> humanoid клона (для отстрела #1)
-    this._duid = 0;
+    this.cloneById = new Map(); // cloneId -> {h, owner} — клоны для отстрела/стана
+    this._cloneSeq = 0;         // общий счётчик (синхронен у всех: одинаковый порядок ability-сообщений)
     // Денис
     this.scents = [];       // {owner, pos, mesh, until} — приманки «нюх мясника»
     this.accum = { dmg: {}, heal: 0, t: 0 }; // dmg по причинам {cause: {amt, by}}
@@ -84,7 +84,7 @@ export class Abilities {
     this.cloneSets.clear();
     for (const d of this.decoys) G.scene.remove(d.h.group);
     this.decoys = []; this.swapDecoy = null;
-    if (this.shootMap) this.shootMap.clear();
+    if (this.cloneById) this.cloneById.clear();
     for (const sc of this.scents) G.scene.remove(sc.mesh);
     this.scents = [];
     G.cloneMode = false;
@@ -560,7 +560,7 @@ export class Abilities {
           h.group.position.copy(start);
           h.group.rotation.y = yaw;
           G.scene.add(h.group);
-          this.registerDecoy(h);
+          this.registerDecoy(h, id);
           clones.push({ h, pos: start.clone(), target: to.clone().addScaledVector(perp, off), phase: Math.random() * 6 });
         }
         this.cloneSets.set(id, { clones, born: now(), owner: id });
@@ -622,7 +622,7 @@ export class Abilities {
         h.group.position.copy(from);
         h.group.rotation.y = data.yaw || 0;
         G.scene.add(h.group);
-        this.registerDecoy(h);
+        this.registerDecoy(h, id);
         this.decoys.push({ owner: id, h, pos: from.clone(), kind: 'stand', until: now() + ABILITY.TWIN_DECOY_TIME, phase: 0 });
         G.sfx.dash(mine ? 1 : 0.4);
         break;
@@ -634,7 +634,7 @@ export class Abilities {
         h.group.position.copy(from);
         h.group.rotation.y = data.yaw || 0;
         G.scene.add(h.group);
-        this.registerDecoy(h);
+        this.registerDecoy(h, id);
         const decoy = { owner: id, h, pos: from.clone(), dir: dirv, kind: 'run', until: now() + ABILITY.SWAP_LIFE, phase: 0, traveled: 0 };
         this.decoys.push(decoy);
         if (mine) { this.swapDecoy = decoy; G.hud.announce('', 'РОКИРОВКА ГОТОВА — НАЖМИ E ЕЩЁ РАЗ', 2); }
@@ -688,29 +688,36 @@ export class Abilities {
         G.net.send({ t: 'ability', kind: 'turretDmg', data: { owner, dmg } });
       }
     } else if (shootId.startsWith('clone:')) {
-      this.popDecoy(shootId); // #1 клон Фафика лопается от выстрела
+      // #1 отстрел клона Фафика — просим сервер лопнуть его и оглушить врагов вокруг
+      const c = this.cloneById.get(shootId);
+      if (c) this.G.net.send({ t: 'clonePop', cloneId: shootId, pos: [c.h.group.position.x, c.h.group.position.z], owner: c.owner });
     }
   }
 
-  // регистрирует гуманоида-клона как отстреливаемую цель
-  registerDecoy(h) {
-    const uid = 'clone:' + (++this._duid);
-    for (const m of h.hitMeshes) m.userData.shootId = uid;
-    for (const m of h.hitMeshes) this.G.shootables.push({ mesh: m, shootId: uid });
-    this.shootMap.set(uid, h);
-    return uid;
+  // регистрирует гуманоида-клона как отстреливаемую цель (cloneId одинаков у всех клиентов)
+  registerDecoy(h, owner) {
+    const cloneId = 'clone:' + (this._cloneSeq++);
+    for (const m of h.hitMeshes) { m.userData.shootId = cloneId; this.G.shootables.push({ mesh: m, shootId: cloneId }); }
+    this.cloneById.set(cloneId, { h, owner });
+    return cloneId;
   }
-  popDecoy(uid) {
-    const h = this.shootMap.get(uid);
-    if (!h) return;
-    this.G.scene.remove(h.group);
-    this.G.shootables = this.G.shootables.filter(s => s.shootId !== uid);
-    this.shootMap.delete(uid);
-    this.decoys = this.decoys.filter(d => d.h !== h);
-    for (const set of this.cloneSets.values()) set.clones = set.clones.filter(c => c.h !== h);
-    if (this.swapDecoy && this.swapDecoy.h === h) this.swapDecoy = null;
-    this.G.fx.burst(h.group.position.clone().add(new THREE.Vector3(0, 1, 0)), { n: 16, color: 0x9fc0e6, speed: 3.5, life: 0.4, size: 0.16 });
-    this.G.sfx.dadDeClone();
+  // лопнуть клона у ВСЕХ (по общему cloneId) + шоквейв; стан считает сервер
+  popClone(cloneId, pos) {
+    const c = this.cloneById.get(cloneId);
+    if (c) {
+      const h = c.h;
+      this.G.scene.remove(h.group);
+      this.G.shootables = this.G.shootables.filter(s => s.shootId !== cloneId);
+      this.decoys = this.decoys.filter(d => d.h !== h);
+      for (const set of this.cloneSets.values()) set.clones = set.clones.filter(cc => cc.h !== h);
+      if (this.swapDecoy && this.swapDecoy.h === h) this.swapDecoy = null;
+      this.cloneById.delete(cloneId);
+    }
+    const p = new THREE.Vector3(pos[0], 0, pos[2]);
+    this.G.fx.burst(p.clone().add(new THREE.Vector3(0, 1, 0)), { n: 20, color: 0x9fc0e6, speed: 5, life: 0.5, size: 0.18 });
+    this.G.fx.ring(p, 0x9fc0e6, ABILITY.CLONE_POP_STUN_R * 1.4);
+    this.G.fx.light(p.clone().add(new THREE.Vector3(0, 1, 0)), 0xaaccff, 4, 14, 0.35);
+    this.G.sfx.clonePop(this.volTo(p));
   }
 
   disposeHook() {
