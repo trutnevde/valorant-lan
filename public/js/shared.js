@@ -54,6 +54,22 @@ export const WEAPONS = {
   operator: { name: 'Оператор', cat: 'sniper',  slot: 'primary', price: 4700, dmg: 150, head: 255, leg: 120, rpm: 45,  mag: 5,  reserve: 10,  auto: false, spread: 0.09,  recoil: 0.055, reload: 3.7, scope: true, scopeSpread: 0.001 },
 };
 
+// Мобильность и время доставания по категориям.
+// С ножом бегаешь быстрее всех; Оператор превращает тебя в шкаф.
+export const WEAPON_FEEL = {
+  knife:   { speed: 1.10, equip: 0.3 },
+  pistol:  { speed: 1.00, equip: 0.5 },
+  smg:     { speed: 0.98, equip: 0.6 },
+  shotgun: { speed: 0.96, equip: 0.75 },
+  rifle:   { speed: 0.94, equip: 0.8 },
+  lmg:     { speed: 0.90, equip: 0.9 },
+  sniper:  { speed: 0.88, equip: 1.0 },
+};
+export function weaponFeel(id) {
+  const w = WEAPONS[id];
+  return (w && WEAPON_FEEL[w.cat]) || WEAPON_FEEL.pistol;
+}
+
 export const WEAPON_CATS = [
   { key: 'pistol', name: 'Пистолеты' },
   { key: 'shotgun', name: 'Дробовики' },

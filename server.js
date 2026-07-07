@@ -72,7 +72,7 @@ function newPlayer(id, ws, bot = false) {
     loadout: { primary: null, sidearm: 'classic' },
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
-    ultMark: null, cloneMode: false, _healFrac: 0,
+    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0,
     ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {} } : null,
   };
 }
@@ -227,6 +227,7 @@ function applyDamage(victim, rawDmg, attackerId, weapon, part) {
     dmg -= absorbed;
   }
   victim.hp = Math.round(victim.hp - dmg);
+  victim.tagUntil = now() + 0.45; // «tagging»: пуля вяжет ноги (для ботов — серверно)
   broadcast({ t: 'hp', id: victim.id, hp: victim.hp, armor: victim.armor, by: attackerId, part });
   if (victim.hp <= 0) onDeath(victim, attackerId, weapon, part);
 }
@@ -865,7 +866,8 @@ function tickBot(bot, dt) {
 function moveToward(bot, target, dt, combat = false) {
   const dx = target[0] - bot.lastPos[0], dz = target[2] - bot.lastPos[2];
   const d = Math.hypot(dx, dz);
-  const speed = combat ? 3.6 : 5.5; // в бою идут медленнее (осторожнее)
+  let speed = combat ? 3.6 : 5.5; // в бою идут медленнее (осторожнее)
+  if (now() < bot.tagUntil) speed *= 0.62; // словил пулю — вязнет
   if (d > 0.01) {
     const step = Math.min(d, speed * dt);
     bot.lastPos[0] += dx / d * step;

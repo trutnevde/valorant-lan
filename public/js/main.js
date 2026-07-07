@@ -35,7 +35,7 @@ const G = {
   weapons: null, abilities: null, fx: null, sfx: new Sfx(), hud: null,
   spikePos: null, spikeFx: null,
   pulled: null, stunnedUntil: 0, slowMul: 1, blindUntil: 0, blindStink: false, shake: 0,
-  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
+  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
   banquets: [], cloneMode: false, clonedIds: new Set(),
   scoped: false, aimT: 0, buyOpen: false, chatOpen: false, holdAction: null,
   spottedUntil: new Map(), revealed: new Map(),
@@ -484,7 +484,12 @@ function onHp(msg) {
     if (dropped && msg.part !== 'heal') {
       G.hud.damage();
       G.sfx.hurt();
+      G.tagUntil = now() + 0.45;   // пуля вязнет в ногах — «tagging», как в CS
     }
+  } else {
+    // чужая модель вздрагивает от попадания
+    const r = G.remotes.get(msg.id);
+    if (r && msg.part !== 'heal') r.flinch();
   }
 }
 

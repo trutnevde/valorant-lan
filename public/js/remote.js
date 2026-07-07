@@ -1,7 +1,8 @@
 // Другие игроки: анимированный человечек с рига́ми (ходьба, руки, голова),
 // костюмы под каждого агента, тени, хитбоксы, подсветка, кокон.
 import * as THREE from './three.module.js';
-import { CHARACTERS, MOVE } from './shared.js';
+import { CHARACTERS, MOVE, WEAPONS } from './shared.js';
+import { tracerStyle } from './weapons.js';
 
 function nameSprite(text, color, occlude) {
   const cv = document.createElement('canvas');
@@ -320,6 +321,7 @@ export class RemotePlayer {
     this.speedSmoothed = 0;
     this.revealedUntil = 0;
     this.fireKick = 0;
+    this.hurtK = 0;
     this.build();
   }
 
@@ -475,6 +477,14 @@ export class RemotePlayer {
       rig.body.position.y += (breathe - rig.body.position.y) * damp;
     }
 
+    // вздрагивание от попадания
+    if (this.hurtK > 0) {
+      this.hurtK = Math.max(0, this.hurtK - dt * 5);
+      rig.body.rotation.x -= this.hurtK * 0.09;
+      rig.headPivot.rotation.z += this.hurtK * 0.12 * Math.sin(t * 40);
+      rig.armL.shoulder.rotation.x -= this.hurtK * 0.25;
+    }
+
     // отдача при стрельбе — руки/корпус дёргаются
     if (this.fireKick > 0) {
       this.fireKick = Math.max(0, this.fireKick - dt * 6);
@@ -526,6 +536,8 @@ export class RemotePlayer {
     return false;
   }
 
+  flinch() { this.hurtK = 1; }
+
   onShoot(msg) {
     this.fireKick = 1; // дёрнуть руки модели
     const o = new THREE.Vector3(...msg.o);
@@ -533,8 +545,12 @@ export class RemotePlayer {
     const ray = new THREE.Raycaster(o, d, 0, 200);
     const hits = ray.intersectObjects(this.G.map.solids, false);
     const end = hits[0] ? hits[0].point : o.clone().addScaledVector(d, 120);
-    this.G.fx.tracer(o, end, this.ally ? 0xb0ffe0 : 0xffd0a0);
-    this.G.fx.muzzle(o.clone().addScaledVector(d, 0.5));
+    const ts = tracerStyle(WEAPONS[msg.w]);
+    this.G.fx.tracer(o, end, this.ally ? 0xb0ffe0 : ts.color, ts.r, ts.life);
+    const mp = o.clone().addScaledVector(d, 0.5);
+    this.G.fx.muzzle(mp, d);
+    const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
+    this.G.fx.casing(mp, right);
     const dist = this.G.player.pos.distanceTo(o);
     const w = msg.w === 'knife' ? 'knife' : msg.w;
     this.G.sfx.shot(w, Math.max(0.12, 1 - dist / 55));

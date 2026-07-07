@@ -14,6 +14,8 @@ export class HUD {
     this.buildAbilitySlots();
     this.buyError = '';
     this.mapTargetCb = null;
+    this.chLines = document.querySelectorAll('#crosshair i');
+    this.lastGap = -1;
     this.lobbyHooks = null;
 
     $('minimap').addEventListener('click', (e) => {
@@ -154,6 +156,19 @@ export class HUD {
   }
 
   damage() { this.lastDamageT = now(); }
+
+  // блум прицела: линии расходятся от реального разброса
+  setCrosshairGap(px) {
+    const g = Math.round(px);
+    if (g === this.lastGap) return;
+    this.lastGap = g;
+    const l = this.chLines;
+    if (l.length < 4) return;
+    l[0].style.transform = `translateY(${-g}px)`;
+    l[1].style.transform = `translateY(${g}px)`;
+    l[2].style.transform = `translateX(${-g}px)`;
+    l[3].style.transform = `translateX(${g}px)`;
+  }
 
   progress(label, pct) {
     if (pct < 0) { $('progressWrap').classList.add('hidden'); return; }
@@ -372,7 +387,9 @@ export class HUD {
     $('blindHint').style.opacity = blind > 0.3 ? 1 : 0;
     $('blindHint').textContent = blind > 0.3 ? 'ОСЛЕПЛЁН' : '';
     const dmg = Math.max(0, 1 - (t - this.lastDamageT) / 0.5);
-    $('dmgVignette').style.opacity = dmg * 0.9;
+    // при низком HP вигнетка не отпускает — пульсирует
+    const low = G.me.alive && G.me.hp > 0 && G.me.hp <= 35 ? 0.26 + 0.09 * Math.sin(t * 5) : 0;
+    $('dmgVignette').style.opacity = Math.max(dmg * 0.9, low);
     this.drawMinimap();
   }
 }

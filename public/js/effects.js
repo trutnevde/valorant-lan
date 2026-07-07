@@ -93,21 +93,65 @@ export class Effects {
   }
 
   // ===== базовые =====
-  tracer(from, to, color = 0xffe0a0) {
-    // светящийся «шнур» из вытянутого цилиндра + быстрое затухание
+  // светящийся «шнур»; r/life задают калибр (снайперка — толстый паровой след)
+  tracer(from, to, color = 0xffe0a0, r = 0.018, lifeMax = 0.07) {
     const dir = to.clone().sub(from);
     const len = dir.length();
     if (len < 0.05) return;
-    const geo = new THREE.CylinderGeometry(0.018, 0.018, len, 5, 1, true);
+    const geo = new THREE.CylinderGeometry(r, r, len, 5, 1, true);
     const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false });
     const mesh = new THREE.Mesh(geo, mat);
     mesh.position.copy(from).addScaledVector(dir, 0.5);
     mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.clone().normalize());
     this.scene.add(mesh);
-    let life = 0.07;
+    let life = lifeMax;
     this.add({
-      update: (dt) => { life -= dt; mat.opacity = Math.max(0, life / 0.07) * 0.9; return life > 0; },
+      update: (dt) => { life -= dt; mat.opacity = Math.max(0, life / lifeMax) * 0.9; return life > 0; },
       dispose: () => { this.scene.remove(mesh); geo.dispose(); mat.dispose(); },
+    });
+  }
+
+  // гильза: вылетает вправо-вверх, крутится, падает
+  casing(pos, rightDir) {
+    if (!this._casingGeo) {
+      this._casingGeo = new THREE.BoxGeometry(0.016, 0.016, 0.042);
+      this._casingMat = new THREE.MeshStandardMaterial({ color: 0xc9a544, metalness: 0.65, roughness: 0.35 });
+    }
+    const m = new THREE.Mesh(this._casingGeo, this._casingMat);
+    m.position.copy(pos);
+    this.scene.add(m);
+    const vel = rightDir.clone().multiplyScalar(1.4 + Math.random() * 0.8);
+    vel.y = 1.6 + Math.random() * 0.7;
+    const ang = new THREE.Vector3(Math.random() * 14, Math.random() * 14, Math.random() * 14);
+    let life = 0.9;
+    this.add({
+      update: (dt) => {
+        life -= dt;
+        vel.y -= 9.8 * dt;
+        m.position.addScaledVector(vel, dt);
+        m.rotation.x += ang.x * dt; m.rotation.y += ang.y * dt; m.rotation.z += ang.z * dt;
+        return life > 0;
+      },
+      dispose: () => this.scene.remove(m),
+    });
+  }
+
+  // дымок из ствола после выстрела
+  smokePuff(pos) {
+    const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.steamTex, color: 0xb8b8b8, transparent: true, opacity: 0.32, depthWrite: false }));
+    spr.position.copy(pos);
+    spr.scale.setScalar(0.14);
+    this.scene.add(spr);
+    let t = 0.5;
+    this.add({
+      update: (dt) => {
+        t -= dt;
+        spr.position.y += dt * 0.5;
+        spr.scale.multiplyScalar(1 + dt * 2.6);
+        spr.material.opacity = Math.max(0, t / 0.5) * 0.32;
+        return t > 0;
+      },
+      dispose: () => this.scene.remove(spr),
     });
   }
 
