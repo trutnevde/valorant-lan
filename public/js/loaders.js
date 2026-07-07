@@ -12,14 +12,12 @@ import { clone as cloneSkinned } from './three/utils/SkeletonUtils.js';
 
 const loader = new GLTFLoader();
 const _cache = new Map();     // path -> Promise<gltf|null>
-let _models = null;           // Set имён агентов, у которых есть персональная модель (из manifest)
+let _manifest = null;         // кэш manifest.json
 
 async function ensureManifest() {
-  if (_models !== null) return;
-  try {
-    const m = await (await fetch('assets/manifest.json')).json();
-    _models = new Set(Array.isArray(m.models) ? m.models : []);
-  } catch { _models = new Set(); }
+  if (_manifest !== null) return;
+  try { _manifest = (await (await fetch('assets/manifest.json')).json()) || {}; }
+  catch { _manifest = {}; }
 }
 
 function loadGltf(path) {
@@ -29,11 +27,17 @@ function loadGltf(path) {
   return _cache.get(path);
 }
 
-// Возвращает gltf для агента (персональный, либо демо если включён), либо null.
+// Возвращает gltf для агента, либо null (тогда — процедурный человечек). Источник, по приоритету:
+//   1) manifest.characterModels[агент] — файл из CC0-пака (напр. "Knight.glb")
+//   2) manifest.models содержит агента — персональный <агент>.glb (свой экспорт из Mixamo)
+//   3) window.USE_DEMO_MODELS — демо _demo.glb для всех
 export async function getCharacterGltf(char) {
   await ensureManifest();
-  if (_models.has(char)) {
-    const g = await loadGltf(`assets/models/characters/${char}.glb`);
+  const map = _manifest.characterModels || {};
+  const models = Array.isArray(_manifest.models) ? _manifest.models : [];
+  const file = map[char] || (models.includes(char) ? `${char}.glb` : null);
+  if (file) {
+    const g = await loadGltf(`assets/models/characters/${file}`);
     if (g) return g;
   }
   if (window.USE_DEMO_MODELS) {
@@ -43,11 +47,10 @@ export async function getCharacterGltf(char) {
   return null;
 }
 
-function pickClip(clips, keys) {
-  for (const k of keys) {
-    const c = clips.find(cl => cl.name.toLowerCase().includes(k));
-    if (c) return c;
-  }
+// Сначала точное совпадение имени (exact), потом по подстроке (fuzzy) — под разные паки/Mixamo.
+function pickClip(clips, exact, fuzzy) {
+  for (const n of exact) { const c = clips.find(cl => cl.name.toLowerCase() === n.toLowerCase()); if (c) return c; }
+  for (const k of fuzzy) { const c = clips.find(cl => cl.name.toLowerCase().includes(k)); if (c) return c; }
   return null;
 }
 
@@ -86,10 +89,10 @@ export function makeGltfCharacter(gltf, char, cfg, pid) {
   // ── анимации ──
   const mixer = new THREE.AnimationMixer(model);
   const clips = gltf.animations || [];
-  const cIdle = pickClip(clips, ['idle', 'survey', 'breath']) || clips[0] || null;
-  const cWalk = pickClip(clips, ['walk']) || cIdle;
-  const cRun = pickClip(clips, ['run']) || cWalk;
-  const cDeath = pickClip(clips, ['death', 'die', 'dead']);
+  const cIdle = pickClip(clips, ['Idle', 'Unarmed_Idle'], ['idle', 'survey', 'breath']) || clips[0] || null;
+  const cWalk = pickClip(clips, ['Walking_A', 'Walk'], ['walk']) || cIdle;
+  const cRun = pickClip(clips, ['Running_A', 'Run'], ['run']) || cWalk;
+  const cDeath = pickClip(clips, ['Death_A', 'Death'], ['death', 'die', 'dead']);
   const A = {
     idle: cIdle && mixer.clipAction(cIdle),
     walk: cWalk && mixer.clipAction(cWalk),
