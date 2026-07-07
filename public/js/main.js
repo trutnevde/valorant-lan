@@ -330,7 +330,9 @@ function onMessage(msg) {
         if (G.holdAction === 'defuse') G.holdAction = null;
       } else {
         G.hud.progress('ОБЕЗВРЕЖИВАНИЕ', msg.pct);
-        if (now() - (G._lastTickSnd || 0) > 0.25) { G._lastTickSnd = now(); G.sfx.plantTick(); }
+        // единый тик, слышно только рядом с шипом (чтобы можно было фейкать дефьюз)
+        const near = G.spikePos && Math.hypot(G.player.pos.x - G.spikePos[0], G.player.pos.z - G.spikePos[2]) < 22;
+        if (near && now() - (G._lastTickSnd || 0) > 0.28) { G._lastTickSnd = now(); G.sfx.defuseTick(); }
       }
       break;
     case 'spikeDrop': {
@@ -358,8 +360,7 @@ function onMessage(msg) {
       G.hud.announce('', 'ШИП УЖЕ РАЗМИНИРУЮТ', 1.5);
       break;
     case 'defuseHalf':
-      G.hud.announce('', 'ПОЛОВИНА ЗАФИКСИРОВАНА', 1.5);
-      G.sfx.defused();
+      // намеренно тихо и без текста: половина фиксируется скрытно (фейки на слух)
       break;
     case 'defused':
       G.hud.progress('', -1);

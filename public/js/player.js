@@ -160,14 +160,15 @@ export class LocalPlayer {
 
     this.moveCollide(dt);
 
-    // шаги
+    // шаги: слышны и создают шум ТОЛЬКО при беге (шифт/присед — бесшумны)
     if (this.grounded && !this.walk && !this.crouch) {
       const hSpeed = Math.hypot(this.vel.x, this.vel.z);
       if (hSpeed > 3) {
         this.stepDist += hSpeed * dt;
         if (this.stepDist > 2.7) {
           this.stepDist = 0;
-          G.sfx.footstep(0.4);
+          G.sfx.footstep(0.55);
+          if (G.me.alive && G.liveish()) G.net.send({ t: 'noise', kind: 'step' }); // боты слышат
         }
       }
     }

@@ -48,6 +48,27 @@ function makeSoftTexture(inner, outer) {
   return new THREE.CanvasTexture(cv);
 }
 
+// плотный клуб дыма: непрозрачное ядро, мягкий край
+function makeCloudTexture() {
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = 128;
+  const c = cv.getContext('2d');
+  // рваная форма из наложенных непрозрачных пятен
+  for (let i = 0; i < 22; i++) {
+    const x = 64 + (Math.random() - 0.5) * 60;
+    const y = 64 + (Math.random() - 0.5) * 60;
+    const rad = 18 + Math.random() * 34;
+    const g = c.createRadialGradient(x, y, rad * 0.2, x, y, rad);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.7, 'rgba(255,255,255,0.9)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(x, y, rad, 0, 7); c.fill();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  return tex;
+}
+
 function makeStarTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 64;
@@ -79,6 +100,7 @@ export class Effects {
     this.steamTex = makeSoftTexture('rgba(255,255,255,0.95)', 'rgba(210,255,220,0.4)');
     this.muzzleTex = makeStarTexture();
     this.bloodTex = makeSoftTexture('rgba(220,40,40,1)', 'rgba(120,10,10,0.6)');
+    this.smokeTex = makeCloudTexture();
   }
 
   add(item) { this.items.push(item); return item; }
@@ -447,26 +469,61 @@ export class Effects {
   }
 
   // ===== дым (обычный серый или зелёная вонючка Дениса) =====
+  // Плотный ОБЪЁМНЫЙ дым: ядро-сфера (DoubleSide, чтобы изнутри тоже было глухо)
+  // + густое облако клубов-биллбордов, заполняющих объём — внутри ничего не видно.
   smoke(pos, r, dur, stink = false) {
-    const mat = new THREE.MeshLambertMaterial({
-      color: stink ? 0x6d8f4a : 0x9fb0bd, transparent: true, opacity: 0,
-    });
-    const m = new THREE.Mesh(new THREE.SphereGeometry(r, 20, 16), mat);
-    m.position.set(pos.x, Math.max(pos.y, 0) + r * 0.55, pos.z);
-    this.scene.add(m);
-    let t = 0;
-    this.add({
+    const color = stink ? 0x5c7a3e : 0x9aa6b0;
+    const group = new THREE.Group();
+    group.position.set(pos.x, Math.max(pos.y, 0), pos.z);
+    this.scene.add(group);
+
+    // 1) плотное ядро — сфера с обеих сторон (снаружи и изнутри непрозрачна)
+    const coreMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.96, 20, 16), coreMat);
+    core.position.y = r * 0.55;
+    group.add(core);
+    // внутренняя сфера поменьше — гарантирует глухоту в центре
+    const innerMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false });
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(r * 0.6, 16, 12), innerMat);
+    inner.position.y = r * 0.55;
+    group.add(inner);
+
+    // 2) облако клубов-спрайтов, набитое по всему объёму (перекрывает любые щели)
+    const puffs = [];
+    const tex = stink ? this.rotTex : this.smokeTex || this.steamTex;
+    for (let i = 0; i < 26; i++) {
+      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity: 0, depthWrite: false }));
+      // равномерно по объёму сферы
+      const u = Math.random(), v = Math.random(), w2 = Math.random();
+      const rr = r * 0.9 * Math.cbrt(Math.random());
+      const th = u * Math.PI * 2, ph = Math.acos(2 * v - 1);
+      spr.position.set(Math.sin(ph) * Math.cos(th) * rr, r * 0.55 + Math.cos(ph) * rr * 0.9, Math.sin(ph) * Math.sin(th) * rr);
+      spr.scale.setScalar(r * (0.9 + w2 * 0.7));
+      spr.userData = { baseY: spr.position.y, ph: Math.random() * 6 };
+      group.add(spr);
+      puffs.push(spr);
+    }
+
+    let t = 0, alive = true;
+    const handle = {
       update: (dt) => {
         t += dt;
-        if (t < 0.4) mat.opacity = (t / 0.4) * 0.96;
-        else if (t > dur - 0.8) mat.opacity = Math.max(0, (dur - t) / 0.8) * 0.96;
-        else mat.opacity = 0.96;
-        m.rotation.y += dt * 0.2;
-        return t < dur;
+        const env = t < 0.35 ? t / 0.35 : (t > dur - 0.7 ? Math.max(0, (dur - t) / 0.7) : 1);
+        coreMat.opacity = env;               // ПОЛНОСТЬЮ плотный (1.0)
+        innerMat.opacity = env;
+        for (const s of puffs) {
+          s.material.opacity = env * (0.85 + 0.15 * Math.sin(t * 2 + s.userData.ph));
+          s.position.y = s.userData.baseY + Math.sin(t * 0.8 + s.userData.ph) * 0.15;
+          s.material.rotation += dt * 0.15 * (s.userData.ph % 2 ? 1 : -1);
+        }
+        core.rotation.y += dt * 0.15;
+        return alive && t < dur;
       },
-      dispose: () => { this.scene.remove(m); mat.dispose(); },
-    });
-    return m;
+      dispose: () => { this.scene.remove(group); coreMat.dispose(); innerMat.dispose(); },
+      kill: () => { alive = false; },
+    };
+    this.add(handle);
+    return handle;
   }
 
   // ===== орбитальный удар Вовы =====

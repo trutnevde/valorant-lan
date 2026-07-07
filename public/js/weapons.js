@@ -403,6 +403,9 @@ export class WeaponSystem {
     const ch = document.getElementById('crosshair');
     ch.classList.toggle('scoped', sniperScoped);
     ch.style.opacity = sniperScoped ? '0' : String(1 - this.aimT * 0.55);
+    // отрисованный снайперский прицел
+    const scope = document.getElementById('scope');
+    if (scope) scope.classList.toggle('hidden', !sniperScoped);
 
     // ===== восстановление толчка ствола (пружина) =====
     this.vkickPos *= Math.exp(-dt * 12);

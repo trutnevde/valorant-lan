@@ -31,6 +31,10 @@ export class Abilities {
     this.buffetReloadUsed = false;
     // Фафик
     this.cloneSets = new Map(); // ownerId -> {clones:[{h,pos,target,phase}], born}
+    this.decoys = [];       // {owner, h, pos, dir?, kind:'stand'|'run', until, phase, traveled}
+    this.swapDecoy = null;  // активный клон для рокировки (только у владельца)
+    // Денис
+    this.scents = [];       // {owner, pos, mesh, until} — приманки «нюх мясника»
     this.accum = { dmg: {}, heal: 0, t: 0 }; // dmg по причинам {cause: {amt, by}}
     this.ray = new THREE.Raycaster();
     this.resetRound();
@@ -76,6 +80,10 @@ export class Abilities {
     this.buffetReloadUsed = false;
     for (const set of this.cloneSets.values()) for (const c of set.clones) G.scene.remove(c.h.group);
     this.cloneSets.clear();
+    for (const d of this.decoys) G.scene.remove(d.h.group);
+    this.decoys = []; this.swapDecoy = null;
+    for (const sc of this.scents) G.scene.remove(sc.mesh);
+    this.scents = [];
     G.cloneMode = false;
     G.gallopUntil = 0;
     if (G.clonedIds) G.clonedIds.clear();
@@ -137,8 +145,8 @@ export class Abilities {
         break;
 
       case 'denis':
-        if (key === 'C' && this.charges.C > 0) send('flash', { from: eye.toArray(), dir: dir.toArray(), stink: true });
-        else if (key === 'Q' && this.charges.Q > 0) send('throwZone', { from: eye.toArray(), dir: dir.toArray(), kind: 'puddle' });
+        if (key === 'C' && this.charges.C > 0) send('bloodfeast', {});
+        else if (key === 'Q' && this.charges.Q > 0) { const p = this.groundPoint(16); send('scent', { pos: [p.x, 0, p.z] }); }
         else if (key === 'E' && this.charges.E > 0) {
           const p = this.groundPoint();
           send('smokes', { positions: [[p.x, p.y, p.z]], stink: true });
@@ -191,13 +199,16 @@ export class Abilities {
         }
         break;
 
-      case 'fafik':
+      case 'fafik': {
+        const flatF = new THREE.Vector3(dir.x, 0, dir.z).normalize();
         if (key === 'C' && this.charges.C > 0) send('flash', { from: eye.toArray(), dir: dir.toArray(), tapok: true });
         else if (key === 'Q' && this.charges.Q > 0) {
-          const p = this.groundPoint();
-          send('smokes', { positions: [[p.x, p.y, p.z]], stink: false, garage: true });
-        } else if (key === 'E' && this.charges.E > 0) send('throwZone', { from: eye.toArray(), dir: dir.toArray(), kind: 'mangal' });
-        else if (key === 'X') {
+          // Двойник: рывок вперёд, на месте — клон-приманка
+          send('twin', { from: [G.player.pos.x, 0, G.player.pos.z], dir: [flatF.x, flatF.z], yaw: G.player.yaw });
+        } else if (key === 'E') {
+          if (this.swapDecoy) { send('swapDo', {}); }       // рокировка с уже запущенным клоном
+          else if (this.charges.E > 0) send('swapCast', { from: [G.player.pos.x, 0, G.player.pos.z], dir: [flatF.x, flatF.z], yaw: G.player.yaw });
+        } else if (key === 'X') {
           if (G.cloneMode) { G.net.send({ t: 'ability', kind: 'fafikDeClone', data: {} }); }
           else if (this.ultReady()) {
             G.hud.mapTarget('КЛОНЫ БАТИ: КУДА БЕГУТ? КЛИКНИ ПО КАРТЕ', (x, z) =>
@@ -205,6 +216,7 @@ export class Abilities {
           } else G.sfx.error();
         }
         break;
+      }
 
       case 'koniliy': {
         const flat0 = new THREE.Vector3(dir.x, 0, dir.z).normalize();
@@ -257,6 +269,7 @@ export class Abilities {
       smokes: this.char === 'vova' ? (data && data.positions && data.positions.length > 1 ? 'E' : 'C') : this.char === 'fafik' ? 'Q' : 'E',
       dash: 'C', launch: 'Q', boost: 'E', trap: 'C', turret: 'Q',
       scout: 'C', crispy: 'Q', buffet: 'E', neigh: 'Q', gallop: 'E',
+      bloodfeast: 'C', scent: 'Q', twin: 'Q', swapCast: 'E',
     };
     if (mine && keyByKind[kind] && this.charges[keyByKind[kind]] > 0) this.charges[keyByKind[kind]]--;
 
@@ -558,6 +571,86 @@ export class Abilities {
         G.sfx.dadDeClone();
         break;
       }
+
+      // ===== Денис: реворк C/Q =====
+      case 'bloodfeast': {
+        // хил считает сервер; тут — визуал пожирания
+        const src = this.posOf(id);
+        if (src) {
+          const c = src.clone().add(new THREE.Vector3(0, 1, 0));
+          G.fx.burst(c, { n: 16, color: 0xaa1122, speed: 2.4, life: 0.5, size: 0.16, gravity: 4, tex: G.fx.bloodTex });
+          G.fx.ring(src, 0x88cc44, 3);
+        }
+        G.sfx.feast(this.volTo(src || G.player.pos));
+        break;
+      }
+      case 'scent': {
+        const pos = new THREE.Vector3(data.pos[0], 0, data.pos[2]);
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(0.22, 10, 8),
+          new THREE.MeshStandardMaterial({ color: 0x7a2b26, roughness: 0.8 })
+        );
+        mesh.scale.set(1.2, 0.7, 1.1);
+        mesh.position.set(pos.x, 0.16, pos.z);
+        G.scene.add(mesh);
+        this.scents.push({ owner: id, pos, mesh, until: now() + ABILITY.SCENT_LIFE });
+        G.sfx.throwLight();
+        break;
+      }
+      case 'scentPing': {
+        const ownerAlly = G.players.get(id) && G.players.get(id).team === G.myTeam;
+        if (ownerAlly) {
+          const r = G.remotes.get(data.target);
+          if (r) r.revealedUntil = now() + ABILITY.SCENT_REVEAL;
+          G.revealed.set(data.target, now() + ABILITY.SCENT_REVEAL);
+        } else if (data.target === G.myId) {
+          G.hud.announce('', 'ДЕНИС ЧУЕТ ТЕБЯ ПО КРОВИ!', 1.4);
+        }
+        G.sfx.growl(0.7);
+        break;
+      }
+
+      // ===== Фафик: реворк Q/E (дуэлянт-обманщик) =====
+      case 'twin': {
+        if (mine) G.player.dash(ABILITY.TWIN_DASH);
+        const from = new THREE.Vector3(data.from[0], 0, data.from[2]);
+        const h = buildHumanoid('fafik');
+        h.group.position.copy(from);
+        h.group.rotation.y = data.yaw || 0;
+        G.scene.add(h.group);
+        this.decoys.push({ owner: id, h, pos: from.clone(), kind: 'stand', until: now() + ABILITY.TWIN_DECOY_TIME, phase: 0 });
+        G.sfx.dash(mine ? 1 : 0.4);
+        break;
+      }
+      case 'swapCast': {
+        const from = new THREE.Vector3(data.from[0], 0, data.from[2]);
+        const dirv = new THREE.Vector3(data.dir[0], 0, data.dir[1]).normalize();
+        const h = buildHumanoid('fafik');
+        h.group.position.copy(from);
+        h.group.rotation.y = data.yaw || 0;
+        G.scene.add(h.group);
+        const decoy = { owner: id, h, pos: from.clone(), dir: dirv, kind: 'run', until: now() + ABILITY.SWAP_LIFE, phase: 0, traveled: 0 };
+        this.decoys.push(decoy);
+        if (mine) { this.swapDecoy = decoy; G.hud.announce('', 'РОКИРОВКА ГОТОВА — НАЖМИ E ЕЩЁ РАЗ', 2); }
+        G.sfx.dadClones();
+        break;
+      }
+      case 'swapDo': {
+        const runs = this.decoys.filter(d => d.owner === id && d.kind === 'run');
+        const decoy = runs[runs.length - 1];
+        if (decoy) {
+          if (mine) {
+            G.player.teleport([decoy.pos.x, 0, decoy.pos.z], G.player.yaw);
+            this.swapDecoy = null;
+            G.fx.ring(decoy.pos, 0x9fd0ff, 3);
+          }
+          G.fx.burst(decoy.pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 12, color: 0x9fd0f0, speed: 4, life: 0.35, size: 0.15 });
+          G.scene.remove(decoy.h.group);
+          this.decoys = this.decoys.filter(d => d !== decoy);
+        }
+        G.sfx.dadDeClone();
+        break;
+      }
     }
   }
 
@@ -683,6 +776,8 @@ export class Abilities {
           G.blindUntil = t + 0.4 + k * (ABILITY.FLASH_MAX_BLIND - 0.4);
           G.blindStink = o.stink;
         }
+        // владелец сообщает серверу — тот ослепляет смотрящих ботов
+        if (o.owner === G.myId) G.net.send({ t: 'flashPop', pos: [o.pos.x, o.pos.y, o.pos.z] });
         G.scene.remove(o.mesh);
         this.orbs.splice(i, 1);
       }
@@ -944,6 +1039,40 @@ export class Abilities {
       if (age >= ABILITY.CLONES_TIME && owner === G.myId && G.cloneMode) {
         G.net.send({ t: 'ability', kind: 'fafikDeClone', data: {} });
       }
+    }
+
+    // Фафик: двойники (стоячий) и клон рокировки (бегущий)
+    for (let i = this.decoys.length - 1; i >= 0; i--) {
+      const dc = this.decoys[i];
+      if (dc.kind === 'run') {
+        const step = dc.dir.clone().multiplyScalar(ABILITY.SWAP_SPEED * dt);
+        this.ray.set(dc.pos, dc.dir); this.ray.far = step.length() + 0.35;
+        const hitWall = this.ray.intersectObjects(G.map.solids, false).length > 0;
+        if (!hitWall && dc.traveled < ABILITY.SWAP_DECOY_RANGE) {
+          dc.pos.add(step); dc.traveled += step.length();
+          dc.phase += dt * 12;
+          const s = Math.sin(dc.phase);
+          dc.h.rig.legL.hip.rotation.x = s * 0.6; dc.h.rig.legR.hip.rotation.x = -s * 0.6;
+          dc.h.rig.armL.shoulder.rotation.x = -s * 0.5; dc.h.rig.armR.shoulder.rotation.x = s * 0.3 - 0.5;
+          dc.h.rig.body.position.y = Math.abs(s) * 0.05;
+        }
+        dc.h.group.position.set(dc.pos.x, 0, dc.pos.z);
+      } else {
+        dc.phase += dt;
+        dc.h.rig.body.position.y = Math.sin(dc.phase * 2) * 0.012; // дышит на месте
+      }
+      if (now() >= dc.until) {
+        if (this.swapDecoy === dc) this.swapDecoy = null;
+        G.scene.remove(dc.h.group);
+        this.decoys.splice(i, 1);
+      }
+    }
+
+    // Денис: приманки «нюх мясника» — реветь считает сервер, тут срок жизни визуала
+    for (let i = this.scents.length - 1; i >= 0; i--) {
+      const sc = this.scents[i];
+      sc.mesh.rotation.y += dt * 1.5;
+      if (t >= sc.until) { G.scene.remove(sc.mesh); this.scents.splice(i, 1); }
     }
 
     // --- крюк-ульта Дениса ---

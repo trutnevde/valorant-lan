@@ -59,6 +59,8 @@ const match = {
   smokes: [],         // {pos:[x,y,z], r, until} — для LOS ботов
   zones: [],          // {type, pos|a/b, r, dps, from, until, owner} — урон ботам
   healZones: [],      // {kind, team, a?/b?/pos?/r?, rate, until} — хилки Иры
+  noises: [],         // {team, pos:[x,z], until, loud} — что боты СЛЫШАТ
+  scents: [],         // {owner, team, pos:[x,z], until, pinged:Map} — «нюх мясника» Дениса
   cocoon: null,       // {victim, by, hp, until}
   mapDef: MAPS[DEFAULT_MAP],
   aabbs: mapAabbs(MAPS[DEFAULT_MAP]),
@@ -75,8 +77,8 @@ function newPlayer(id, ws, bot = false) {
     loadout: { primary: null, sidearm: 'classic' },
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
-    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0,
-    ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {} } : null,
+    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0,
+    ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0 } : null,
   };
 }
 
@@ -114,6 +116,13 @@ function inSite(pos) {
     }
   }
   return null;
+}
+
+// шум, который слышат боты; шифт/присед бесшумны (клиент не шлёт noise), глушитель тише
+function addNoise(p, loud) {
+  if (!liveish()) return;
+  match.noises.push({ team: p.team, pos: [p.lastPos[0], p.lastPos[2]], until: now() + (loud ? 1.1 : 0.5), loud });
+  if (match.noises.length > 120) match.noises.shift();
 }
 
 // LOS для ботов: стены + дымы
@@ -154,7 +163,7 @@ function startRound() {
   match.deadline = now() + RULES.BUY_TIME;
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
-  match.spikeDropped = null; match.defuseHalfDone = false;
+  match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = [];
   // шип получает ОДИН случайный атакер (людям — приоритет)
   const attackers = teamOf(match.attackTeam);
   const humanAtt = attackers.filter(a => !a.bot);
@@ -165,7 +174,7 @@ function startRound() {
   for (const p of players.values()) {
     p.alive = true;
     p.hp = p.maxHp;
-    p.ultMark = null; p.cloneMode = false; p._healFrac = 0;
+    p.ultMark = null; p.cloneMode = false; p._healFrac = 0; p._hotUntil = 0; p.lastKillT = -99;
     if (match.round > 1) p.ult = Math.min(9, p.ult + 1);
     // позиция
     const side = sideOfTeam(p.team);
@@ -259,6 +268,7 @@ function onDeath(victim, killerId, weapon, part) {
   const killer = players.get(killerId);
   if (killer && killer.id !== victim.id && killer.team !== victim.team) {
     killer.kills++;
+    killer.lastKillT = now(); // «накормлен» — усиливает Кровопир Дениса
     killer.ult = Math.min(9, killer.ult + 1);
     killer.credits = Math.min(RULES.MAX_CREDITS, killer.credits + RULES.KILL_REWARD);
     send(killer, { t: 'ultPts', pts: killer.ult });
@@ -373,9 +383,20 @@ function onMessage(p, msg) {
       broadcastExcept(p.id, { ...msg, id: p.id });
       break;
     }
+    case 'noise': {
+      if (p.alive) addNoise(p, false); // бег
+      break;
+    }
     case 'shoot': case 'chat': {
       broadcastExcept(p.id, { ...msg, id: p.id });
-      if (msg.t === 'chat') send(p, { ...msg, id: p.id });
+      if (msg.t === 'chat') { send(p, { ...msg, id: p.id }); }
+      else if (p.alive) { const w = WEAPONS[msg.w]; addNoise(p, !(w && w.silenced) && msg.w !== 'knife'); } // выстрел — громкий шум (глушитель тише)
+      break;
+    }
+    case 'flashPop': {
+      // владелец сообщил, где хлопнула вспышка — ослепляем смотрящих ботов
+      if (!p.alive || !liveish()) return;
+      blindBots(msg.pos);
       break;
     }
     case 'buy': {
@@ -562,8 +583,9 @@ function onAbility(p, msg) {
     for (const e of players.values()) {
       if (e.team === p.team || !e.alive) continue;
       if (distToSeg2D(e.lastPos, a, b) < ABILITY.STAMPEDE_WIDTH) {
-        applyDamage(e, ABILITY.STAMPEDE_DMG, p.id, 'stampede', 'body');
-        if (!e.bot && e.alive) send(e, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
+        // табун только ОГЛУШАЕТ (урона нет)
+        if (e.bot) e.ai.stunUntil = now() + ABILITY.STAMPEDE_STUN;
+        else send(e, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
       }
     }
   } else if (kind === 'fafikClones') {
@@ -574,6 +596,16 @@ function onAbility(p, msg) {
   } else if (kind === 'fafikDeClone') {
     if (p.char !== 'fafik') return;
     p.cloneMode = false;
+  } else if (kind === 'bloodfeast') {
+    if (p.char !== 'denis') return;
+    const fed = now() - p.lastKillT < ABILITY.BLOODFEAST_FED_WINDOW;
+    heal(p, fed ? ABILITY.BLOODFEAST_FED : ABILITY.BLOODFEAST_INSTANT);
+    p._hotUntil = now() + ABILITY.BLOODFEAST_HOT_TIME;
+    p._hotRate = fed ? ABILITY.BLOODFEAST_HOT_FED : ABILITY.BLOODFEAST_HOT;
+    p.lastKillT = -99; // «съел» бонус кормёжки
+  } else if (kind === 'scent') {
+    if (p.char !== 'denis') return;
+    match.scents.push({ owner: p.id, team: p.team, pos: [msg.data.pos[0], msg.data.pos[2]], until: now() + ABILITY.SCENT_LIFE, pinged: new Map() });
   } else if (kind === 'smokes') {
     // дымы: запоминаем для LOS ботов
     for (const pos of msg.data.positions || []) {
@@ -589,6 +621,7 @@ function botResetRound(bot) {
   ai.path = []; ai.pathIdx = 0; ai.goal = null; ai.site = null;
   ai.nextThink = 0; ai.nextShot = 0; ai.engaging = 0; ai.scanYaw = bot.yaw;
   ai.nextAbility = now() + 3 + Math.random() * 3; ai.target = null;
+  ai.blindUntil = 0; ai.stunUntil = 0; ai.heardUntil = 0; ai.heardPos = null; ai._noiseAcc = 0;
   // автозакупка
   if (bot.credits >= 3900) { bot.loadout.primary = 'vandal'; bot.armor = 50; bot.credits -= 3900; }
   else if (bot.credits >= 2000) { bot.loadout.primary = 'spectre'; bot.armor = 25; bot.credits -= 2000; }
@@ -634,7 +667,38 @@ function navPath(fromIdx, toIdx) {
 
 function botEye(b) { return [b.lastPos[0], b.lastPos[1] + 1.6, b.lastPos[2]]; }
 
+// вспышка ослепляет ботов, которые на неё смотрят (с LOS)
+function blindBots(flashPos) {
+  const fp = [flashPos[0], flashPos[1] || 1.5, flashPos[2]];
+  for (const b of players.values()) {
+    if (!b.bot || !b.alive) continue;
+    const eye = botEye(b);
+    const to = [fp[0] - eye[0], fp[1] - eye[1], fp[2] - eye[2]];
+    const dist = Math.hypot(to[0], to[2]);
+    if (dist > 40 || dist < 0.1) continue;
+    const dot = (to[0] * -Math.sin(b.yaw) + to[2] * -Math.cos(b.yaw)) / dist;
+    if (dot < 0.2) continue; // не смотрит
+    if (!losClear(eye, fp)) continue;
+    const k = (dot - 0.2) / 0.8;
+    b.ai.blindUntil = Math.max(b.ai.blindUntil, now() + 0.5 + k * (ABILITY.FLASH_MAX_BLIND - 0.5));
+  }
+}
+
+// бот слышит ближайший вражеский шум (громкий — дальше)
+function botHearEnemy(bot) {
+  const t = now();
+  let best = null, bd = Infinity;
+  for (const n of match.noises) {
+    if (t > n.until || n.team === bot.team) continue;
+    const range = n.loud ? 28 : 14;
+    const d = Math.hypot(n.pos[0] - bot.lastPos[0], n.pos[1] - bot.lastPos[2]);
+    if (d < range && d < bd) { bd = d; best = n; }
+  }
+  return best ? best.pos : null;
+}
+
 function botVisibleEnemy(bot) {
+  if (now() < bot.ai.blindUntil) return null; // ослеплённый бот не видит
   let best = null, bd = 48;
   for (const e of players.values()) {
     if (e.team === bot.team || !e.alive) continue;
@@ -678,7 +742,9 @@ function botShoot(bot, e, dist) {
     e.lastPos[2] - bot.lastPos[2] + (Math.random() - 0.5) * 1.6,
   ];
   const len = Math.hypot(...dir) || 1;
-  broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bot.loadout.primary || bot.loadout.sidearm || 'classic' });
+  const bw = bot.loadout.primary || bot.loadout.sidearm || 'classic';
+  broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bw });
+  addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
   // шанс попасть падает с дистанцией и растёт вблизи
   const pHit = Math.max(0.06, Math.min(0.32, 0.34 - dist * 0.008));
   if (Math.random() < pHit) {
@@ -707,6 +773,9 @@ function botFlash(bot, enemy, tapok) {
   const dir = [tgt[0] - eye[0], 1.4 - eye[1], tgt[2] - eye[2]];
   const dl = Math.hypot(...dir) || 1;
   botBroadcastAbility(bot, 'flash', { from: eye, dir: dir.map(v => v / dl), tapok: !!tapok });
+  const popX = eye[0] + (tgt[0] - eye[0]) / (dl / (ABILITY.FLASH_SPEED * ABILITY.FLASH_FUSE));
+  const popZ = eye[2] + (tgt[2] - eye[2]) / (dl / (ABILITY.FLASH_SPEED * ABILITY.FLASH_FUSE));
+  setTimeout(() => { if (liveish()) blindBots([popX, 1.5, popZ]); }, ABILITY.FLASH_FUSE * 1000);
 }
 function botSmoke(bot) {
   const p = [bot.lastPos[0] - Math.sin(bot.yaw) * 6, 0, bot.lastPos[2] - Math.cos(bot.yaw) * 6];
@@ -758,14 +827,19 @@ function botUseAbility(bot, seen, combat) {
           botBroadcastAbility(bot, 'cocoonHit', { target: e.id });
         }
         cd(11);
-      } else if (combat && e) { botZoneAt(bot, 'puddle', e.lastPos, ABILITY.PUDDLE_R, ABILITY.PUDDLE_TIME, ABILITY.PUDDLE_DPS); cd(8); }
+      } else if (bot.hp < bot.maxHp - 35) {
+        // Кровопир: подъедается, когда ранен
+        const fed = t - bot.lastKillT < ABILITY.BLOODFEAST_FED_WINDOW;
+        heal(bot, fed ? ABILITY.BLOODFEAST_FED : ABILITY.BLOODFEAST_INSTANT);
+        bot._hotUntil = t + ABILITY.BLOODFEAST_HOT_TIME; bot._hotRate = fed ? ABILITY.BLOODFEAST_HOT_FED : ABILITY.BLOODFEAST_HOT;
+        bot.lastKillT = -99;
+        botBroadcastAbility(bot, 'bloodfeast', {});
+        cd(9);
+      } else if (!combat) { botSmoke(bot); cd(11); }
       break;
     case 'fafik':
-      if (combat && e) {
-        if (Math.random() < 0.5) botZoneAt(bot, 'mangal', e.lastPos, ABILITY.MANGAL_R, ABILITY.MANGAL_TIME, ABILITY.MANGAL_DPS);
-        else botFlash(bot, e, true);
-        cd(8);
-      }
+      // дуэлянт: бросает тапок-флешку по врагу (клоны-мобильность оставим людям)
+      if (combat && e) { botFlash(bot, e, true); cd(8); }
       break;
     case 'koniliy':
       if (bot.ult >= cost && combat && e) {
@@ -777,8 +851,9 @@ function botUseAbility(bot, seen, combat) {
         for (const en of players.values()) {
           if (en.team === bot.team || !en.alive) continue;
           if (distToSeg2D(en.lastPos, a, b) < ABILITY.STAMPEDE_WIDTH) {
-            applyDamage(en, ABILITY.STAMPEDE_DMG, bot.id, 'stampede', 'body');
-            if (!en.bot && en.alive) send(en, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
+            // табун только ОГЛУШАЕТ, урона нет
+            if (en.bot) en.ai.stunUntil = now() + ABILITY.STAMPEDE_STUN;
+            else send(en, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
           }
         }
         botBroadcastAbility(bot, 'stampede', { from: [a[0], 0, a[2]], to: [b[0], b[2]] });
@@ -822,17 +897,31 @@ function tickBot(bot, dt) {
   const ai = bot.ai;
   if (!bot.alive) return;
   if (match.cocoon && match.cocoon.victim === bot.id) return;
+  if (t < ai.stunUntil) return;          // оглушён табуном — стоит
   if (match.state === PHASES.BUY) return; // заморозка на закупке
 
   const side = sideOfTeam(bot.team);
-  const seen = botVisibleEnemy(bot);
+  const blinded = t < ai.blindUntil;      // ослеплён вспышкой — не видит и не стреляет
+  const seen = blinded ? null : botVisibleEnemy(bot);
   if (seen) { ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist; }
-  const combat = t < ai.engaging && ai.target && ai.target.alive;
+  const combat = !blinded && t < ai.engaging && ai.target && ai.target.alive;
 
   // стрельба поверх движения (не замораживает бота)
   if (combat && seen) botShoot(bot, ai.target, seen.dist);
-  // способности агента
-  botUseAbility(bot, seen, combat);
+  // способности агента (не колдует ослеплённым)
+  if (!blinded) botUseAbility(bot, seen, combat);
+
+  // реакция на ЗВУК: не в бою и не ослеплён — поворачивается на шум, близкий проверяет
+  if (!combat && !blinded) {
+    const heard = botHearEnemy(bot);
+    if (heard) { ai.heardPos = heard; ai.heardUntil = t + 1.6; }
+    if (ai.heardPos && t < ai.heardUntil) {
+      const hdx = ai.heardPos[0] - bot.lastPos[0], hdz = ai.heardPos[1] - bot.lastPos[2];
+      bot.yaw = Math.atan2(-hdx, -hdz); // пре-аим на звук
+      const hd = Math.hypot(hdx, hdz);
+      if (hd > 2.5 && hd < 13) { moveToward(bot, [ai.heardPos[0], 0, ai.heardPos[1]], dt, true); return; }
+    }
+  }
 
   // близкий враг — придержать позицию для точности (дуэль в упор)
   const holdForDuel = combat && seen && seen.dist < 12;
@@ -911,6 +1000,8 @@ function moveToward(bot, target, dt, combat = false) {
     const step = Math.min(d, speed * dt);
     bot.lastPos[0] += dx / d * step;
     bot.lastPos[2] += dz / d * step;
+    bot.ai._noiseAcc = (bot.ai._noiseAcc || 0) + step;
+    if (bot.ai._noiseAcc > 2.7) { bot.ai._noiseAcc = 0; addNoise(bot, false); }
     // высота — плавно к высоте цели (лестницы)
     bot.lastPos[1] += (target[1] - bot.lastPos[1]) * Math.min(1, dt * 6);
     if (!combat) bot.yaw = Math.atan2(-dx, -dz); // в бою прицел держит botShoot
@@ -1080,6 +1171,28 @@ setInterval(() => {
       }
     }
     match.healZones = match.healZones.filter(z => t <= z.until);
+
+    // Денис: реген Кровопира (HoT)
+    for (const p of players.values()) {
+      if (!p.alive || t >= p._hotUntil || p.hp >= p.maxHp) continue;
+      p._healFrac = (p._healFrac || 0) + p._hotRate * 0.05;
+      if (p._healFrac >= 1) { const whole = Math.floor(p._healFrac); p._healFrac -= whole; heal(p, whole); }
+    }
+
+    // Денис: «нюх мясника» — приманки палят врагов команде (раненых чуют вдвое дальше)
+    for (const sc of match.scents) {
+      if (t > sc.until) continue;
+      for (const e of players.values()) {
+        if (e.team === sc.team || !e.alive) continue;
+        const d = Math.hypot(e.lastPos[0] - sc.pos[0], e.lastPos[2] - sc.pos[1]);
+        const range = e.hp < ABILITY.SCENT_WOUND_HP ? ABILITY.SCENT_R * ABILITY.SCENT_BLOOD_MUL : ABILITY.SCENT_R;
+        if (d < range && t > (sc.pinged.get(e.id) || 0)) {
+          sc.pinged.set(e.id, t + ABILITY.SCENT_REVEAL * 0.8);
+          broadcast({ t: 'ability', id: sc.owner, kind: 'scentPing', data: { target: e.id } });
+        }
+      }
+    }
+    match.scents = match.scents.filter(sc => t <= sc.until);
 
     // ИИ ботов
     for (const b of players.values()) {

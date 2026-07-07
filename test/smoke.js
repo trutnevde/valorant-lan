@@ -108,19 +108,20 @@ try {
   const death = await host.wait(m => m.t === 'death' && m.id === enemyBot.id, 'death enemy bot', 5000);
   log(death.by === host.id && death.part === 'head', 'убийство вражеского бота засчитано');
 
-  // проверка: дружественного огня нет
+  // проверка: дружественного огня нет — по вине ХОСТА союзник не гибнет
   const allyBot = lobFull.players.find(p => p.team === 'A' && p.bot);
   host.send({ t: 'hit', target: allyBot.id, dmg: 200, part: 'head', weapon: 'vandal' });
   await new Promise(r => setTimeout(r, 300));
-  const allyDeath = host.last(m => m.t === 'death' && m.id === allyBot.id);
-  log(!allyDeath, 'по своим ботам урона нет (friendly fire off)');
+  const allyDeathByHost = host.last(m => m.t === 'death' && m.id === allyBot.id && m.by === host.id);
+  log(!allyDeathByHost, 'по своим ботам урона нет (friendly fire off)');
 
   // ===== хилки Иры (хост — Ира) =====
-  // healBurst по союзникам на полном HP не даёт overheal-события
+  // healBurst принимается сервером без краша (само лечение зависит от текущего HP союзников)
   host.msgs.length = 0;
   host.send({ t: 'healBurst', pos: [0, 0, -19], r: 8, amount: 50 });
   await new Promise(r => setTimeout(r, 250));
-  log(!host.last(m => m.t === 'hp' && m.part === 'heal'), 'healBurst не даёт overheal союзникам на 100 HP');
+  const anyHeal = host.last(m => m.t === 'hp' && m.part === 'heal');
+  log(!anyHeal || anyHeal.hp <= 100, 'healBurst не задирает HP союзника выше максимума');
   // криспи-хилзона и банкет от Иры принимаются без краша
   host.send({ t: 'healZone', kind: 'crispy', a: [-3, 0, 0], b: [3, 0, 0], dur: 15 });
   host.send({ t: 'healZone', kind: 'banquet', pos: [0, 0, 0], r: 6, dur: 20 });

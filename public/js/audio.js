@@ -48,40 +48,114 @@ export class Sfx {
     src.start(t);
   }
 
-  // ===== оружие =====
+  // ===== богатые примитивы для оружия =====
+  // резкий транзиент-щелчок (порох)
+  crack({ vol = 0.5, fc = 2500, dur = 0.03, delay = 0, drive = 8 }) {
+    if (!this.ctx) return;
+    const t = this.t0 + delay;
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) { const e = 1 - i / len; d[i] = Math.tanh((Math.random() * 2 - 1) * drive) * e * e; }
+    const src = this.ctx.createBufferSource(); src.buffer = buf;
+    const flt = this.ctx.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = fc; flt.Q.value = 0.6;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(flt); flt.connect(g); g.connect(this.master); src.start(t);
+  }
+  // низкочастотное «тело» выстрела с искажением
+  body({ f = 140, f2 = 45, vol = 0.35, dur = 0.1, delay = 0, type = 'sawtooth' }) {
+    if (!this.ctx) return;
+    const t = this.t0 + delay;
+    const o = this.ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f, t); o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
+    const ws = this.ctx.createWaveShaper(); const c = new Float32Array(256);
+    for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 3); } ws.curve = c;
+    const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(ws); ws.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+  }
+  // ===== оружие: транзиент + тело + хвост, всё с джиттером =====
   shot(w, vol = 1) {
+    const j = 0.9 + Math.random() * 0.2;   // джиттер тона на каждый выстрел
     switch (w) {
       case 'knife':
-        this.noise({ dur: 0.06, vol: 0.15 * vol, fc: 3000, type: 'highpass' });
+        this.crack({ vol: 0.16 * vol, fc: 3500 * j, dur: 0.05, drive: 3 });
+        this.tone({ f: 700 * j, f2: 300, dur: 0.05, vol: 0.08 * vol, type: 'triangle' });
         break;
       case 'classic':
-        this.noise({ dur: 0.09, vol: 0.5 * vol, fc: 2200, fc2: 300 });
-        this.tone({ f: 180, f2: 60, type: 'triangle', dur: 0.07, vol: 0.25 * vol });
+        this.crack({ vol: 0.4 * vol, fc: 2400 * j, dur: 0.03 });
+        this.body({ f: 170 * j, f2: 55, dur: 0.06, vol: 0.22 * vol });
+        this.noise({ dur: 0.08, vol: 0.18 * vol, fc: 1800 * j, fc2: 350 });
+        break;
+      case 'ghost':
+        this.crack({ vol: 0.22 * vol, fc: 3200 * j, dur: 0.02, drive: 4 }); // с глушителем — «пфф»
+        this.noise({ dur: 0.09, vol: 0.22 * vol, fc: 900 * j, fc2: 200, type: 'bandpass' });
+        this.body({ f: 130, f2: 60, dur: 0.05, vol: 0.1 * vol });
         break;
       case 'sheriff':
-        this.noise({ dur: 0.16, vol: 0.7 * vol, fc: 1600, fc2: 150 });
-        this.tone({ f: 120, f2: 40, type: 'sawtooth', dur: 0.14, vol: 0.4 * vol });
+        this.crack({ vol: 0.6 * vol, fc: 1900 * j, dur: 0.04, drive: 12 });
+        this.body({ f: 110 * j, f2: 35, dur: 0.16, vol: 0.45 * vol });
+        this.noise({ dur: 0.22, vol: 0.28 * vol, fc: 1200, fc2: 90 }); // хвост
+        break;
+      case 'stinger':
+        this.crack({ vol: 0.32 * vol, fc: 3000 * j, dur: 0.02 });
+        this.body({ f: 220 * j, f2: 110, dur: 0.04, vol: 0.13 * vol, type: 'square' });
         break;
       case 'spectre':
-        this.noise({ dur: 0.06, vol: 0.4 * vol, fc: 2800, fc2: 500 });
-        this.tone({ f: 220, f2: 90, type: 'square', dur: 0.05, vol: 0.15 * vol });
+        this.crack({ vol: 0.26 * vol, fc: 2600 * j, dur: 0.025, drive: 4 });
+        this.noise({ dur: 0.06, vol: 0.16 * vol, fc: 1400 * j, fc2: 400, type: 'bandpass' });
+        break;
+      case 'ares':
+        this.crack({ vol: 0.42 * vol, fc: 2100 * j, dur: 0.03, drive: 10 });
+        this.body({ f: 130 * j, f2: 55, dur: 0.08, vol: 0.3 * vol });
+        this.noise({ dur: 0.1, vol: 0.2 * vol, fc: 1600, fc2: 260 });
+        break;
+      case 'bucky': case 'judge':
+        this.crack({ vol: 0.55 * vol, fc: 1400 * j, dur: 0.05, drive: 14 });
+        this.body({ f: 90 * j, f2: 30, dur: 0.18, vol: 0.4 * vol });
+        this.noise({ dur: 0.26, vol: 0.3 * vol, fc: 900, fc2: 70 }); // раскатистый хвост
+        break;
+      case 'bulldog': case 'guardian':
+        this.crack({ vol: 0.5 * vol, fc: 2000 * j, dur: 0.035, drive: 11 });
+        this.body({ f: 145 * j, f2: 48, dur: 0.1, vol: 0.34 * vol });
+        this.noise({ dur: 0.14, vol: 0.2 * vol, fc: 1700, fc2: 220 });
+        break;
+      case 'phantom':
+        this.crack({ vol: 0.34 * vol, fc: 2600 * j, dur: 0.025, drive: 5 }); // глушитель — суше
+        this.body({ f: 150 * j, f2: 60, dur: 0.07, vol: 0.24 * vol });
+        this.noise({ dur: 0.08, vol: 0.14 * vol, fc: 1300, fc2: 400, type: 'bandpass' });
+        break;
+      case 'marshal':
+        this.crack({ vol: 0.7 * vol, fc: 1700 * j, dur: 0.05, drive: 16 });
+        this.body({ f: 95 * j, f2: 32, dur: 0.24, vol: 0.5 * vol });
+        this.noise({ dur: 0.4, vol: 0.32 * vol, fc: 1100, fc2: 70 });
         break;
       case 'operator':
-        this.noise({ dur: 0.35, vol: 0.9 * vol, fc: 900, fc2: 80 });
-        this.tone({ f: 70, f2: 28, type: 'sawtooth', dur: 0.3, vol: 0.5 * vol });
+        this.crack({ vol: 0.85 * vol, fc: 1500 * j, dur: 0.06, drive: 20 });
+        this.body({ f: 80 * j, f2: 26, dur: 0.32, vol: 0.6 * vol });
+        this.noise({ dur: 0.5, vol: 0.4 * vol, fc: 900, fc2: 55 }); // долгий раскат
+        this.tone({ f: 55, f2: 30, dur: 0.4, vol: 0.25 * vol, type: 'sine', delay: 0.02 });
         break;
-      default: // vandal / phantom
-        this.noise({ dur: 0.11, vol: 0.6 * vol, fc: 2000, fc2: 250 });
-        this.tone({ f: 150, f2: 55, type: 'sawtooth', dur: 0.09, vol: 0.3 * vol });
+      default: // vandal и прочие винтовки
+        this.crack({ vol: 0.5 * vol, fc: 2200 * j, dur: 0.03, drive: 12 });
+        this.body({ f: 155 * j, f2: 52, dur: 0.09, vol: 0.32 * vol });
+        this.noise({ dur: 0.12, vol: 0.2 * vol, fc: 1800, fc2: 240 });
     }
   }
-  dry() { this.tone({ f: 900, dur: 0.04, vol: 0.12, type: 'square' }); }
+  dry() { this.crack({ vol: 0.1, fc: 4000, dur: 0.02, drive: 2 }); this.tone({ f: 1100, dur: 0.02, vol: 0.08, type: 'square' }); }
   reload() {
-    this.noise({ dur: 0.05, vol: 0.2, fc: 3500, type: 'highpass' });
-    this.noise({ dur: 0.05, vol: 0.25, fc: 3000, type: 'highpass', delay: 0.35 });
-    this.tone({ f: 500, f2: 700, dur: 0.05, vol: 0.12, delay: 0.6 });
+    // защёлка магазина — три разных клика с разным тембром
+    this.crack({ vol: 0.18, fc: 3200, dur: 0.03, drive: 3 });
+    this.tone({ f: 380, f2: 260, dur: 0.04, vol: 0.12, type: 'square', delay: 0.05 });
+    this.crack({ vol: 0.22, fc: 2600, dur: 0.04, drive: 4, delay: 0.4 });
+    this.tone({ f: 520, f2: 700, dur: 0.05, vol: 0.13, type: 'square', delay: 0.7 });
+    this.crack({ vol: 0.14, fc: 4000, dur: 0.02, delay: 0.75 });
   }
-  footstep(vol = 0.5) { this.noise({ dur: 0.05, vol: 0.18 * vol, fc: 400 + Math.random() * 200, q: 2 }); }
+  footstep(vol = 0.5, surface = 0) {
+    // разные поверхности + рандом высоты + два слоя (пятка/носок)
+    const base = 300 + Math.random() * 260 + surface * 200;
+    this.noise({ dur: 0.05, vol: 0.16 * vol, fc: base, q: 2.2 });
+    this.noise({ dur: 0.035, vol: 0.09 * vol, fc: base * 2.4, q: 1.5, type: 'bandpass', delay: 0.02 });
+  }
 
   // ===== фидбек =====
   hitmarker() { this.tone({ f: 1400, f2: 900, dur: 0.05, vol: 0.2, type: 'square' }); }
@@ -116,6 +190,17 @@ export class Sfx {
   }
   rotStop() {
     if (this.rotNode) { try { this.rotNode.src.stop(); } catch {} this.rotNode = null; }
+  }
+  feast(vol = 1) {
+    // чавканье-пожирание: низкое влажное + глоток
+    this.noise({ dur: 0.18, vol: 0.28 * vol, fc: 500, fc2: 140 });
+    this.body({ f: 120, f2: 70, dur: 0.2, vol: 0.22 * vol, type: 'sawtooth' });
+    this.tone({ f: 260, f2: 500, dur: 0.14, vol: 0.16 * vol, type: 'sine', delay: 0.14 });
+  }
+  growl(vol = 1) {
+    // утробное рычание-нюх
+    this.body({ f: 90, f2: 55, dur: 0.35, vol: 0.3 * vol, type: 'sawtooth' });
+    this.noise({ dur: 0.3, vol: 0.14 * vol, fc: 600, fc2: 250, type: 'bandpass' });
   }
   dismember() {
     this.tone({ f: 100, f2: 45, dur: 0.6, vol: 0.4, type: 'sawtooth' });
@@ -203,10 +288,15 @@ export class Sfx {
   }
 
   // ===== шип =====
-  spikeBeep(fast = false) { this.tone({ f: fast ? 2200 : 1800, dur: 0.06, vol: 0.22, type: 'square' }); }
-  plantTick() { this.tone({ f: 1000, dur: 0.04, vol: 0.15 }); }
-  planted() { this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); }
-  defused() { this.tone({ f: 900, f2: 1400, dur: 0.3, vol: 0.3, type: 'triangle' }); }
+  spikeBeep(fast = false) {
+    this.tone({ f: fast ? 2300 : 1850, dur: 0.05, vol: 0.24, type: 'square' });
+    this.tone({ f: fast ? 3200 : 2600, dur: 0.03, vol: 0.1, type: 'sine', delay: 0.01 });
+  }
+  plantTick() { this.crack({ vol: 0.1, fc: 3500, dur: 0.02, drive: 2 }); this.tone({ f: 900, dur: 0.03, vol: 0.12, type: 'square' }); }
+  // ЕДИНЫЙ тик разминирования — звучит одинаково всегда (для фейков нет «прогресса» на слух)
+  defuseTick() { this.tone({ f: 1400, dur: 0.05, vol: 0.16, type: 'sine' }); this.crack({ vol: 0.06, fc: 5000, dur: 0.015 }); }
+  planted() { this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); this.body({ f: 90, f2: 60, dur: 0.4, vol: 0.25, delay: 0.05, type: 'sine' }); }
+  defused() { this.tone({ f: 700, f2: 1200, dur: 0.18, vol: 0.28, type: 'sine' }); this.tone({ f: 1000, f2: 1500, dur: 0.25, vol: 0.24, type: 'triangle', delay: 0.14 }); }
   explosion() {
     this.noise({ dur: 1.2, vol: 1.0, fc: 400, fc2: 40 });
     this.tone({ f: 60, f2: 25, dur: 1.0, vol: 0.7, type: 'sawtooth' });
