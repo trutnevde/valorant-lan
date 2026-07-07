@@ -1,0 +1,221 @@
+// Весь звук синтезируется через WebAudio — никаких файлов, работает офлайн
+export class Sfx {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.rotNode = null;
+  }
+  init() {
+    if (!this.ctx) {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.45;
+      this.master.connect(this.ctx.destination);
+    }
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+  get t0() { return this.ctx ? this.ctx.currentTime : 0; }
+
+  tone({ f = 440, f2 = 0, type = 'square', dur = 0.1, vol = 0.25, delay = 0 }) {
+    if (!this.ctx) return;
+    const t = this.t0 + delay;
+    const o = this.ctx.createOscillator();
+    const g = this.ctx.createGain();
+    o.type = type;
+    o.frequency.setValueAtTime(f, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    o.connect(g); g.connect(this.master);
+    o.start(t); o.stop(t + dur + 0.02);
+  }
+  noise({ dur = 0.1, vol = 0.25, fc = 1200, q = 1, type = 'lowpass', fc2 = 0, delay = 0 }) {
+    if (!this.ctx) return;
+    const t = this.t0 + delay;
+    const len = Math.max(1, Math.floor(this.ctx.sampleRate * dur));
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf;
+    const flt = this.ctx.createBiquadFilter();
+    flt.type = type; flt.frequency.setValueAtTime(fc, t); flt.Q.value = q;
+    if (fc2) flt.frequency.exponentialRampToValueAtTime(Math.max(10, fc2), t + dur);
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+    src.connect(flt); flt.connect(g); g.connect(this.master);
+    src.start(t);
+  }
+
+  // ===== оружие =====
+  shot(w, vol = 1) {
+    switch (w) {
+      case 'knife':
+        this.noise({ dur: 0.06, vol: 0.15 * vol, fc: 3000, type: 'highpass' });
+        break;
+      case 'classic':
+        this.noise({ dur: 0.09, vol: 0.5 * vol, fc: 2200, fc2: 300 });
+        this.tone({ f: 180, f2: 60, type: 'triangle', dur: 0.07, vol: 0.25 * vol });
+        break;
+      case 'sheriff':
+        this.noise({ dur: 0.16, vol: 0.7 * vol, fc: 1600, fc2: 150 });
+        this.tone({ f: 120, f2: 40, type: 'sawtooth', dur: 0.14, vol: 0.4 * vol });
+        break;
+      case 'spectre':
+        this.noise({ dur: 0.06, vol: 0.4 * vol, fc: 2800, fc2: 500 });
+        this.tone({ f: 220, f2: 90, type: 'square', dur: 0.05, vol: 0.15 * vol });
+        break;
+      case 'operator':
+        this.noise({ dur: 0.35, vol: 0.9 * vol, fc: 900, fc2: 80 });
+        this.tone({ f: 70, f2: 28, type: 'sawtooth', dur: 0.3, vol: 0.5 * vol });
+        break;
+      default: // vandal / phantom
+        this.noise({ dur: 0.11, vol: 0.6 * vol, fc: 2000, fc2: 250 });
+        this.tone({ f: 150, f2: 55, type: 'sawtooth', dur: 0.09, vol: 0.3 * vol });
+    }
+  }
+  dry() { this.tone({ f: 900, dur: 0.04, vol: 0.12, type: 'square' }); }
+  reload() {
+    this.noise({ dur: 0.05, vol: 0.2, fc: 3500, type: 'highpass' });
+    this.noise({ dur: 0.05, vol: 0.25, fc: 3000, type: 'highpass', delay: 0.35 });
+    this.tone({ f: 500, f2: 700, dur: 0.05, vol: 0.12, delay: 0.6 });
+  }
+  footstep(vol = 0.5) { this.noise({ dur: 0.05, vol: 0.18 * vol, fc: 400 + Math.random() * 200, q: 2 }); }
+
+  // ===== фидбек =====
+  hitmarker() { this.tone({ f: 1400, f2: 900, dur: 0.05, vol: 0.2, type: 'square' }); }
+  headshot() { this.tone({ f: 1800, f2: 2400, dur: 0.09, vol: 0.3, type: 'square' }); }
+  hurt() { this.tone({ f: 220, f2: 110, dur: 0.12, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.08, vol: 0.2, fc: 800 }); }
+  kill() { this.tone({ f: 600, dur: 0.08, vol: 0.25 }); this.tone({ f: 900, dur: 0.1, vol: 0.25, delay: 0.08 }); }
+  buy() { this.tone({ f: 800, f2: 1200, dur: 0.08, vol: 0.2, type: 'triangle' }); }
+  error() { this.tone({ f: 200, dur: 0.12, vol: 0.2, type: 'square' }); }
+  click() { this.tone({ f: 600, dur: 0.03, vol: 0.1 }); }
+
+  // ===== способности =====
+  flashThrow() { this.noise({ dur: 0.15, vol: 0.2, fc: 2000, fc2: 3500, type: 'bandpass' }); }
+  flashPop(vol = 1) { this.tone({ f: 2500, f2: 4500, dur: 0.4, vol: 0.4 * vol, type: 'sine' }); this.noise({ dur: 0.15, vol: 0.3 * vol, fc: 4000, type: 'highpass' }); }
+  fireIgnite(vol = 1) { this.noise({ dur: 0.5, vol: 0.35 * vol, fc: 900, fc2: 300 }); this.tone({ f: 90, f2: 50, dur: 0.4, vol: 0.2 * vol, type: 'sawtooth' }); }
+  fireCrackle(vol = 1) { this.noise({ dur: 0.08, vol: 0.06 * vol, fc: 1200 + Math.random() * 1500, q: 3, type: 'bandpass' }); }
+  hookThrow() { this.noise({ dur: 0.25, vol: 0.3, fc: 1500, fc2: 400, type: 'bandpass' }); this.tone({ f: 300, f2: 150, dur: 0.2, vol: 0.15, type: 'triangle' }); }
+  hookHit() { this.tone({ f: 150, f2: 60, dur: 0.25, vol: 0.5, type: 'sawtooth' }); this.noise({ dur: 0.15, vol: 0.4, fc: 600 }); }
+  rotStart() {
+    if (!this.ctx || this.rotNode) return;
+    const len = this.ctx.sampleRate;
+    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buf; src.loop = true;
+    const flt = this.ctx.createBiquadFilter();
+    flt.type = 'lowpass'; flt.frequency.value = 300; flt.Q.value = 4;
+    const g = this.ctx.createGain(); g.gain.value = 0.14;
+    src.connect(flt); flt.connect(g); g.connect(this.master);
+    src.start();
+    this.rotNode = { src, g };
+  }
+  rotStop() {
+    if (this.rotNode) { try { this.rotNode.src.stop(); } catch {} this.rotNode = null; }
+  }
+  dismember() {
+    this.tone({ f: 100, f2: 45, dur: 0.6, vol: 0.4, type: 'sawtooth' });
+    for (let i = 0; i < 6; i++) this.noise({ dur: 0.1, vol: 0.3, fc: 500 + Math.random() * 400, delay: i * 0.4 });
+  }
+  phoenixUlt() { this.tone({ f: 300, f2: 900, dur: 0.5, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.5, vol: 0.25, fc: 600, fc2: 2000 }); }
+
+  // ===== новые способности v2 =====
+  smokePop(stink = false) {
+    this.noise({ dur: 0.6, vol: 0.3, fc: stink ? 500 : 900, fc2: 150 });
+    if (stink) this.tone({ f: 90, f2: 60, dur: 0.5, vol: 0.15, type: 'sawtooth' });
+  }
+  orbitalWarn() {
+    [0, 0.18, 0.36].forEach((d) => this.tone({ f: 880, dur: 0.12, vol: 0.3, type: 'square', delay: d }));
+    this.noise({ dur: 2.5, vol: 0.35, fc: 300, fc2: 2000, delay: 1.2 });
+    this.tone({ f: 60, f2: 45, dur: 2.5, vol: 0.3, type: 'sawtooth', delay: 1.4 });
+  }
+  dash(vol = 1) { this.noise({ dur: 0.22, vol: 0.3 * vol, fc: 1800, fc2: 400, type: 'bandpass' }); }
+  knivesUlt() { [600, 900, 1300].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.25, type: 'triangle', delay: i * 0.09 })); }
+  knifeThrow() { this.noise({ dur: 0.12, vol: 0.25, fc: 3500, fc2: 1500, type: 'bandpass' }); }
+  trapPing() { this.tone({ f: 1500, f2: 2200, dur: 0.2, vol: 0.3, type: 'sine' }); }
+  turretPlace() { this.tone({ f: 400, f2: 700, dur: 0.15, vol: 0.25, type: 'square' }); this.noise({ dur: 0.1, vol: 0.2, fc: 2000, delay: 0.12 }); }
+  turretShot(vol = 1) { this.noise({ dur: 0.05, vol: 0.3 * vol, fc: 2600, fc2: 800 }); }
+  xray() { this.tone({ f: 300, f2: 1600, dur: 0.6, vol: 0.3, type: 'sine' }); this.tone({ f: 450, f2: 2400, dur: 0.6, vol: 0.2, type: 'sine', delay: 0.1 }); }
+  puddleSplat(vol = 1) { this.noise({ dur: 0.25, vol: 0.35 * vol, fc: 600, fc2: 150 }); }
+
+  // ===== Ира (KFC) =====
+  throwLight() { this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 900, type: 'bandpass' }); }
+  crispyPlace(vol = 1) { this.noise({ dur: 0.35, vol: 0.35 * vol, fc: 3000, q: 0.6, type: 'highpass' }); this.tone({ f: 300, f2: 500, dur: 0.15, vol: 0.15 * vol, type: 'triangle' }); }
+  buffetPop(vol = 1) { this.tone({ f: 500, f2: 900, dur: 0.25, vol: 0.3 * vol, type: 'sine' }); this.noise({ dur: 0.4, vol: 0.25 * vol, fc: 800, fc2: 2000 }); }
+  banquetSummon() { [330, 440, 550, 660].forEach((f, i) => this.tone({ f, dur: 0.25, vol: 0.28, type: 'triangle', delay: i * 0.1 })); this.noise({ dur: 0.6, vol: 0.2, fc: 500, fc2: 1500, delay: 0.2 }); }
+  chickenSpawn() { this.tone({ f: 600, f2: 900, dur: 0.1, vol: 0.2, type: 'square' }); this.chickenCluck(0.7); }
+  chickenCluck(vol = 1) {
+    // «ко-ко-ко-кудах!»
+    for (let i = 0; i < 3; i++) this.tone({ f: 700 + Math.random() * 100, f2: 500, dur: 0.06, vol: 0.18 * vol, type: 'square', delay: i * 0.09 });
+    this.tone({ f: 900, f2: 1500, dur: 0.18, vol: 0.25 * vol, type: 'square', delay: 0.3 });
+    this.tone({ f: 1500, f2: 700, dur: 0.15, vol: 0.2 * vol, type: 'square', delay: 0.45 });
+  }
+
+  // ===== Конилий (кони) =====
+  neigh(vol = 1) {
+    // ржание: скользящий тон вверх-вниз + шум
+    this.tone({ f: 400, f2: 900, dur: 0.18, vol: 0.3 * vol, type: 'sawtooth' });
+    this.tone({ f: 900, f2: 350, dur: 0.3, vol: 0.28 * vol, type: 'sawtooth', delay: 0.16 });
+    this.noise({ dur: 0.4, vol: 0.15 * vol, fc: 1200, fc2: 400, type: 'bandpass', delay: 0.1 });
+  }
+  gallop(vol = 1) {
+    for (let i = 0; i < 6; i++) this.noise({ dur: 0.06, vol: 0.2 * vol, fc: 200 + Math.random() * 100, q: 3, delay: i * 0.12 });
+  }
+  stampede() {
+    this.neigh(1);
+    // топот копыт нарастающей толпой
+    for (let i = 0; i < 24; i++) this.noise({ dur: 0.05, vol: 0.18 + i * 0.004, fc: 160 + Math.random() * 120, q: 4, delay: i * 0.07 });
+    this.tone({ f: 70, f2: 45, dur: 1.6, vol: 0.35, type: 'sawtooth' });
+  }
+
+  // ===== Фафик (бати) =====
+  dadClones() { [440, 440, 440, 550].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.22, type: 'square', delay: i * 0.11 })); this.noise({ dur: 0.3, vol: 0.15, fc: 1000, fc2: 3000, delay: 0.3 }); }
+  dadDeClone() { this.noise({ dur: 0.3, vol: 0.2, fc: 3000, fc2: 400 }); this.tone({ f: 600, f2: 200, dur: 0.2, vol: 0.2, type: 'triangle' }); }
+
+  // ===== Ира (KFC-поддержка) =====
+  throwLight() { this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 800, type: 'bandpass' }); }
+  chickenSpawn() { this.tone({ f: 500, f2: 900, dur: 0.12, vol: 0.2, type: 'square' }); this.chickenCluck(0.6); }
+  // «кудах-тах-тах» — восходяще-нисходящие писки
+  chickenCluck(vol = 1) {
+    const seq = [900, 1300, 1100, 1500, 800];
+    seq.forEach((f, i) => this.tone({ f, f2: f * 0.7, dur: 0.07, vol: 0.22 * vol, type: 'square', delay: i * 0.08 }));
+    this.noise({ dur: 0.05, vol: 0.1 * vol, fc: 3000, type: 'highpass', delay: 0.1 });
+  }
+  crispyPlace(vol = 1) {
+    // хруст панировки
+    for (let i = 0; i < 5; i++) this.noise({ dur: 0.06, vol: 0.18 * vol, fc: 2500 + Math.random() * 2000, q: 4, type: 'bandpass', delay: i * 0.04 });
+    this.tone({ f: 300, f2: 200, dur: 0.2, vol: 0.15 * vol, type: 'triangle' });
+  }
+  buffetPop(vol = 1) {
+    this.tone({ f: 400, f2: 800, dur: 0.25, vol: 0.3 * vol, type: 'sine' });
+    this.noise({ dur: 0.4, vol: 0.25 * vol, fc: 1200, fc2: 3000, type: 'bandpass' }); // шипение пара
+    [660, 880, 1046].forEach((f, i) => this.tone({ f, dur: 0.15, vol: 0.15 * vol, type: 'triangle', delay: 0.1 + i * 0.08 }));
+  }
+  banquetSummon() {
+    // фанфары + гулкий бас-«шлепок» гигантского ведра
+    [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.22, vol: 0.28, type: 'triangle', delay: i * 0.12 }));
+    this.tone({ f: 90, f2: 50, dur: 0.6, vol: 0.4, type: 'sine', delay: 0.5 });
+    this.chickenCluck(1);
+  }
+
+  // ===== шип =====
+  spikeBeep(fast = false) { this.tone({ f: fast ? 2200 : 1800, dur: 0.06, vol: 0.22, type: 'square' }); }
+  plantTick() { this.tone({ f: 1000, dur: 0.04, vol: 0.15 }); }
+  planted() { this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); }
+  defused() { this.tone({ f: 900, f2: 1400, dur: 0.3, vol: 0.3, type: 'triangle' }); }
+  explosion() {
+    this.noise({ dur: 1.2, vol: 1.0, fc: 400, fc2: 40 });
+    this.tone({ f: 60, f2: 25, dur: 1.0, vol: 0.7, type: 'sawtooth' });
+  }
+
+  // ===== раунды =====
+  roundStart() { this.tone({ f: 440, dur: 0.1, vol: 0.2 }); this.tone({ f: 660, dur: 0.15, vol: 0.2, delay: 0.12 }); }
+  roundWin() { [523, 659, 784].forEach((f, i) => this.tone({ f, dur: 0.18, vol: 0.25, type: 'triangle', delay: i * 0.13 })); }
+  roundLose() { [392, 330, 262].forEach((f, i) => this.tone({ f, dur: 0.2, vol: 0.25, type: 'triangle', delay: i * 0.15 })); }
+  matchWin() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.16 })); }
+  matchLose() { [330, 294, 262, 196].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.18 })); }
+}

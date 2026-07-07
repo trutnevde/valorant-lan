@@ -1,0 +1,13 @@
+{
+  "name": "valorant-lan",
+  "version": "1.0.0",
+  "description": "Тактический шутер 1v1 по локальной сети: Артемий против Дениса",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

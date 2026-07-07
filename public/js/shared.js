@@ -1,0 +1,449 @@
+// Общий конфиг игры — используется и сервером (Node), и клиентом (браузер)
+
+export const PORT = 27015;
+
+export const PHASES = {
+  WAIT: 'wait', BUY: 'buy', LIVE: 'live', PLANTED: 'planted',
+  ROUND_END: 'roundEnd', MATCH_END: 'matchEnd',
+};
+
+export const RULES = {
+  ROUNDS_TO_WIN: 5,
+  BUY_TIME: 15,
+  ROUND_TIME: 100,
+  SPIKE_TIME: 45,
+  PLANT_TIME: 4,
+  DEFUSE_TIME: 7,
+  ROUND_END_TIME: 6,
+  START_CREDITS: 800,
+  MAX_CREDITS: 9000,
+  KILL_REWARD: 200,
+  WIN_REWARD: 3000,
+  LOSS_REWARD: 2400,
+  PLANT_REWARD: 300,
+  BASE_HP: 100,
+  ARMOR_ABSORB: 0.66,   // броня поглощает 66% урона, пока не кончится
+  TEAM_MAX: 5,
+};
+
+// ===== Оружие =====
+// cat: pistol | shotgun | smg | lmg | rifle | sniper
+// recoil — панч камеры за выстрел (рад), spread — базовый разброс (рад)
+// pellets — дробовики: N дробин за выстрел; falloffStart/falloffMin — спад урона
+export const WEAPONS = {
+  knife:    { name: 'Нож',      cat: 'knife',   slot: 'knife',   price: 0,    dmg: 50,  head: 75,  leg: 50,  rpm: 100, mag: 0,  reserve: 0,   auto: false, spread: 0,     recoil: 0,     reload: 0,   range: 2.4, melee: true },
+
+  classic:  { name: 'Классик',  cat: 'pistol',  slot: 'sidearm', price: 0,    dmg: 26,  head: 78,  leg: 22,  rpm: 400, mag: 12, reserve: 36,  auto: false, spread: 0.010, recoil: 0.013, reload: 1.7, falloffStart: 20, falloffMin: 0.8 },
+  ghost:    { name: 'Призрак',  cat: 'pistol',  slot: 'sidearm', price: 500,  dmg: 30,  head: 105, leg: 26,  rpm: 500, mag: 15, reserve: 45,  auto: false, spread: 0.008, recoil: 0.011, reload: 1.8, silenced: true, falloffStart: 22, falloffMin: 0.8 },
+  sheriff:  { name: 'Шериф',    cat: 'pistol',  slot: 'sidearm', price: 800,  dmg: 55,  head: 159, leg: 47,  rpm: 150, mag: 6,  reserve: 18,  auto: false, spread: 0.009, recoil: 0.034, reload: 2.2 },
+
+  bucky:    { name: 'Дробаш',   cat: 'shotgun', slot: 'primary', price: 850,  dmg: 9,   head: 16,  leg: 8,   rpm: 65,  mag: 5,  reserve: 10,  auto: false, spread: 0.065, recoil: 0.045, reload: 2.8, pellets: 8,  falloffStart: 8,  falloffMin: 0.25 },
+  judge:    { name: 'Судья',    cat: 'shotgun', slot: 'primary', price: 1850, dmg: 8,   head: 14,  leg: 7,   rpm: 210, mag: 7,  reserve: 15,  auto: true,  spread: 0.075, recoil: 0.030, reload: 2.6, pellets: 5,  falloffStart: 8,  falloffMin: 0.25 },
+
+  stinger:  { name: 'Стингер',  cat: 'smg',     slot: 'primary', price: 950,  dmg: 24,  head: 60,  leg: 20,  rpm: 900, mag: 20, reserve: 60,  auto: true,  spread: 0.018, recoil: 0.006, reload: 2.2, falloffStart: 18, falloffMin: 0.75 },
+  spectre:  { name: 'Спектр',   cat: 'smg',     slot: 'primary', price: 1600, dmg: 26,  head: 66,  leg: 22,  rpm: 750, mag: 30, reserve: 90,  auto: true,  spread: 0.015, recoil: 0.0065, reload: 2.2, silenced: true, falloffStart: 20, falloffMin: 0.75 },
+
+  ares:     { name: 'Арес',     cat: 'lmg',     slot: 'primary', price: 1600, dmg: 28,  head: 70,  leg: 24,  rpm: 800, mag: 50, reserve: 100, auto: true,  spread: 0.022, recoil: 0.0075, reload: 3.2 },
+
+  bulldog:  { name: 'Бульдог',  cat: 'rifle',   slot: 'primary', price: 2050, dmg: 35,  head: 115, leg: 30,  rpm: 550, mag: 24, reserve: 72,  auto: true,  spread: 0.011, recoil: 0.010, reload: 2.5 },
+  guardian: { name: 'Гвардеец', cat: 'rifle',   slot: 'primary', price: 2250, dmg: 65,  head: 195, leg: 49,  rpm: 350, mag: 12, reserve: 36,  auto: false, spread: 0.006, recoil: 0.022, reload: 2.5 },
+  phantom:  { name: 'Фантом',   cat: 'rifle',   slot: 'primary', price: 2900, dmg: 39,  head: 140, leg: 33,  rpm: 660, mag: 30, reserve: 60,  auto: true,  spread: 0.009, recoil: 0.009, reload: 2.5, silenced: true, falloffStart: 25, falloffMin: 0.85 },
+  vandal:   { name: 'Вандал',   cat: 'rifle',   slot: 'primary', price: 2900, dmg: 40,  head: 160, leg: 34,  rpm: 585, mag: 25, reserve: 50,  auto: true,  spread: 0.011, recoil: 0.011, reload: 2.5 },
+
+  marshal:  { name: 'Маршал',   cat: 'sniper',  slot: 'primary', price: 950,  dmg: 101, head: 202, leg: 85,  rpm: 90,  mag: 5,  reserve: 15,  auto: false, spread: 0.06,  recoil: 0.040, reload: 2.5, scope: true, scopeSpread: 0.004 },
+  operator: { name: 'Оператор', cat: 'sniper',  slot: 'primary', price: 4700, dmg: 150, head: 255, leg: 120, rpm: 45,  mag: 5,  reserve: 10,  auto: false, spread: 0.09,  recoil: 0.055, reload: 3.7, scope: true, scopeSpread: 0.001 },
+};
+
+export const WEAPON_CATS = [
+  { key: 'pistol', name: 'Пистолеты' },
+  { key: 'shotgun', name: 'Дробовики' },
+  { key: 'smg', name: 'ПП' },
+  { key: 'lmg', name: 'Пулемёты' },
+  { key: 'rifle', name: 'Винтовки' },
+  { key: 'sniper', name: 'Снайперки' },
+];
+
+export const ARMOR = {
+  light: { name: 'Лёгкая броня',  price: 400,  value: 25 },
+  heavy: { name: 'Тяжёлая броня', price: 1000, value: 50 },
+};
+
+// ===== Агенты =====
+export const CHARACTERS = {
+  artemiy: {
+    name: 'Артемий', title: 'Дуэлянт', color: '#ff6b35', darkColor: '#8f2f10',
+    speedMul: 1.0, ultCost: 5,
+    desc: 'Поджигатель на базе Феникса. Огонь лечит его — и сжигает остальных.',
+    abilities: {
+      C: { name: 'Вспышка',        desc: 'Кривой светошар: ослепляет смотрящих (2 заряда)', charges: 2 },
+      Q: { name: 'Огонёк',         desc: 'Огненный шар: зона огня — жжёт врагов, лечит Артемия', charges: 1 },
+      E: { name: 'Стена огня',     desc: 'Стена пламени 16 м: жжёт врагов, лечит Артемия', charges: 1 },
+      X: { name: 'Второе дыхание', desc: 'УЛЬТА: метка на 10 сек — умер? вернулся на неё с полным HP', charges: 1 },
+    },
+  },
+  max: {
+    name: 'Макс', title: 'Дуэлянт', color: '#7ec8e3', darkColor: '#23566b',
+    speedMul: 1.05, ultCost: 5,
+    desc: 'Ветер. Самый быстрый: рывки, вертикаль и ножи, от которых не убежать.',
+    abilities: {
+      C: { name: 'Рывок',          desc: 'Мгновенный рывок в направлении движения (2 заряда)', charges: 2 },
+      Q: { name: 'Взлёт',          desc: 'Подброс высоко вверх — залетай на ящики и платформы (2 заряда)', charges: 2 },
+      E: { name: 'Порыв',          desc: '+40% скорости на 4 сек', charges: 1 },
+      X: { name: 'Стальные перья', desc: 'УЛЬТА: 5 ножей (70/150 в голову) на 12 сек, убийство обновляет ножи', charges: 1 },
+    },
+  },
+  vova: {
+    name: 'Вова', title: 'Смокер', color: '#8f7ad1', darkColor: '#3d3266',
+    speedMul: 1.0, ultCost: 6,
+    desc: 'Туманщик. Контролирует карту дымами откуда угодно и роняет небо на голову.',
+    abilities: {
+      C: { name: 'Дым по карте',     desc: 'ГЛОБАЛЬНО: клик по карте — там встаёт дым (3 заряда)', charges: 3 },
+      Q: { name: 'Слепящий заряд',   desc: 'Быстрая вспышка прямо по курсу', charges: 1 },
+      E: { name: 'Завеса',           desc: 'Стена из трёх дымов перед собой', charges: 1 },
+      X: { name: 'Орбитальный удар', desc: 'УЛЬТА, ГЛОБАЛЬНО: клик по карте — луч выжигает зону', charges: 1 },
+    },
+  },
+  sanek: {
+    name: 'Санёк', title: 'Специалист', color: '#e8c14d', darkColor: '#6b5518',
+    speedMul: 0.98, ultCost: 5,
+    desc: 'Инженер. Ставит железо, знает, где враг, и заливает подходы кислотой.',
+    abilities: {
+      C: { name: 'Сигналка', desc: 'Датчик на полу: враг рядом — подсвечен 3 сек (2 заряда)', charges: 2 },
+      Q: { name: 'Турель',   desc: 'Автотурель: стреляет по врагам в 20 м (60 HP, можно расстрелять)', charges: 1 },
+      E: { name: 'Кислота',  desc: 'Лужа кислоты: урон и замедление', charges: 1 },
+      X: { name: 'Рентген',  desc: 'УЛЬТА, ГЛОБАЛЬНО: все враги подсвечены сквозь стены 8 сек', charges: 1 },
+    },
+  },
+  denis: {
+    name: 'Денис', title: 'Мясник', color: '#7a9b4e', darkColor: '#3d5222',
+    speedMul: 0.95, ultCost: 7,
+    desc: 'Вонючий инициатор на базе Пуджа. Всё, к чему он прикасается, пахнет смертью.',
+    abilities: {
+      C: { name: 'Тухлая вспышка', desc: 'Вонючая граната: ослепляет смотрящих зелёной пеленой (2 заряда)', charges: 2 },
+      Q: { name: 'Тухлятина',      desc: 'Шмат гнилого мяса: лужа вони — урон и замедление', charges: 1 },
+      E: { name: 'Смрад',          desc: 'Смок-вонючка: зелёное облако полностью закрывает обзор (2 заряда)', charges: 2 },
+      X: { name: 'Мясной крюк',    desc: 'УЛЬТА: крюк-кокон тащит жертву к Денису 2.6 сек — дотащил, разделал. Союзники жертвы могут отстрелить кокон (150 HP)', charges: 1 },
+    },
+  },
+  ira: {
+    name: 'Ира', title: 'Поддержка', color: '#e8302c', darkColor: '#f4f0e6', accent: '#ffcf3f',
+    speedMul: 1.0, ultCost: 7,
+    desc: 'Шеф-повар IRAFRIED. Молекулярная кухня как оружие: кормит, лечит и хрустит панировкой.',
+    abilities: {
+      C: { name: 'Куриный дозор',  desc: 'Механический цыплёнок бежит вперёд и подсвечивает врагов в 10 м с кудахтаньем (2 заряда)', charges: 2 },
+      Q: { name: 'Криспи-стена',   desc: 'Стена из панировки: сквозь неё стреляют, врагов замедляет, союзников лечит на проходе', charges: 1 },
+      E: { name: 'Буфет лечения',  desc: 'Ведёрко с курицей: облако пара лечит союзников на +50 HP в 8 м. Подбирается 1 раз за раунд', charges: 1 },
+      X: { name: 'Финальный банкет', desc: 'УЛЬТА: гигантское ведро KFC на 20 сек — союзникам +30 HP, реген 10/сек, +15% скорости, скрытие от детекта', charges: 1 },
+    },
+  },
+  fafik: {
+    name: 'Фафик', title: 'Обманщик', color: '#3f5c8c', darkColor: '#22304d', accent: '#e6e6e6',
+    speedMul: 1.0, ultCost: 7,
+    desc: 'Носит в себе несколько отцов. Батя в трениках: тапок, шашлык и армия клонов-двойников.',
+    abilities: {
+      C: { name: 'Батин тапок',   desc: 'Метко брошенный тапок: контузит и ослепляет врагов на попадании (2 заряда)', charges: 2 },
+      Q: { name: 'Дым из гаража', desc: 'Завеса сигаретного дыма — полностью закрывает обзор', charges: 1 },
+      E: { name: 'Мангал',        desc: 'Раскалённый шашлычный мангал: зона огня жжёт врагов', charges: 1 },
+      X: { name: 'Клоны бати',    desc: 'УЛЬТА: укажи точку — 5 клонов бегут туда, ты сам становишься клоном (стрелять нельзя). Нажми ещё раз — клоны исчезают, ты снова стреляешь', charges: 1 },
+    },
+  },
+  koniliy: {
+    name: 'Конилий', title: 'Наездник', color: '#8a5a2b', darkColor: '#4d3117', accent: '#d9b06a',
+    speedMul: 1.0, ultCost: 7,
+    desc: 'Всё про коней. Подковы, ржание, галоп и табун призрачных коней сносят всё на пути.',
+    abilities: {
+      C: { name: 'Подкова',  desc: 'Брошенная подкова оставляет зону — враги вязнут и получают урон (2 заряда)', charges: 2 },
+      Q: { name: 'Ржание',   desc: 'Оглушительное ржание конусом — контузит и ослепляет врагов перед собой', charges: 1 },
+      E: { name: 'Галоп',    desc: 'Оседлай призрачного коня: +50% скорости на 3.5 сек', charges: 1 },
+      X: { name: 'Табун',    desc: 'УЛЬТА: укажи направление — табун призрачных коней проносится линией, снося врагов (72 урона + оглушение)', charges: 1 },
+    },
+  },
+};
+
+export const ABILITY = {
+  // вспышки
+  FLASH_FUSE: 0.7, FLASH_SPEED: 17, FLASH_MAX_BLIND: 1.9,
+  // огонь Артемия
+  FIRE_ZONE_R: 4.0, FIRE_ZONE_TIME: 8, FIRE_DPS: 15, FIRE_HEAL: 12,
+  WALL_LEN: 16, WALL_TIME: 8,
+  PHOENIX_ULT_TIME: 10,
+  // дымы
+  SMOKE_R: 4.3, SMOKE_TIME: 13, SMOKE_WALL_GAP: 5.5,
+  // орбитальный удар
+  ORBITAL_DELAY: 1.4, ORBITAL_DUR: 3, ORBITAL_R: 5.5, ORBITAL_DPS: 40,
+  // Макс
+  DASH_DIST: 6.5, LAUNCH_V: 8.5, BOOST_MUL: 1.4, BOOST_TIME: 4,
+  KNIVES_COUNT: 5, KNIFE_DMG: 70, KNIFE_HEAD: 150, KNIVES_TIME: 12,
+  // Санёк
+  TURRET_R: 20, TURRET_DMG: 5, TURRET_TICK: 0.5, TURRET_HP: 60,
+  TRAP_R: 3, TRAP_REVEAL: 3,
+  XRAY_TIME: 8,
+  // Денис
+  PUDDLE_R: 3.5, PUDDLE_TIME: 7, PUDDLE_DPS: 10, PUDDLE_SLOW: 0.65,
+  ACID_R: 3.2, ACID_TIME: 6, ACID_DPS: 12, ACID_SLOW: 0.7,
+  COCOON_RANGE: 30, COCOON_SPEED: 45, COCOON_HIT_DMG: 30,
+  COCOON_TIME: 2.6, COCOON_HP: 150, COCOON_FREE_DMG: 20,
+  // Ира (KFC-поддержка)
+  CRISPY_LEN: 10, CRISPY_TIME: 15, CRISPY_SLOW: 0.6, CRISPY_HEAL: 20,   // хил/сек, пока союзник в стене
+  BUFFET_R: 8, BUFFET_HEAL: 50, BUFFET_ARM_TIME: 1.2,
+  SCOUT_SPEED: 9, SCOUT_RANGE: 10, SCOUT_LIFE: 7, SCOUT_REVEAL: 3,
+  BANQUET_R: 6, BANQUET_TIME: 20, BANQUET_INSTANT: 30, BANQUET_REGEN: 10, BANQUET_SPEED: 1.15,
+  // Фафик
+  CLONES_COUNT: 5, CLONES_TIME: 18, CLONES_SPEED: 6.4,
+  MANGAL_R: 3.6, MANGAL_TIME: 7, MANGAL_DPS: 15,
+  // Конилий
+  HORSESHOE_R: 3, HORSESHOE_TIME: 6, HORSESHOE_DPS: 10, HORSESHOE_SLOW: 0.6,
+  GALLOP_MUL: 1.5, GALLOP_TIME: 3.5,
+  STAMPEDE_LEN: 26, STAMPEDE_WIDTH: 3, STAMPEDE_DMG: 72, STAMPEDE_STUN: 1.2, STAMPEDE_SPEED: 26,
+};
+
+export const MOVE = {
+  RUN_SPEED: 6.2, WALK_SPEED: 3.1, CROUCH_SPEED: 2.6,
+  ACCEL: 14, AIR_ACCEL: 3, GRAVITY: 21, JUMP_VEL: 6.5,
+  HEIGHT: 1.8, CROUCH_HEIGHT: 1.25, EYE: 0.12, RADIUS: 0.38,
+  STEP_UP: 0.45, // авто-подъём на ступеньки
+};
+
+// ===== Карты =====
+// Стены/ящики: [cx, cz, w(x), d(z), h, colorIndex] (+7-й элемент yBase для «парящих» блоков)
+// stairs: {x, z, dir: 'N'|'S'|'E'|'W', w, steps, rise, run} — лестницы (dir = куда поднимаемся)
+export const MAPS = {
+  duel: {
+    id: 'duel',
+    name: 'Дуэль',
+    desc: 'Плоская классика: два сайта, мид, много укрытий',
+    SIZE: { w: 62, d: 46 },
+    COLORS: ['#d8d2c4', '#b8bfc7', '#1f8a8a', '#ff4655', '#8a6f4e', '#4a5568'],
+    walls: [
+      // периметр
+      [0, -23, 64, 1.2, 5, 1], [0, 23, 64, 1.2, 5, 1],
+      [-31, 0, 1.2, 48, 5, 1], [31, 0, 1.2, 48, 5, 1],
+      // мид-коридор
+      [-9, 2, 1.2, 20, 3.6, 0], [9, 2, 1.2, 20, 3.6, 0],
+      // экраны в лобби A/B
+      [-20, -2, 9, 1.2, 3.6, 2], [20, -2, 9, 1.2, 3.6, 2],
+      // экран против прострела спавн-в-спавн
+      [0, -14, 7, 1.2, 3.6, 2],
+      // стены сайтов с севера
+      [-25, -14, 10, 1.2, 3.6, 3], [25, -14, 10, 1.2, 3.6, 3],
+      // зубы на входах на сайты с юга
+      [-14, 8, 1.2, 8, 3.6, 0], [14, 8, 1.2, 8, 3.6, 0],
+    ],
+    crates: [
+      // сайт A: дефолт-плент прикрыт с двух углов
+      [-20, -8, 2.2, 2.2, 0.9, 4], [-16, -11, 2.2, 2.2, 0.9, 4],
+      [-18.5, -9.5, 1.6, 1.6, 1.9, 5],
+      [-23, -5, 2, 2, 1.9, 5],          // укрытие от угла защиты
+      [-13, -7, 2, 2, 0.9, 4],          // шаг на входе
+      // сайт B
+      [20, -8, 2.2, 2.2, 0.9, 4], [16, -11, 2.2, 2.2, 0.9, 4],
+      [18.5, -9.5, 1.6, 1.6, 1.9, 5],
+      [23, -5, 2, 2, 1.9, 5],
+      [13, -7, 2, 2, 0.9, 4],
+      // мид
+      [0, 2, 3, 3, 1.2, 4], [0, 2, 1.6, 1.6, 2.4, 5],
+      [-4, -4, 2, 2, 0.9, 4], [4, 7, 2, 2, 0.9, 4],
+      // укрытия на подходах (атакерам есть за чем идти)
+      [-13, 12, 2.4, 2.4, 1.9, 5], [13, 12, 2.4, 2.4, 1.9, 5],
+      [-26, 6, 2.4, 2.4, 1.9, 4], [26, 6, 2.4, 2.4, 1.9, 4],
+      // укрытия для защиты у выходов со спавна
+      [-7, -17, 2, 2, 0.9, 4], [7, -17, 2, 2, 0.9, 4],
+    ],
+    stairs: [],
+    sites: {
+      A: { x: -19, z: -9, w: 13, d: 11 },
+      B: { x: 19, z: -9, w: 13, d: 11 },
+    },
+    spawns: {
+      attack: { pts: [[0, 0, 19.5], [-4, 0, 20], [4, 0, 20], [-8, 0, 20.5], [8, 0, 20.5]], yaw: 0 },
+      defend: { pts: [[0, 0, -19.5], [-4, 0, -20], [4, 0, -20], [-8, 0, -20.5], [8, 0, -20.5]], yaw: Math.PI },
+    },
+    // навигация ботов: nodes [x, z, y] + edges [i, j]
+    nav: {
+      nodes: [
+        [0, 19.5, 0],   // 0 спавн атаки
+        [0, 15, 0],     // 1
+        [-15, 15, 0],   // 2 лобби A
+        [-13, 4, 0],    // 3 коридор A
+        [-13, -2, 0],   // 4 вход на A
+        [-17, -8, 0],   // 5 сайт A
+        [-19, -9, 0],   // 6 плент A
+        [15, 15, 0],    // 7 лобби B
+        [13, 4, 0],     // 8 коридор B
+        [13, -2, 0],    // 9 вход на B
+        [17, -8, 0],    // 10 сайт B
+        [19, -9, 0],    // 11 плент B
+        [4, 8, 0],      // 12 мид юг
+        [4, 0, 0],      // 13 мид
+        [4, -6, 0],     // 14 мид север
+        [0, -10, 0],    // 15 центр север
+        [-12, -11, 0],  // 16 связка A
+        [12, -11, 0],   // 17 связка B
+        [0, -19.5, 0],  // 18 спавн защиты
+        [0, -16.5, 0],  // 19
+        [-9, -16, 0],   // 20 запад от спавна защиты
+        [9, -16, 0],    // 21 восток
+      ],
+      edges: [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 6],
+        [1, 7], [7, 8], [8, 9], [9, 10], [10, 11],
+        [1, 12], [12, 13], [13, 14], [14, 15],
+        [15, 16], [16, 5], [15, 17], [17, 10],
+        [18, 19], [19, 20], [20, 16], [19, 21], [21, 17],
+        [20, 4], [21, 9],
+      ],
+    },
+  },
+
+  height: {
+    id: 'height',
+    name: 'Высота',
+    desc: 'Вертикаль: центральная башня и сайт B на платформе',
+    SIZE: { w: 66, d: 48 },
+    COLORS: ['#d9c9a8', '#a8b0b8', '#c96f4a', '#ff4655', '#7d6b52', '#54616e'],
+    walls: [
+      // периметр
+      [0, -24, 68, 1.2, 6, 1], [0, 24, 68, 1.2, 6, 1],
+      [-33, 0, 1.2, 50, 6, 1], [33, 0, 1.2, 50, 6, 1],
+      // боковые стены, формирующие лини
+      [-10, 8, 1.2, 14, 4, 0], [10, 8, 1.2, 14, 4, 0],
+      // экраны против дальних прострелов
+      [-22, 2, 8, 1.2, 4, 2], [0, -16, 8, 1.2, 4, 2],
+      // стена за сайтом A
+      [-27, -12, 10, 1.2, 4, 3],
+    ],
+    crates: [
+      // центральная башня (на неё ведут лестницы с юга и севера)
+      [0, -2, 14, 10, 3, 5],
+      // сайт B — приподнятая платформа
+      [20, -6, 12, 10, 2.4, 5],
+      // сайт A — наземный, укрытия
+      [-22, -8, 2.2, 2.2, 0.9, 4], [-18, -5, 2.2, 2.2, 1.9, 4],
+      [-24, -3, 2, 2, 0.9, 4],
+      // ящики на земле
+      [-14, 14, 2.4, 2.4, 1.9, 4], [14, 14, 2.4, 2.4, 1.9, 4],
+      [-4, 10, 2, 2, 0.9, 4], [26, 6, 2.4, 2.4, 1.9, 4],
+      [-26, 8, 2, 2, 0.9, 4], [10, -14, 2, 2, 0.9, 4],
+      [-10, -14, 2, 2, 0.9, 4],
+      // укрытия на самой платформе B
+      [22, -8, 1.8, 1.8, 3.4, 4, 0], // торчит над платформой
+      [17, -4, 1.6, 1.6, 3.2, 4, 0],
+    ],
+    stairs: [
+      // на башню с юга и с севера
+      { x: 0, z: 8.2, dir: 'N', w: 4, steps: 7, rise: 0.42, run: 0.75 },
+      { x: 0, z: -12.2, dir: 'S', w: 4, steps: 7, rise: 0.42, run: 0.75 },
+      // на платформу B с юга (атака) и с севера (защита)
+      { x: 20, z: 4.2, dir: 'N', w: 4, steps: 6, rise: 0.4, run: 0.8 },
+      { x: 20, z: -16.2, dir: 'S', w: 4, steps: 6, rise: 0.4, run: 0.8 },
+      // с запада на платформу B (флешенка через мид)
+      { x: 11.2, z: -6, dir: 'E', w: 3.5, steps: 6, rise: 0.4, run: 0.8 },
+    ],
+    sites: {
+      A: { x: -21, z: -7, w: 12, d: 11 },
+      B: { x: 20, z: -6, w: 11, d: 9, yMin: 2.0 }, // плент только НА платформе
+    },
+    spawns: {
+      attack: { pts: [[0, 0, 20.5], [-5, 0, 21], [5, 0, 21], [-10, 0, 21], [10, 0, 21]], yaw: 0 },
+      defend: { pts: [[0, 0, -20.5], [-5, 0, -21], [5, 0, -21], [-10, 0, -21], [10, 0, -21]], yaw: Math.PI },
+    },
+    nav: {
+      nodes: [
+        [0, 20.5, 0],    // 0 спавн атаки
+        [0, 14, 0],      // 1
+        [-16, 12, 0],    // 2 запад юг
+        [-24, 4, 0],     // 3 запад
+        [-22, -4, 0],    // 4 сайт A юг
+        [-21, -8, 0],    // 5 плент A
+        [16, 12, 0],     // 6 восток юг
+        [20, 8, 0],      // 7 перед лестницей B юг
+        [20, 1, 1.7],    // 8 лестница B юг (середина)
+        [20, -4, 2.4],   // 9 платформа B
+        [20, -7, 2.4],   // 10 плент B
+        [0, 11, 0],      // 11 перед южной лестницей башни
+        [0, 5.5, 1.6],   // 12 лестница юг
+        [0, -2, 3],      // 13 башня (верх)
+        [0, -9.5, 1.6],  // 14 лестница север
+        [-3, -14, 0],    // 15 под башней север (обход экрана)
+        [-7, -17, 0],    // 16 к спавну защиты запад
+        [0, -20.5, 0],   // 17 спавн защиты
+        [-16, -14, 0],   // 18 запад север
+        [-22, -12, 0],   // 19 сайт A север
+        [10, -18, 0],    // 20 восток север
+        [20, -13, 0],    // 21 перед лестницей B север
+        [20, -9.5, 1.6], // 22 лестница B север
+        [12, -6, 0],     // 23 под платформой B запад (низ)
+        [14, -6, 1.7],   // 24 лестница B запад
+      ],
+      edges: [
+        [0, 1], [1, 2], [2, 3], [3, 4], [4, 5],
+        [1, 6], [6, 7], [7, 8], [8, 9], [9, 10],
+        [1, 11], [11, 12], [12, 13], [13, 14], [14, 15],
+        [15, 16], [16, 17],
+        [16, 18], [18, 19], [19, 5],
+        [17, 20], [20, 21], [21, 22], [22, 9],
+        [6, 23], [23, 24], [24, 9], [23, 15], [20, 23],
+      ],
+    },
+  },
+};
+
+export const DEFAULT_MAP = 'duel';
+
+// Разворачивает лестницы в набор ящиков [cx, cz, w, d, h]
+export function expandStairs(map) {
+  const out = [];
+  for (const s of map.stairs || []) {
+    for (let i = 0; i < s.steps; i++) {
+      const h = (i + 1) * s.rise;
+      const off = i * s.run;
+      if (s.dir === 'N') out.push([s.x, s.z - off, s.w, s.run + 0.05, h, 5]);
+      else if (s.dir === 'S') out.push([s.x, s.z + off, s.w, s.run + 0.05, h, 5]);
+      else if (s.dir === 'E') out.push([s.x + off, s.z, s.run + 0.05, s.w, h, 5]);
+      else out.push([s.x - off, s.z, s.run + 0.05, s.w, h, 5]);
+    }
+  }
+  return out;
+}
+
+// Все AABB карты (стены + ящики + лестницы) — для коллизий и лучей
+export function mapAabbs(map) {
+  const boxes = [...map.walls, ...map.crates, ...expandStairs(map)];
+  return boxes.map(([cx, cz, w, d, h, _c, yBase]) => ({
+    minX: cx - w / 2, maxX: cx + w / 2,
+    minY: yBase || 0, maxY: (yBase || 0) + h,
+    minZ: cz - d / 2, maxZ: cz + d / 2,
+  }));
+}
+
+// Пересечение отрезка с AABB (slab method) — для LOS ботов и сервера
+export function segmentHitsAabb(a, b, box) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const mins = [box.minX, box.minY, box.minZ];
+  const maxs = [box.maxX, box.maxY, box.maxZ];
+  let tMin = 0, tMax = 1;
+  for (let i = 0; i < 3; i++) {
+    if (Math.abs(d[i]) < 1e-9) {
+      if (a[i] < mins[i] || a[i] > maxs[i]) return false;
+    } else {
+      let t1 = (mins[i] - a[i]) / d[i];
+      let t2 = (maxs[i] - a[i]) / d[i];
+      if (t1 > t2) [t1, t2] = [t2, t1];
+      tMin = Math.max(tMin, t1);
+      tMax = Math.min(tMax, t2);
+      if (tMin > tMax) return false;
+    }
+  }
+  return true;
+}
+
+// Отрезок против сферы (для дымов)
+export function segmentHitsSphere(a, b, c, r) {
+  const ab = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+  const ac = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+  const len2 = ab[0] * ab[0] + ab[1] * ab[1] + ab[2] * ab[2];
+  let t = len2 ? (ac[0] * ab[0] + ac[1] * ab[1] + ac[2] * ab[2]) / len2 : 0;
+  t = Math.max(0, Math.min(1, t));
+  const px = a[0] + ab[0] * t - c[0], py = a[1] + ab[1] * t - c[1], pz = a[2] + ab[2] * t - c[2];
+  return px * px + py * py + pz * pz <= r * r;
+}

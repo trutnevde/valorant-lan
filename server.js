@@ -1,0 +1,1108 @@
+// Сервер «Valorant LAN» v2 — команды до 5x5, лобби с хостом, боты, две карты.
+// Сервер авторитарен для: HP, урона, экономики, раундов, шипа, ультов, кокона Дениса.
+// Движение и попадания людей считает клиент; ботов целиком ведёт сервер.
+
+import http from 'http';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+import { WebSocketServer } from 'ws';
+import {
+  PORT, PHASES, RULES, WEAPONS, ARMOR, CHARACTERS, ABILITY,
+  MAPS, DEFAULT_MAP, mapAabbs, segmentHitsAabb, segmentHitsSphere,
+} from './public/js/shared.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const PUB = path.join(__dirname, 'public');
+const port = Number(process.env.PORT) || PORT;
+const now = () => Date.now() / 1000;
+
+// ===== Статика =====
+const MIME = {
+  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8', '.png': 'image/png', '.ico': 'image/x-icon',
+};
+const httpServer = http.createServer((req, res) => {
+  let urlPath = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (urlPath === '/') urlPath = '/index.html';
+  const file = path.normalize(path.join(PUB, urlPath));
+  if (!file.startsWith(PUB)) { res.writeHead(403); res.end(); return; }
+  fs.readFile(file, (err, data) => {
+    if (err) { res.writeHead(404); res.end('404'); return; }
+    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' });
+    res.end(data);
+  });
+});
+
+// ===== Состояние =====
+const players = new Map(); // id -> P (люди id 1..99, боты id 100+)
+let nextHumanId = 1;
+let nextBotId = 100;
+const BOT_NAMES = ['Бот Витёк', 'Бот Толян', 'Бот Серый', 'Бот Колян', 'Бот Жека', 'Бот Санчо', 'Бот Диман', 'Бот Лёха'];
+
+const lobby = { map: DEFAULT_MAP };
+
+const match = {
+  running: false,
+  state: PHASES.WAIT,
+  round: 0,
+  score: { A: 0, B: 0 },
+  attackTeam: 'A',
+  deadline: 0,
+  planting: null,     // {by, start, pos}
+  defusing: null,     // {by, start}
+  defuseAccum: 0,
+  spike: null,        // {pos, boomAt}
+  smokes: [],         // {pos:[x,y,z], r, until} — для LOS ботов
+  zones: [],          // {type, pos|a/b, r, dps, from, until, owner} — урон ботам
+  healZones: [],      // {kind, team, a?/b?/pos?/r?, rate, until} — хилки Иры
+  cocoon: null,       // {victim, by, hp, until}
+  mapDef: MAPS[DEFAULT_MAP],
+  aabbs: mapAabbs(MAPS[DEFAULT_MAP]),
+};
+
+function newPlayer(id, ws, bot = false) {
+  return {
+    id, ws, bot,
+    name: bot ? BOT_NAMES[(id - 100) % BOT_NAMES.length] : 'Игрок',
+    char: bot ? Object.keys(CHARACTERS)[Math.floor(Math.random() * Object.keys(CHARACTERS).length)] : 'artemiy',
+    team: 'A',
+    alive: false, hp: 100, armor: 0, maxHp: RULES.BASE_HP,
+    credits: RULES.START_CREDITS,
+    loadout: { primary: null, sidearm: 'classic' },
+    kills: 0, deaths: 0, ult: 0,
+    lastPos: [0, 0, 0], yaw: 0,
+    ultMark: null, cloneMode: false, _healFrac: 0,
+    ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {} } : null,
+  };
+}
+
+const humans = () => [...players.values()].filter(p => !p.bot);
+const hostId = () => Math.min(...humans().map(p => p.id), Infinity);
+const teamOf = (t) => [...players.values()].filter(p => p.team === t);
+const enemyTeam = (t) => (t === 'A' ? 'B' : 'A');
+const teamAliveCount = (t) => teamOf(t).filter(p => p.alive).length;
+const sideOfTeam = (t) => (t === match.attackTeam ? 'attack' : 'defend');
+const liveish = () => match.state === PHASES.LIVE || match.state === PHASES.PLANTED;
+
+function send(p, msg) {
+  if (p && p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(msg));
+}
+function broadcast(msg) {
+  const s = JSON.stringify(msg);
+  for (const p of players.values()) {
+    if (p.ws && p.ws.readyState === 1) p.ws.send(s);
+  }
+}
+function lobbyInfo() {
+  return {
+    t: 'lobby',
+    players: [...players.values()].map(p => ({ id: p.id, name: p.name, char: p.char, team: p.team, bot: p.bot })),
+    map: lobby.map,
+    hostId: hostId() === Infinity ? 0 : hostId(),
+    inMatch: match.running,
+  };
+}
+function inSite(pos) {
+  for (const [key, s] of Object.entries(match.mapDef.sites)) {
+    if (Math.abs(pos[0] - s.x) <= s.w / 2 + 0.5 && Math.abs(pos[2] - s.z) <= s.d / 2 + 0.5) {
+      if (s.yMin !== undefined && pos[1] < s.yMin - 0.3) continue;
+      return key;
+    }
+  }
+  return null;
+}
+
+// LOS для ботов: стены + дымы
+function losClear(a, b) {
+  for (const box of match.aabbs) {
+    if (segmentHitsAabb(a, b, box)) return false;
+  }
+  const t = now();
+  for (const s of match.smokes) {
+    if (t < s.until && segmentHitsSphere(a, b, s.pos, s.r)) return false;
+  }
+  return true;
+}
+
+// ===== Матч =====
+function startMatch() {
+  match.running = true;
+  match.round = 0;
+  match.score = { A: 0, B: 0 };
+  match.attackTeam = Math.random() < 0.5 ? 'A' : 'B';
+  match.mapDef = MAPS[lobby.map] || MAPS[DEFAULT_MAP];
+  match.aabbs = mapAabbs(match.mapDef);
+  for (const p of players.values()) {
+    p.credits = RULES.START_CREDITS;
+    p.kills = 0; p.deaths = 0; p.ult = 0;
+    p.maxHp = RULES.BASE_HP; p.armor = 0;
+    p.loadout = { primary: null, sidearm: 'classic' };
+  }
+  broadcast({ ...lobbyInfo(), inMatch: true });
+  broadcast({ t: 'matchStart', players: lobbyInfo().players, map: match.mapDef.id, score: match.score });
+  startRound();
+}
+
+function startRound() {
+  match.round++;
+  if (match.round > 1) match.attackTeam = enemyTeam(match.attackTeam);
+  match.state = PHASES.BUY;
+  match.deadline = now() + RULES.BUY_TIME;
+  match.planting = null; match.defusing = null; match.defuseAccum = 0;
+  match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
+
+  const spawnIdx = { A: 0, B: 0 };
+  for (const p of players.values()) {
+    p.alive = true;
+    p.hp = p.maxHp;
+    p.ultMark = null; p.cloneMode = false; p._healFrac = 0;
+    if (match.round > 1) p.ult = Math.min(9, p.ult + 1);
+    // позиция
+    const side = sideOfTeam(p.team);
+    const sp = match.mapDef.spawns[side];
+    const pos = sp.pts[spawnIdx[p.team] % sp.pts.length];
+    spawnIdx[p.team]++;
+    p.lastPos = [...pos];
+    p.yaw = sp.yaw;
+    if (p.bot) botResetRound(p);
+  }
+  const credits = {}, status = {};
+  for (const p of players.values()) {
+    credits[p.id] = p.credits;
+    status[p.id] = { hp: p.hp, maxHp: p.maxHp, armor: p.armor, alive: true, ult: p.ult, loadout: p.loadout, pos: p.lastPos, yaw: p.yaw };
+  }
+  broadcast({
+    t: 'roundStart', round: match.round, score: match.score,
+    sides: { A: sideOfTeam('A'), B: sideOfTeam('B') },
+    buyTime: RULES.BUY_TIME, credits, status,
+  });
+}
+
+function startLive() {
+  match.state = PHASES.LIVE;
+  match.deadline = now() + RULES.ROUND_TIME;
+  broadcast({ t: 'phase', phase: PHASES.LIVE, tLeft: RULES.ROUND_TIME });
+}
+
+function endRound(winnerTeam, reason) {
+  if (match.state === PHASES.ROUND_END || match.state === PHASES.MATCH_END) return;
+  match.state = PHASES.ROUND_END;
+  match.deadline = now() + RULES.ROUND_END_TIME;
+  match.planting = null; match.defusing = null; match.cocoon = null;
+  match.score[winnerTeam]++;
+  for (const p of players.values()) {
+    const reward = p.team === winnerTeam ? RULES.WIN_REWARD : RULES.LOSS_REWARD;
+    p.credits = Math.min(RULES.MAX_CREDITS, p.credits + reward);
+    if (!p.alive) { p.loadout = { primary: null, sidearm: 'classic' }; p.armor = 0; }
+  }
+  const credits = {};
+  for (const p of players.values()) credits[p.id] = p.credits;
+  broadcast({ t: 'roundEnd', winner: winnerTeam, reason, score: match.score, credits });
+  if (match.score[winnerTeam] >= RULES.ROUNDS_TO_WIN) {
+    match.state = PHASES.MATCH_END;
+    match.deadline = now() + 12;
+    const stats = {};
+    for (const p of players.values()) stats[p.id] = { name: p.name, kills: p.kills, deaths: p.deaths, team: p.team, char: p.char };
+    broadcast({ t: 'matchEnd', winner: winnerTeam, score: match.score, stats });
+  }
+}
+
+function backToLobby() {
+  match.running = false;
+  match.state = PHASES.WAIT;
+  match.planting = null; match.defusing = null; match.spike = null; match.cocoon = null;
+  broadcast(lobbyInfo());
+}
+
+// ===== Урон =====
+function applyDamage(victim, rawDmg, attackerId, weapon, part) {
+  if (!victim.alive || !liveish()) return;
+  // жертва в коконе неуязвима для врагов (кокон отстреливают союзники)
+  if (match.cocoon && match.cocoon.victim === victim.id && part !== 'ult') return;
+  let dmg = Math.min(320, Math.max(0, rawDmg));
+  if (victim.armor > 0 && part !== 'ult') {
+    const absorbed = Math.min(victim.armor, dmg * RULES.ARMOR_ABSORB);
+    victim.armor = Math.round(victim.armor - absorbed);
+    dmg -= absorbed;
+  }
+  victim.hp = Math.round(victim.hp - dmg);
+  broadcast({ t: 'hp', id: victim.id, hp: victim.hp, armor: victim.armor, by: attackerId, part });
+  if (victim.hp <= 0) onDeath(victim, attackerId, weapon, part);
+}
+
+function onDeath(victim, killerId, weapon, part) {
+  // ульт Артемия: вместо смерти — возвращение на метку
+  if (victim.ultMark && now() < victim.ultMark.until) {
+    victim.hp = victim.maxHp;
+    const mark = victim.ultMark;
+    victim.ultMark = null;
+    victim.lastPos = [...mark.pos];
+    broadcast({ t: 'revive', id: victim.id, pos: mark.pos, yaw: mark.yaw, hp: victim.hp });
+    return;
+  }
+  victim.alive = false;
+  victim.hp = 0;
+  victim.deaths++;
+  victim.ult = Math.min(9, victim.ult + 1);
+  const killer = players.get(killerId);
+  if (killer && killer.id !== victim.id && killer.team !== victim.team) {
+    killer.kills++;
+    killer.ult = Math.min(9, killer.ult + 1);
+    killer.credits = Math.min(RULES.MAX_CREDITS, killer.credits + RULES.KILL_REWARD);
+    send(killer, { t: 'ultPts', pts: killer.ult });
+    send(killer, { t: 'credits', credits: killer.credits });
+  }
+  send(victim, { t: 'ultPts', pts: victim.ult });
+  if (match.planting && match.planting.by === victim.id) { match.planting = null; broadcast({ t: 'plantProg', pct: -1 }); }
+  if (match.defusing && match.defusing.by === victim.id) stopDefuse();
+  if (match.cocoon && match.cocoon.victim === victim.id) {
+    broadcast({ t: 'cocoonEnd', victim: victim.id, freed: false });
+    match.cocoon = null;
+  }
+  broadcast({ t: 'death', id: victim.id, by: killerId, weapon, part });
+  // исход раунда
+  if (match.state === PHASES.LIVE) {
+    if (teamAliveCount(victim.team) === 0) endRound(enemyTeam(victim.team), 'elim');
+  } else if (match.state === PHASES.PLANTED) {
+    const defTeam = enemyTeam(match.attackTeam);
+    if (victim.team === defTeam && teamAliveCount(defTeam) === 0) endRound(match.attackTeam, 'elim');
+  }
+}
+
+function heal(p, amt) {
+  if (!p.alive || !liveish()) return;
+  const before = p.hp;
+  p.hp = Math.min(p.maxHp, Math.round(p.hp + amt));
+  if (p.hp !== before) broadcast({ t: 'hp', id: p.id, hp: p.hp, armor: p.armor, by: 0, part: 'heal' });
+}
+
+function stopDefuse() {
+  if (!match.defusing) return;
+  match.defuseAccum += now() - match.defusing.start;
+  match.defusing = null;
+  broadcast({ t: 'defuseProg', pct: -1 });
+}
+
+// ===== Сообщения =====
+function onMessage(p, msg) {
+  switch (msg.t) {
+    case 'join': {
+      p.name = String(msg.name || 'Игрок').slice(0, 16) || 'Игрок';
+      p.char = CHARACTERS[msg.char] ? msg.char : 'artemiy';
+      // авто-баланс команд (не считая самого себя — он уже в мапе с team='A')
+      const aCount = [...players.values()].filter(x => x.id !== p.id && x.team === 'A').length;
+      const bCount = [...players.values()].filter(x => x.id !== p.id && x.team === 'B').length;
+      p.team = aCount <= bCount ? 'A' : 'B';
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'switchTeam': {
+      if (match.running) return;
+      const other = enemyTeam(p.team);
+      if (teamOf(other).length >= RULES.TEAM_MAX) return;
+      p.team = other;
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'setChar': {
+      if (match.running) return;
+      if (CHARACTERS[msg.char]) p.char = msg.char;
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'addBot': {
+      if (p.id !== hostId() || match.running) return;
+      const team = msg.team === 'B' ? 'B' : 'A';
+      if (teamOf(team).length >= RULES.TEAM_MAX) return;
+      const bot = newPlayer(nextBotId++, null, true);
+      bot.team = team;
+      players.set(bot.id, bot);
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'removeBot': {
+      if (p.id !== hostId() || match.running) return;
+      const bots = [...players.values()].filter(b => b.bot && b.team === msg.team);
+      if (bots.length) { players.delete(bots[bots.length - 1].id); broadcast(lobbyInfo()); }
+      break;
+    }
+    case 'setMap': {
+      if (p.id !== hostId() || match.running) return;
+      if (MAPS[msg.map]) lobby.map = msg.map;
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'startMatch': {
+      if (p.id !== hostId() || match.running) return;
+      if (teamOf('A').length < 1 || teamOf('B').length < 1) return;
+      startMatch();
+      break;
+    }
+    case 'state': {
+      if (!match.running) return;
+      p.lastPos = msg.p;
+      p.yaw = msg.yaw;
+      if (match.planting && match.planting.by === p.id) {
+        const d = Math.hypot(msg.p[0] - match.planting.pos[0], msg.p[2] - match.planting.pos[2]);
+        if (d > 0.7) { match.planting = null; broadcast({ t: 'plantProg', pct: -1 }); }
+      }
+      if (match.defusing && match.defusing.by === p.id && match.spike) {
+        const d = Math.hypot(msg.p[0] - match.spike.pos[0], msg.p[2] - match.spike.pos[2]);
+        if (d > 2.8) stopDefuse();
+      }
+      broadcastExcept(p.id, { ...msg, id: p.id });
+      break;
+    }
+    case 'shoot': case 'chat': {
+      broadcastExcept(p.id, { ...msg, id: p.id });
+      if (msg.t === 'chat') send(p, { ...msg, id: p.id });
+      break;
+    }
+    case 'buy': {
+      if (match.state !== PHASES.BUY) { send(p, { t: 'buyFail', reason: 'Закупка закрыта' }); return; }
+      const item = msg.item;
+      if (WEAPONS[item] && !WEAPONS[item].melee) {
+        const w = WEAPONS[item];
+        if (p.credits < w.price) { send(p, { t: 'buyFail', reason: 'Не хватает кредитов' }); return; }
+        p.credits -= w.price;
+        p.loadout[w.slot] = item;
+      } else if (ARMOR[item]) {
+        const a = ARMOR[item];
+        if (p.credits < a.price) { send(p, { t: 'buyFail', reason: 'Не хватает кредитов' }); return; }
+        if (p.armor >= a.value) { send(p, { t: 'buyFail', reason: 'Броня уже есть' }); return; }
+        p.credits -= a.price;
+        p.armor = a.value;
+      } else return;
+      send(p, { t: 'buyOk', item, credits: p.credits, loadout: p.loadout, armor: p.armor });
+      break;
+    }
+    case 'hit': {
+      if (!p.alive || p.cloneMode) return;   // клон Фафика стрелять не может
+      const victim = players.get(msg.target);
+      if (!victim || !victim.alive) return;
+      // выстрел союзника по кокону — спасение жертвы
+      if (match.cocoon && match.cocoon.victim === victim.id && p.team === victim.team) {
+        match.cocoon.hp -= Math.min(320, Number(msg.dmg) || 0);
+        if (match.cocoon.hp <= 0) {
+          broadcast({ t: 'cocoonEnd', victim: victim.id, freed: true });
+          match.cocoon = null;
+        }
+        return;
+      }
+      if (victim.team === p.team) return; // дружественного огня нет
+      applyDamage(victim, Number(msg.dmg) || 0, p.id, msg.weapon || 'unknown', msg.part || 'body');
+      break;
+    }
+    case 'selfDamage': {
+      if (!p.alive) return;
+      const dmg = Math.min(45, Math.max(0, Number(msg.dmg) || 0));
+      const by = players.get(msg.by);
+      const attackerId = by && by.team !== p.team ? by.id : 0;
+      applyDamage(p, dmg, attackerId, msg.cause || 'zone', msg.cause || 'zone');
+      break;
+    }
+    case 'selfHeal': {
+      if (p.char !== 'artemiy') return;
+      heal(p, Math.min(15, Math.max(0, Number(msg.amt) || 0)));
+      break;
+    }
+    case 'zone': {
+      // владелец зоны сообщает серверу (урон ботам, дымы для их LOS)
+      if (!liveish()) return;
+      const dur = Math.min(15, Number(msg.dur) || 5);
+      const r = Math.min(6.5, Number(msg.r) || 3);
+      if (msg.ztype === 'smoke') {
+        match.smokes.push({ pos: msg.pos, r, until: now() + dur });
+      } else if (msg.ztype === 'firewall') {
+        match.zones.push({ type: 'seg', a: msg.a, b: msg.b, r: 1.3, dps: ABILITY.FIRE_DPS, from: now(), until: now() + dur, owner: p.id });
+      } else {
+        const dpsMap = { fire: ABILITY.FIRE_DPS, mangal: ABILITY.MANGAL_DPS, acid: ABILITY.ACID_DPS, horseshoe: ABILITY.HORSESHOE_DPS, puddle: ABILITY.PUDDLE_DPS };
+        const dps = dpsMap[msg.ztype] !== undefined ? dpsMap[msg.ztype] : ABILITY.PUDDLE_DPS;
+        match.zones.push({ type: 'circle', pos: msg.pos, r, dps, from: now(), until: now() + dur, owner: p.id });
+      }
+      break;
+    }
+    case 'healZone': {
+      if (!liveish() || p.char !== 'ira') return;
+      const dur = Math.min(22, Number(msg.dur) || 10);
+      if (msg.kind === 'crispy') {
+        match.healZones.push({ kind: 'crispy', team: p.team, a: msg.a, b: msg.b, rate: ABILITY.CRISPY_HEAL, until: now() + dur });
+      } else if (msg.kind === 'banquet') {
+        const r = Math.min(8, Number(msg.r) || ABILITY.BANQUET_R);
+        // мгновенные +30 всем союзникам, кто уже внутри
+        for (const q of players.values()) {
+          if (q.alive && q.team === p.team && Math.hypot(q.lastPos[0] - msg.pos[0], q.lastPos[2] - msg.pos[2]) < r) {
+            heal(q, ABILITY.BANQUET_INSTANT);
+          }
+        }
+        match.healZones.push({ kind: 'banquet', team: p.team, pos: msg.pos, r, rate: ABILITY.BANQUET_REGEN, until: now() + dur });
+      }
+      break;
+    }
+    case 'healBurst': {
+      if (!liveish() || p.char !== 'ira') return;
+      const r = Math.min(10, Number(msg.r) || ABILITY.BUFFET_R);
+      const amount = Math.min(60, Number(msg.amount) || ABILITY.BUFFET_HEAL);
+      for (const q of players.values()) {
+        if (q.alive && q.team === p.team && Math.hypot(q.lastPos[0] - msg.pos[0], q.lastPos[2] - msg.pos[2]) < r) {
+          heal(q, amount);
+        }
+      }
+      break;
+    }
+    case 'ability': onAbility(p, msg); break;
+    case 'plantStart': {
+      if (match.state !== PHASES.LIVE || sideOfTeam(p.team) !== 'attack' || !p.alive) return;
+      const site = inSite(p.lastPos);
+      if (!site || match.planting) return;
+      match.planting = { by: p.id, start: now(), pos: [...p.lastPos] };
+      broadcast({ t: 'plantProg', pct: 0 });
+      break;
+    }
+    case 'plantCancel':
+      if (match.planting && match.planting.by === p.id) { match.planting = null; broadcast({ t: 'plantProg', pct: -1 }); }
+      break;
+    case 'defuseStart': {
+      if (match.state !== PHASES.PLANTED || sideOfTeam(p.team) !== 'defend' || !p.alive || !match.spike) return;
+      const d = Math.hypot(p.lastPos[0] - match.spike.pos[0], p.lastPos[2] - match.spike.pos[2]);
+      if (d > 2.8 || match.defusing) return;
+      match.defusing = { by: p.id, start: now() };
+      broadcast({ t: 'defuseProg', pct: match.defuseAccum / RULES.DEFUSE_TIME });
+      break;
+    }
+    case 'defuseCancel':
+      if (match.defusing && match.defusing.by === p.id) stopDefuse();
+      break;
+  }
+}
+
+function broadcastExcept(id, msg) {
+  const s = JSON.stringify(msg);
+  for (const p of players.values()) {
+    if (p.id !== id && p.ws && p.ws.readyState === 1) p.ws.send(s);
+  }
+}
+
+function onAbility(p, msg) {
+  if (!p.alive || !liveish()) return;
+  const kind = msg.kind;
+  const cost = CHARACTERS[p.char].ultCost;
+
+  // ульты списываются сервером
+  if (kind === 'ultMark') {
+    if (p.char !== 'artemiy' || p.ult < cost) return;
+    p.ult -= cost;
+    p.ultMark = { pos: msg.data.pos, yaw: msg.data.yaw, until: now() + ABILITY.PHOENIX_ULT_TIME };
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'hookFire') {
+    if (p.char !== 'denis' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'orbital') {
+    if (p.char !== 'vova' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+    match.zones.push({
+      type: 'circle', pos: [msg.data.pos[0], 0, msg.data.pos[2]], r: ABILITY.ORBITAL_R,
+      dps: ABILITY.ORBITAL_DPS, from: now() + ABILITY.ORBITAL_DELAY,
+      until: now() + ABILITY.ORBITAL_DELAY + ABILITY.ORBITAL_DUR, owner: p.id,
+    });
+  } else if (kind === 'xray') {
+    if (p.char !== 'sanek' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'knives') {
+    if (p.char !== 'max' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'banquet') {
+    if (p.char !== 'ira' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'cocoonHit') {
+    // Денис попал крюком: сервер ведёт кокон
+    const victim = players.get(msg.data.target);
+    if (!victim || !victim.alive || victim.team === p.team || match.cocoon) return;
+    applyDamage(victim, ABILITY.COCOON_HIT_DMG, p.id, 'hook', 'body');
+    if (!victim.alive) return;
+    match.cocoon = { victim: victim.id, by: p.id, hp: ABILITY.COCOON_HP, until: now() + ABILITY.COCOON_TIME };
+    broadcast({ t: 'cocoon', victim: victim.id, by: p.id, tLeft: ABILITY.COCOON_TIME });
+  } else if (kind === 'stampede') {
+    if (p.char !== 'koniliy' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+    const fromX = msg.data.from[0], fromZ = msg.data.from[2];
+    const toX = msg.data.to[0], toZ = msg.data.to[1];
+    let dx = toX - fromX, dz = toZ - fromZ;
+    const dl = Math.hypot(dx, dz) || 1;
+    const len = Math.min(ABILITY.STAMPEDE_LEN, dl);
+    const a = [fromX, 0, fromZ], b = [fromX + dx / dl * len, 0, fromZ + dz / dl * len];
+    for (const e of players.values()) {
+      if (e.team === p.team || !e.alive) continue;
+      if (distToSeg2D(e.lastPos, a, b) < ABILITY.STAMPEDE_WIDTH) {
+        applyDamage(e, ABILITY.STAMPEDE_DMG, p.id, 'stampede', 'body');
+        if (!e.bot && e.alive) send(e, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
+      }
+    }
+  } else if (kind === 'fafikClones') {
+    if (p.char !== 'fafik' || p.ult < cost || p.cloneMode) return;
+    p.ult -= cost;
+    p.cloneMode = true;
+    send(p, { t: 'ultPts', pts: p.ult });
+  } else if (kind === 'fafikDeClone') {
+    if (p.char !== 'fafik') return;
+    p.cloneMode = false;
+  } else if (kind === 'smokes') {
+    // дымы: запоминаем для LOS ботов
+    for (const pos of msg.data.positions || []) {
+      match.smokes.push({ pos, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
+    }
+  }
+  broadcast({ t: 'ability', id: p.id, kind, data: msg.data || {} });
+}
+
+// ===== Боты =====
+function botResetRound(bot) {
+  const ai = bot.ai;
+  ai.path = []; ai.pathIdx = 0; ai.goal = null; ai.site = null;
+  ai.nextThink = 0; ai.nextShot = 0; ai.engaging = 0; ai.scanYaw = bot.yaw;
+  ai.nextAbility = now() + 3 + Math.random() * 3; ai.target = null;
+  // автозакупка
+  if (bot.credits >= 3900) { bot.loadout.primary = 'vandal'; bot.armor = 50; bot.credits -= 3900; }
+  else if (bot.credits >= 2000) { bot.loadout.primary = 'spectre'; bot.armor = 25; bot.credits -= 2000; }
+  else if (bot.credits >= 800 && !bot.loadout.primary) { bot.loadout.sidearm = 'sheriff'; bot.credits -= 800; }
+}
+
+function botWeapon(bot) {
+  return WEAPONS[bot.loadout.primary || bot.loadout.sidearm || 'classic'];
+}
+
+function navNearest(pos) {
+  const nodes = match.mapDef.nav.nodes;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < nodes.length; i++) {
+    const d = Math.hypot(pos[0] - nodes[i][0], pos[2] - nodes[i][1]);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+
+function navPath(fromIdx, toIdx) {
+  const { nodes, edges } = match.mapDef.nav;
+  const adj = new Map();
+  for (const [a, b] of edges) {
+    if (!adj.has(a)) adj.set(a, []);
+    if (!adj.has(b)) adj.set(b, []);
+    adj.get(a).push(b); adj.get(b).push(a);
+  }
+  const prev = new Map([[fromIdx, -1]]);
+  const q = [fromIdx];
+  while (q.length) {
+    const cur = q.shift();
+    if (cur === toIdx) break;
+    for (const nb of adj.get(cur) || []) {
+      if (!prev.has(nb)) { prev.set(nb, cur); q.push(nb); }
+    }
+  }
+  if (!prev.has(toIdx)) return [toIdx];
+  const path = [];
+  for (let cur = toIdx; cur !== -1; cur = prev.get(cur)) path.unshift(cur);
+  return path;
+}
+
+function botEye(b) { return [b.lastPos[0], b.lastPos[1] + 1.6, b.lastPos[2]]; }
+
+function botVisibleEnemy(bot) {
+  let best = null, bd = 48;
+  for (const e of players.values()) {
+    if (e.team === bot.team || !e.alive) continue;
+    const d = Math.hypot(e.lastPos[0] - bot.lastPos[0], e.lastPos[2] - bot.lastPos[2]);
+    if (d < bd && losClear(botEye(bot), [e.lastPos[0], e.lastPos[1] + 1.4, e.lastPos[2]])) {
+      bd = d; best = e;
+    }
+  }
+  return best ? { enemy: best, dist: bd } : null;
+}
+
+function botSetGoal(bot, nodeIdx, goal) {
+  const ai = bot.ai;
+  ai.path = navPath(navNearest(bot.lastPos), nodeIdx);
+  ai.pathIdx = 0;
+  ai.goal = goal;
+}
+
+function botPlantNode(site) {
+  const s = match.mapDef.sites[site];
+  const nodes = match.mapDef.nav.nodes;
+  let best = 0, bd = Infinity;
+  for (let i = 0; i < nodes.length; i++) {
+    const d = Math.hypot(nodes[i][0] - s.x, nodes[i][1] - s.z);
+    if (d < bd) { bd = d; best = i; }
+  }
+  return best;
+}
+
+function botShoot(bot, e, dist) {
+  const t = now();
+  const ai = bot.ai;
+  const w = botWeapon(bot);
+  // аим всегда на врага
+  bot.yaw = Math.atan2(-(e.lastPos[0] - bot.lastPos[0]), -(e.lastPos[2] - bot.lastPos[2]));
+  if (t < ai.nextShot) return;
+  ai.nextShot = t + Math.max(0.12, 60 / w.rpm) + Math.random() * 0.12;
+  const dir = [
+    e.lastPos[0] - bot.lastPos[0] + (Math.random() - 0.5) * 1.6,
+    (e.lastPos[1] + 1.2) - (bot.lastPos[1] + 1.6),
+    e.lastPos[2] - bot.lastPos[2] + (Math.random() - 0.5) * 1.6,
+  ];
+  const len = Math.hypot(...dir) || 1;
+  broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bot.loadout.primary || bot.loadout.sidearm || 'classic' });
+  // шанс попасть падает с дистанцией и растёт вблизи
+  const pHit = Math.max(0.06, Math.min(0.32, 0.34 - dist * 0.008));
+  if (Math.random() < pHit) {
+    const head = Math.random() < 0.13;
+    applyDamage(e, head ? w.head : w.dmg, bot.id, bot.loadout.primary || 'classic', head ? 'head' : 'body');
+  }
+}
+
+// ===== боты используют способности =====
+function botBroadcastAbility(bot, kind, data) {
+  broadcast({ t: 'ability', id: bot.id, kind, data: data || {} });
+}
+function botZoneAt(bot, ztype, point, r, dur, dps) {
+  // сервер-зона (для урона ботам) + бросок-визуал к точке (люди сами репортят урон)
+  match.zones.push({ type: 'circle', pos: [point[0], 0, point[2]], r, dps, from: now(), until: now() + dur, owner: bot.id });
+  const eye = botEye(bot);
+  const dir = [point[0] - eye[0], 0.4 - eye[1] + (point[1] || 0), point[2] - eye[2]];
+  const dl = Math.hypot(...dir) || 1;
+  const d = dir.map(v => v / dl);
+  if (ztype === 'fire') botBroadcastAbility(bot, 'molly', { from: eye, dir: d });
+  else botBroadcastAbility(bot, 'throwZone', { from: eye, dir: d, kind: ztype });
+}
+function botFlash(bot, enemy, tapok) {
+  const eye = botEye(bot);
+  const tgt = enemy ? enemy.lastPos : [bot.lastPos[0] - Math.sin(bot.yaw) * 8, 1.4, bot.lastPos[2] - Math.cos(bot.yaw) * 8];
+  const dir = [tgt[0] - eye[0], 1.4 - eye[1], tgt[2] - eye[2]];
+  const dl = Math.hypot(...dir) || 1;
+  botBroadcastAbility(bot, 'flash', { from: eye, dir: dir.map(v => v / dl), tapok: !!tapok });
+}
+function botSmoke(bot) {
+  const p = [bot.lastPos[0] - Math.sin(bot.yaw) * 6, 0, bot.lastPos[2] - Math.cos(bot.yaw) * 6];
+  match.smokes.push({ pos: p, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
+  botBroadcastAbility(bot, 'smokes', { positions: [p], stink: bot.char === 'denis' });
+}
+function botHealAllies(bot, pos, r, amount) {
+  for (const q of players.values()) {
+    if (q.alive && q.team === bot.team && Math.hypot(q.lastPos[0] - pos[0], q.lastPos[2] - pos[2]) < r) heal(q, amount);
+  }
+}
+
+function botUseAbility(bot, seen, combat) {
+  const t = now();
+  const ai = bot.ai;
+  if (t < ai.nextAbility || !liveish()) return;
+  const cost = CHARACTERS[bot.char].ultCost;
+  const e = ai.target;
+  const cd = (s) => { ai.nextAbility = t + s; };
+
+  switch (bot.char) {
+    case 'artemiy':
+      if (bot.hp < 45 && bot.ult >= cost) {
+        bot.ult -= cost;
+        bot.ultMark = { pos: [...bot.lastPos], yaw: bot.yaw, until: t + ABILITY.PHOENIX_ULT_TIME };
+        botBroadcastAbility(bot, 'ultMark', { pos: [...bot.lastPos], yaw: bot.yaw });
+        cd(10);
+      } else if (combat && e) { botZoneAt(bot, 'fire', e.lastPos, ABILITY.FIRE_ZONE_R, ABILITY.FIRE_ZONE_TIME, ABILITY.FIRE_DPS); cd(8); }
+      break;
+    case 'vova':
+      if (bot.ult >= cost && combat && e) {
+        bot.ult -= cost;
+        match.zones.push({ type: 'circle', pos: [e.lastPos[0], 0, e.lastPos[2]], r: ABILITY.ORBITAL_R, dps: ABILITY.ORBITAL_DPS, from: t + ABILITY.ORBITAL_DELAY, until: t + ABILITY.ORBITAL_DELAY + ABILITY.ORBITAL_DUR, owner: bot.id });
+        botBroadcastAbility(bot, 'orbital', { pos: [e.lastPos[0], 0, e.lastPos[2]] });
+        cd(13);
+      } else if (combat && e) { botFlash(bot, e); cd(7); }
+      else { botSmoke(bot); cd(10); }
+      break;
+    case 'sanek':
+      if (combat && e) { botZoneAt(bot, 'acid', e.lastPos, ABILITY.ACID_R, ABILITY.ACID_TIME, ABILITY.ACID_DPS); cd(8); }
+      break;
+    case 'denis':
+      if (bot.ult >= cost && combat && e && seen && seen.dist < ABILITY.COCOON_RANGE && !match.cocoon) {
+        bot.ult -= cost;
+        applyDamage(e, ABILITY.COCOON_HIT_DMG, bot.id, 'hook', 'body');
+        if (e.alive) {
+          match.cocoon = { victim: e.id, by: bot.id, hp: ABILITY.COCOON_HP, until: t + ABILITY.COCOON_TIME };
+          broadcast({ t: 'cocoon', victim: e.id, by: bot.id, tLeft: ABILITY.COCOON_TIME });
+          botBroadcastAbility(bot, 'cocoonHit', { target: e.id });
+        }
+        cd(11);
+      } else if (combat && e) { botZoneAt(bot, 'puddle', e.lastPos, ABILITY.PUDDLE_R, ABILITY.PUDDLE_TIME, ABILITY.PUDDLE_DPS); cd(8); }
+      break;
+    case 'fafik':
+      if (combat && e) {
+        if (Math.random() < 0.5) botZoneAt(bot, 'mangal', e.lastPos, ABILITY.MANGAL_R, ABILITY.MANGAL_TIME, ABILITY.MANGAL_DPS);
+        else botFlash(bot, e, true);
+        cd(8);
+      }
+      break;
+    case 'koniliy':
+      if (bot.ult >= cost && combat && e) {
+        bot.ult -= cost;
+        const a = [bot.lastPos[0], 0, bot.lastPos[2]];
+        let dx = e.lastPos[0] - a[0], dz = e.lastPos[2] - a[2]; const dl = Math.hypot(dx, dz) || 1;
+        const len = Math.min(ABILITY.STAMPEDE_LEN, Math.max(8, dl));
+        const b = [a[0] + dx / dl * len, 0, a[2] + dz / dl * len];
+        for (const en of players.values()) {
+          if (en.team === bot.team || !en.alive) continue;
+          if (distToSeg2D(en.lastPos, a, b) < ABILITY.STAMPEDE_WIDTH) {
+            applyDamage(en, ABILITY.STAMPEDE_DMG, bot.id, 'stampede', 'body');
+            if (!en.bot && en.alive) send(en, { t: 'stun', dur: ABILITY.STAMPEDE_STUN });
+          }
+        }
+        botBroadcastAbility(bot, 'stampede', { from: [a[0], 0, a[2]], to: [b[0], b[2]] });
+        cd(13);
+      } else if (combat && e) { botZoneAt(bot, 'horseshoe', e.lastPos, ABILITY.HORSESHOE_R, ABILITY.HORSESHOE_TIME, ABILITY.HORSESHOE_DPS); cd(8); }
+      break;
+    case 'ira': {
+      let hurt = null, hd = 1e9;
+      for (const q of players.values()) {
+        if (q.team !== bot.team || !q.alive) continue;
+        if (q.hp < q.maxHp - 20) { const d = Math.hypot(q.lastPos[0] - bot.lastPos[0], q.lastPos[2] - bot.lastPos[2]); if (d < hd) { hd = d; hurt = q; } }
+      }
+      if (bot.ult >= cost && hurt) {
+        bot.ult -= cost;
+        const pos = [bot.lastPos[0], 0, bot.lastPos[2]];
+        botHealAllies(bot, pos, ABILITY.BANQUET_R, ABILITY.BANQUET_INSTANT);
+        match.healZones.push({ kind: 'banquet', team: bot.team, pos, r: ABILITY.BANQUET_R, rate: ABILITY.BANQUET_REGEN, until: t + ABILITY.BANQUET_TIME });
+        botBroadcastAbility(bot, 'banquet', { pos });
+        cd(15);
+      } else if (hurt && hd < 12) {
+        const pos = [hurt.lastPos[0], 0, hurt.lastPos[2]];
+        botHealAllies(bot, pos, ABILITY.BUFFET_R, ABILITY.BUFFET_HEAL);
+        botBroadcastAbility(bot, 'buffetPop', { pos });
+        cd(9);
+      }
+      break;
+    }
+    case 'max':
+      if (combat && e && seen && seen.dist > 6) {
+        let dx = e.lastPos[0] - bot.lastPos[0], dz = e.lastPos[2] - bot.lastPos[2]; const dl = Math.hypot(dx, dz) || 1;
+        bot.lastPos[0] += dx / dl * ABILITY.DASH_DIST; bot.lastPos[2] += dz / dl * ABILITY.DASH_DIST;
+        botBroadcastAbility(bot, 'dash', {});
+        cd(7);
+      }
+      break;
+  }
+}
+
+function tickBot(bot, dt) {
+  const t = now();
+  const ai = bot.ai;
+  if (!bot.alive) return;
+  if (match.cocoon && match.cocoon.victim === bot.id) return;
+  if (match.state === PHASES.BUY) return; // заморозка на закупке
+
+  const side = sideOfTeam(bot.team);
+  const seen = botVisibleEnemy(bot);
+  if (seen) { ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist; }
+  const combat = t < ai.engaging && ai.target && ai.target.alive;
+
+  // стрельба поверх движения (не замораживает бота)
+  if (combat && seen) botShoot(bot, ai.target, seen.dist);
+  // способности агента
+  botUseAbility(bot, seen, combat);
+
+  // близкий враг — придержать позицию для точности (дуэль в упор)
+  const holdForDuel = combat && seen && seen.dist < 12;
+
+  // --- назначение цели по фазе ---
+  if (side === 'attack') {
+    if (match.state === PHASES.LIVE) {
+      if (!ai.site) { ai.site = Math.random() < 0.5 ? 'A' : 'B'; botSetGoal(bot, botPlantNode(ai.site), 'plant'); }
+      if (ai.goal === 'plant' && ai.pathIdx >= ai.path.length && inSite(bot.lastPos)) {
+        if (!match.planting && !combat) { // при враге рядом сначала отбиться
+          match.planting = { by: bot.id, start: t, pos: [...bot.lastPos] };
+          broadcast({ t: 'plantProg', pct: 0 });
+        }
+        if (match.planting && match.planting.by === bot.id) { if (!combat) return; }
+        else if (!combat) { bot.yaw += dt * 0.8; return; }
+      }
+    } else if (match.state === PHASES.PLANTED) {
+      if (ai.goal !== 'holdSpike') botSetGoal(bot, navNearest(match.spike.pos), 'holdSpike');
+      if (ai.pathIdx >= ai.path.length && !combat) { bot.yaw += dt * 0.8; return; }
+    }
+  } else {
+    if (match.state === PHASES.LIVE) {
+      if (!ai.site) { ai.site = Math.random() < 0.5 ? 'A' : 'B'; botSetGoal(bot, botPlantNode(ai.site), 'hold'); }
+      if (ai.goal === 'hold' && ai.pathIdx >= ai.path.length) {
+        if (!combat) bot.yaw += dt * 0.7; // держим сайт, сканируем
+        return;
+      }
+    } else if (match.state === PHASES.PLANTED) {
+      if (ai.goal !== 'defuse') botSetGoal(bot, navNearest(match.spike.pos), 'defuse');
+      if (ai.pathIdx >= ai.path.length) {
+        const d = Math.hypot(bot.lastPos[0] - match.spike.pos[0], bot.lastPos[2] - match.spike.pos[2]);
+        if (d > 1.6 && !holdForDuel) {
+          moveToward(bot, [match.spike.pos[0], match.spike.pos[1], match.spike.pos[2]], dt);
+        } else if (!match.defusing && !combat) {
+          match.defusing = { by: bot.id, start: t };
+          broadcast({ t: 'defuseProg', pct: match.defuseAccum / RULES.DEFUSE_TIME });
+        }
+        return;
+      }
+    }
+  }
+
+  // --- движение по пути (продолжается даже в бою, кроме дуэли в упор) ---
+  if (!holdForDuel && ai.pathIdx < ai.path.length) {
+    const node = match.mapDef.nav.nodes[ai.path[ai.pathIdx]];
+    const target = [node[0], node[2] || 0, node[1]];
+    if (moveToward(bot, target, dt, combat) < 0.9) ai.pathIdx++;
+  }
+}
+
+function moveToward(bot, target, dt, combat = false) {
+  const dx = target[0] - bot.lastPos[0], dz = target[2] - bot.lastPos[2];
+  const d = Math.hypot(dx, dz);
+  const speed = combat ? 3.6 : 5.5; // в бою идут медленнее (осторожнее)
+  if (d > 0.01) {
+    const step = Math.min(d, speed * dt);
+    bot.lastPos[0] += dx / d * step;
+    bot.lastPos[2] += dz / d * step;
+    // высота — плавно к высоте цели (лестницы)
+    bot.lastPos[1] += (target[1] - bot.lastPos[1]) * Math.min(1, dt * 6);
+    if (!combat) bot.yaw = Math.atan2(-dx, -dz); // в бою прицел держит botShoot
+  }
+  return d;
+}
+
+// ===== Главный тик (20 Гц) =====
+setInterval(() => {
+  const t = now();
+  if (!match.running) return;
+
+  // фазы
+  switch (match.state) {
+    case PHASES.BUY:
+      if (t >= match.deadline) startLive();
+      break;
+    case PHASES.LIVE: {
+      if (match.planting) {
+        const pct = (t - match.planting.start) / RULES.PLANT_TIME;
+        if (pct >= 1) {
+          const planter = players.get(match.planting.by);
+          match.spike = { pos: [...match.planting.pos], boomAt: t + RULES.SPIKE_TIME };
+          match.planting = null;
+          match.state = PHASES.PLANTED;
+          match.deadline = match.spike.boomAt;
+          if (planter) {
+            planter.credits = Math.min(RULES.MAX_CREDITS, planter.credits + RULES.PLANT_REWARD);
+            planter.ult = Math.min(9, planter.ult + 1);
+            send(planter, { t: 'ultPts', pts: planter.ult });
+            send(planter, { t: 'credits', credits: planter.credits });
+          }
+          broadcast({ t: 'planted', pos: match.spike.pos, tLeft: RULES.SPIKE_TIME });
+          for (const b of players.values()) if (b.bot) { b.ai.goal = null; b.ai.site = null; }
+          const defTeam = enemyTeam(match.attackTeam);
+          if (teamAliveCount(defTeam) === 0) endRound(match.attackTeam, 'elim');
+        } else {
+          broadcast({ t: 'plantProg', pct });
+        }
+      }
+      if (match.state === PHASES.LIVE && t >= match.deadline) endRound(enemyTeam(match.attackTeam), 'time');
+      break;
+    }
+    case PHASES.PLANTED: {
+      if (match.defusing) {
+        const total = match.defuseAccum + (t - match.defusing.start);
+        const pct = total / RULES.DEFUSE_TIME;
+        if (pct >= 1) {
+          const defuser = players.get(match.defusing.by);
+          match.defusing = null;
+          if (defuser) { defuser.ult = Math.min(9, defuser.ult + 1); send(defuser, { t: 'ultPts', pts: defuser.ult }); }
+          broadcast({ t: 'defused' });
+          endRound(enemyTeam(match.attackTeam), 'defuse');
+        } else {
+          broadcast({ t: 'defuseProg', pct });
+        }
+      }
+      if (match.state === PHASES.PLANTED && t >= match.deadline) {
+        broadcast({ t: 'boom', pos: match.spike.pos });
+        endRound(match.attackTeam, 'boom');
+      }
+      break;
+    }
+    case PHASES.ROUND_END:
+      if (t >= match.deadline) startRound();
+      return;
+    case PHASES.MATCH_END:
+      if (t >= match.deadline) backToLobby();
+      return;
+  }
+
+  // ульт Артемия — возврат по таймеру
+  for (const p of players.values()) {
+    if (p.ultMark && t >= p.ultMark.until) {
+      const mark = p.ultMark;
+      p.ultMark = null;
+      if (p.alive) {
+        p.hp = p.maxHp;
+        p.lastPos = [...mark.pos];
+        broadcast({ t: 'revive', id: p.id, pos: mark.pos, yaw: mark.yaw, hp: p.hp });
+      }
+    }
+  }
+
+  // кокон Дениса
+  if (match.cocoon) {
+    const c = match.cocoon;
+    const victim = players.get(c.victim);
+    const denis = players.get(c.by);
+    if (!victim || !victim.alive || !denis || !denis.alive) {
+      if (victim && victim.alive) broadcast({ t: 'cocoonEnd', victim: c.victim, freed: true });
+      match.cocoon = null;
+    } else {
+      // бот-жертву тащим на сервере (человек тащит себя сам на клиенте)
+      if (victim.bot) {
+        const dx = denis.lastPos[0] - victim.lastPos[0], dz = denis.lastPos[2] - victim.lastPos[2];
+        const d = Math.hypot(dx, dz);
+        if (d > 1.6) {
+          const step = Math.min(d - 1.5, 9 * 0.05);
+          victim.lastPos[0] += dx / d * step;
+          victim.lastPos[2] += dz / d * step;
+        }
+      }
+      if (t >= c.until) {
+        match.cocoon = null;
+        broadcast({ t: 'cocoonEnd', victim: c.victim, freed: false });
+        applyDamage(victim, 9999, c.by, 'hook', 'ult');
+      }
+    }
+  }
+
+  if (liveish()) {
+    // урон зон по ботам (люди сами репортят selfDamage)
+    for (const z of match.zones) {
+      if (t < z.from || t > z.until) continue;
+      for (const b of players.values()) {
+        if (!b.bot || !b.alive) continue;
+        let inside = false;
+        if (z.type === 'circle') {
+          inside = Math.hypot(b.lastPos[0] - z.pos[0], b.lastPos[2] - z.pos[2]) < z.r && b.lastPos[1] < (z.pos[1] || 0) + 2.5;
+        } else {
+          inside = distToSeg2D(b.lastPos, z.a, z.b) < z.r;
+        }
+        if (inside) applyDamage(b, z.dps * 0.05, z.owner, 'zone', 'zone');
+      }
+    }
+    match.zones = match.zones.filter(z => t <= z.until);
+    match.smokes = match.smokes.filter(s => t <= s.until);
+
+    // хил-зоны Иры: лечим союзников (люди и боты) по позиции, дробный аккумулятор
+    if (match.healZones.length) {
+      for (const q of players.values()) {
+        if (!q.alive || q.hp >= q.maxHp) continue;
+        let rate = 0;
+        for (const hz of match.healZones) {
+          if (q.team !== hz.team) continue;
+          let inside = false;
+          if (hz.kind === 'crispy') inside = distToSeg2D(q.lastPos, hz.a, hz.b) < 1.4 && q.lastPos[1] < 2.6;
+          else inside = Math.hypot(q.lastPos[0] - hz.pos[0], q.lastPos[2] - hz.pos[2]) < hz.r;
+          if (inside) rate = Math.max(rate, hz.rate);
+        }
+        if (rate > 0) {
+          q._healFrac = (q._healFrac || 0) + rate * 0.05;
+          if (q._healFrac >= 1) {
+            const whole = Math.floor(q._healFrac);
+            q._healFrac -= whole;
+            heal(q, whole);
+          }
+        }
+      }
+    }
+    match.healZones = match.healZones.filter(z => t <= z.until);
+
+    // ИИ ботов
+    for (const b of players.values()) {
+      if (b.bot) {
+        try { tickBot(b, 0.05); } catch (e) { console.error('bot error:', e.message); }
+      }
+    }
+  }
+
+  // трансляция состояния ботов
+  for (const b of players.values()) {
+    if (b.bot && b.alive && match.state !== PHASES.WAIT) {
+      broadcast({ t: 'state', id: b.id, p: b.lastPos.map(v => +v.toFixed(2)), yaw: +b.yaw.toFixed(2), pitch: 0, crouch: false });
+    }
+  }
+}, 50);
+
+function distToSeg2D(p, a, b) {
+  const abx = b[0] - a[0], abz = b[2] - a[2];
+  const len2 = abx * abx + abz * abz;
+  let k = len2 ? ((p[0] - a[0]) * abx + (p[2] - a[2]) * abz) / len2 : 0;
+  k = Math.max(0, Math.min(1, k));
+  return Math.hypot(p[0] - (a[0] + abx * k), p[2] - (a[2] + abz * k));
+}
+
+// ===== WebSocket =====
+const wss = new WebSocketServer({ server: httpServer });
+
+wss.on('connection', (ws) => {
+  if (humans().length >= RULES.TEAM_MAX * 2) {
+    ws.send(JSON.stringify({ t: 'full' }));
+    ws.close();
+    return;
+  }
+  const id = nextHumanId++;
+  const p = newPlayer(id, ws);
+  players.set(id, p);
+  console.log(`[+] Игрок ${id} подключился (людей: ${humans().length})`);
+  send(p, { t: 'welcome', id });
+  send(p, lobbyInfo());
+  if (match.running) send(p, { t: 'matchAbort', reason: 'Матч уже идёт — подожди в лобби' });
+
+  ws.on('message', (raw) => {
+    let msg;
+    try { msg = JSON.parse(raw); } catch { return; }
+    try { onMessage(p, msg); } catch (e) { console.error('msg error:', e); }
+  });
+
+  ws.on('close', () => {
+    players.delete(id);
+    console.log(`[-] Игрок ${id} отключился`);
+    if (humans().length === 0) {
+      // все люди вышли — чистим ботов и матч целиком, начинаем с нуля
+      players.clear();
+      match.running = false;
+      match.state = PHASES.WAIT;
+      match.planting = null; match.defusing = null; match.spike = null; match.cocoon = null;
+      match.zones = []; match.healZones = []; match.smokes = [];
+      return;
+    } else if (match.running) {
+      broadcast({ t: 'chat', id: 0, text: `${p.name} покинул матч` });
+      // если вся команда из людей ушла и ботов в ней нет — конец
+      if (teamOf(p.team).length === 0) {
+        endRound(enemyTeam(p.team), 'elim');
+        match.score[enemyTeam(p.team)] = RULES.ROUNDS_TO_WIN;
+      }
+    }
+    broadcast(lobbyInfo());
+  });
+});
+
+httpServer.listen(port, '0.0.0.0', () => {
+  console.log('==========================================');
+  console.log('  VALORANT LAN v2 — сервер запущен');
+  console.log(`  Локально:  http://localhost:${port}`);
+  import('os').then(os => {
+    for (const ifaces of Object.values(os.networkInterfaces())) {
+      for (const i of ifaces || []) {
+        if (i.family === 'IPv4' && !i.internal) console.log(`  По сети:   http://${i.address}:${port}  <- дай эту ссылку друзьям`);
+      }
+    }
+    console.log('==========================================');
+  });
+});

@@ -1,0 +1,274 @@
+/* ===== Valorant LAN 1v1 ===== */
+:root {
+  --bg: #0f1923;
+  --red: #ff4655;
+  --teal: #0ac8b9;
+  --white: #ece8e1;
+  --panel: rgba(15, 25, 35, 0.92);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+html, body { width: 100%; height: 100%; overflow: hidden; background: var(--bg); }
+body { font-family: 'Segoe UI', 'Arial', sans-serif; color: var(--white); }
+.hidden { display: none !important; }
+
+.screen {
+  position: fixed; inset: 0; z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at 30% 20%, #1c2b3a 0%, var(--bg) 65%);
+}
+.screen::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(115deg, transparent 48%, rgba(255,70,85,.07) 48%, rgba(255,70,85,.07) 55%, transparent 55%);
+}
+
+/* ===== Меню ===== */
+.menu-inner { width: min(860px, 94vw); text-align: center; position: relative; }
+.logo {
+  font-size: clamp(44px, 7vw, 84px); font-weight: 900; letter-spacing: .18em;
+  color: var(--white); line-height: .95;
+}
+.logo span { display: block; font-size: clamp(13px, 1.6vw, 18px); letter-spacing: .55em; color: var(--red); margin-top: 8px; }
+.menu-row { display: flex; gap: 14px; justify-content: center; margin: 30px 0 8px; }
+.menu-row label { font-size: 11px; letter-spacing: .25em; color: #8b978f; text-align: left; }
+.menu-row input {
+  display: block; margin-top: 6px; width: 240px; padding: 11px 14px;
+  background: rgba(255,255,255,.06); border: 1px solid rgba(236,232,225,.25);
+  color: var(--white); font-size: 15px; outline: none; letter-spacing: .05em;
+}
+.menu-row input:focus { border-color: var(--red); }
+.pick-title { margin: 18px 0 10px; font-size: 12px; letter-spacing: .4em; color: #8b978f; }
+#charSelect { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-height: 52vh; overflow-y: auto; padding: 2px; }
+.char-card {
+  padding: 12px 14px 10px; text-align: left; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 2px solid rgba(236,232,225,.15);
+  transition: border-color .15s, transform .15s; position: relative; overflow: hidden;
+}
+.char-card:hover { transform: translateY(-3px); }
+.char-card.sel { border-color: var(--card-color, var(--red)); background: rgba(255,255,255,.07); }
+.char-card.sel::after {
+  content: 'ВЫБРАН'; position: absolute; top: 10px; right: -32px; transform: rotate(38deg);
+  background: var(--card-color, var(--red)); color: #0f1923; font-size: 10px; font-weight: 800;
+  letter-spacing: .2em; padding: 3px 36px;
+}
+.char-name { font-size: 21px; font-weight: 900; letter-spacing: .06em; }
+.char-title { font-size: 10px; letter-spacing: .28em; margin-bottom: 6px; }
+.char-desc { font-size: 11px; color: #aab4ad; margin-bottom: 8px; min-height: 44px; line-height: 1.35; }
+.char-ab { font-size: 10.5px; color: #cfd6d0; padding: 2px 0; border-top: 1px solid rgba(236,232,225,.08); line-height: 1.3; }
+.char-ab b { color: var(--white); display: inline-block; width: 16px; }
+#btnPlay {
+  margin-top: 26px; padding: 15px 90px; font-size: 18px; font-weight: 800; letter-spacing: .3em;
+  background: var(--red); color: #fff; border: none; cursor: pointer; transition: filter .15s;
+}
+#btnPlay:hover { filter: brightness(1.15); }
+#btnPlay:disabled { filter: grayscale(1); cursor: wait; }
+#menuError { color: var(--red); font-size: 13px; margin-top: 12px; min-height: 18px; }
+.menu-hint { margin-top: 14px; font-size: 12px; color: #6d7a72; letter-spacing: .05em; }
+
+/* ===== Лобби ===== */
+.lobby-inner { text-align: center; width: min(760px, 94vw); }
+.lobby-title { font-size: 34px; font-weight: 900; letter-spacing: .35em; margin-bottom: 8px; }
+#lobbyStatus { font-size: 15px; letter-spacing: .12em; color: #aab4ad; min-height: 20px; }
+#lobbyTeams { display: flex; gap: 14px; margin: 18px 0 14px; }
+.team-col { flex: 1; background: rgba(255,255,255,.04); border: 1px solid rgba(236,232,225,.12); padding: 10px; min-height: 160px; }
+.team-head { font-size: 13px; font-weight: 800; letter-spacing: .2em; padding-bottom: 8px; border-bottom: 1px solid rgba(236,232,225,.1); margin-bottom: 8px; }
+.team-head.teamA { color: var(--teal); }
+.team-head.teamB { color: var(--red); }
+.roster-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; font-size: 14px; text-align: left; }
+.roster-row .r-char { color: #8b978f; font-size: 11px; letter-spacing: .1em; margin-left: auto; }
+.roster-row.me { background: rgba(10,200,185,.08); }
+.roster-row .r-host { color: gold; }
+.mini-btn {
+  padding: 3px 10px; font-size: 11px; letter-spacing: .1em; cursor: pointer;
+  background: rgba(255,255,255,.08); color: var(--white); border: 1px solid rgba(236,232,225,.25);
+}
+.mini-btn:hover { border-color: var(--teal); }
+#mapRow, #mapRowGuest { font-size: 12px; letter-spacing: .2em; color: #8b978f; margin: 10px 0; }
+#mapButtons button { margin: 0 4px; padding: 5px 14px; font-size: 12px; letter-spacing: .1em; cursor: pointer; background: rgba(255,255,255,.06); color: var(--white); border: 1px solid rgba(236,232,225,.25); }
+#mapButtons button.sel { border-color: var(--red); background: rgba(255,70,85,.15); }
+.lobby-actions { display: flex; gap: 12px; justify-content: center; margin-top: 14px; }
+#btnStart {
+  padding: 12px 60px; font-size: 15px; font-weight: 800; letter-spacing: .25em;
+  background: var(--red); color: #fff; border: none; cursor: pointer;
+}
+#btnStart:disabled { filter: grayscale(1); cursor: not-allowed; }
+#lobbyHint { margin-top: 12px; font-size: 12px; color: #6d7a72; }
+#lobbyLinks { margin-top: 10px; font-size: 13px; color: var(--teal); line-height: 1.7; }
+.hide-host .host-only { display: none !important; }
+
+/* режим прицеливания по карте (Вова) */
+#minimap.targeting {
+  width: 560px; height: auto; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  cursor: crosshair; border: 2px solid var(--teal); z-index: 30; pointer-events: auto;
+}
+#mapTargetHint {
+  position: fixed; left: 50%; top: calc(50% - 220px); transform: translateX(-50%); z-index: 31;
+  font-size: 16px; font-weight: 800; letter-spacing: .25em; color: var(--teal);
+  background: var(--panel); padding: 8px 24px;
+}
+
+/* ===== Игра ===== */
+#game { position: fixed; inset: 0; z-index: 1; }
+#game canvas { display: block; }
+#hud { position: fixed; inset: 0; z-index: 10; pointer-events: none; }
+
+#topbar {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: stretch; gap: 2px;
+}
+.score {
+  width: 64px; display: flex; align-items: center; justify-content: center;
+  font-size: 30px; font-weight: 900; background: var(--panel);
+}
+#scoreMe { color: var(--teal); } #scoreOpp { color: var(--red); }
+#timerBox { background: var(--panel); padding: 6px 22px 5px; text-align: center; }
+#timer { font-size: 24px; font-weight: 800; letter-spacing: .06em; }
+#timer.danger { color: var(--red); }
+#roundLabel { font-size: 10px; letter-spacing: .3em; color: #8b978f; }
+#roleLabel {
+  position: absolute; top: 62px; left: 50%; transform: translateX(-50%);
+  font-size: 11px; letter-spacing: .35em; color: #aab4ad;
+}
+
+#killfeed { position: absolute; top: 14px; right: 16px; text-align: right; font-size: 13px; }
+.kf-row { background: var(--panel); padding: 5px 12px; margin-bottom: 5px; animation: kfIn .2s; }
+.kf-row b { font-weight: 700; }
+.kf-row .kf-w { color: #8b978f; font-size: 11px; margin: 0 8px; letter-spacing: .1em; }
+.kf-hs { color: gold; }
+@keyframes kfIn { from { transform: translateX(30px); opacity: 0; } }
+
+#minimap { position: absolute; top: 14px; left: 16px; background: rgba(15,25,35,.75); border: 1px solid rgba(236,232,225,.12); }
+
+#announce {
+  position: absolute; top: 26%; width: 100%; text-align: center;
+  font-size: 44px; font-weight: 900; letter-spacing: .25em; color: var(--white);
+  text-shadow: 0 0 30px rgba(255,70,85,.5); opacity: 0; transition: opacity .3s;
+}
+#announce.show { opacity: 1; }
+#subAnnounce {
+  position: absolute; top: calc(26% + 58px); width: 100%; text-align: center;
+  font-size: 15px; letter-spacing: .3em; color: #aab4ad; opacity: 0; transition: opacity .3s;
+}
+#subAnnounce.show { opacity: 1; }
+
+/* прицел */
+#crosshair { position: absolute; top: 50%; left: 50%; width: 0; height: 0; }
+#crosshair i { position: absolute; background: #00ffcc; box-shadow: 0 0 2px #000; }
+#crosshair i:nth-child(1) { width: 2px; height: 7px; left: -1px; top: -12px; }
+#crosshair i:nth-child(2) { width: 2px; height: 7px; left: -1px; top: 5px; }
+#crosshair i:nth-child(3) { width: 7px; height: 2px; left: -12px; top: -1px; }
+#crosshair i:nth-child(4) { width: 7px; height: 2px; left: 5px; top: -1px; }
+#crosshair b { position: absolute; width: 2px; height: 2px; left: -1px; top: -1px; background: #00ffcc; }
+#crosshair.scoped i, #crosshair.scoped b { background: #fff; }
+#hitmarker {
+  position: absolute; top: 50%; left: 50%; width: 26px; height: 26px; margin: -13px;
+  opacity: 0; pointer-events: none;
+}
+#hitmarker::before, #hitmarker::after {
+  content: ''; position: absolute; inset: 0;
+  background:
+    linear-gradient(45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%),
+    linear-gradient(-45deg, transparent 44%, currentColor 44%, currentColor 56%, transparent 56%);
+  -webkit-mask: radial-gradient(circle, transparent 30%, #000 32%);
+          mask: radial-gradient(circle, transparent 30%, #000 32%);
+}
+#hitmarker { color: #fff; }
+#hitmarker.hs { color: gold; }
+#hitmarker.show { animation: hm .18s; }
+@keyframes hm { 0% { opacity: 1; transform: scale(1.25); } 100% { opacity: 0; transform: scale(.9); } }
+
+#progressWrap { position: absolute; top: 58%; left: 50%; transform: translateX(-50%); width: 300px; text-align: center; }
+#progressLabel { font-size: 12px; letter-spacing: .3em; margin-bottom: 6px; color: var(--white); }
+.pbar { height: 8px; background: rgba(255,255,255,.15); }
+#progressFill { height: 100%; width: 0%; background: var(--teal); transition: width .1s linear; }
+
+/* низ */
+#hpWrap { position: absolute; left: 20px; bottom: 20px; display: flex; align-items: center; gap: 12px; }
+.hp-num { font-size: 38px; font-weight: 900; min-width: 70px; text-align: right; }
+.armor-num { font-size: 16px; font-weight: 700; color: #9fb6c4; }
+.bars { width: 170px; }
+.bar { height: 10px; background: rgba(255,255,255,.12); margin: 3px 0; }
+.bar div { height: 100%; transition: width .15s; }
+#hpBar { width: 100%; background: var(--white); }
+#hpBar.low { background: var(--red); }
+#armorBar { width: 0%; background: #9fb6c4; }
+
+#abilities { position: absolute; left: 50%; bottom: 18px; transform: translateX(-50%); display: flex; gap: 8px; }
+.abSlot {
+  width: 64px; padding: 7px 0 5px; text-align: center; background: var(--panel);
+  border: 1px solid rgba(236,232,225,.14); position: relative;
+}
+.abSlot .k { font-size: 15px; font-weight: 800; color: var(--white); }
+.abSlot .n { font-size: 8.5px; letter-spacing: .05em; color: #8b978f; margin-top: 2px; white-space: nowrap; overflow: hidden; }
+.abSlot .c { font-size: 11px; color: var(--teal); font-weight: 700; }
+.abSlot.empty { opacity: .35; }
+.abSlot.active { border-color: var(--teal); box-shadow: 0 0 12px rgba(10,200,185,.4); }
+.abSlot.ult { border-color: rgba(255,70,85,.5); }
+.abSlot.ult.ready { border-color: var(--red); box-shadow: 0 0 14px rgba(255,70,85,.55); animation: pulse 1.4s infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 26px rgba(255,70,85,.85); } }
+
+#gunWrap { position: absolute; right: 24px; bottom: 20px; text-align: right; }
+#creditsHud { font-size: 14px; color: #d9c98a; letter-spacing: .1em; margin-bottom: 4px; }
+#weaponName { font-size: 12px; letter-spacing: .3em; color: #aab4ad; }
+#ammo { font-size: 36px; font-weight: 900; }
+#ammo .sep { color: #55636d; margin: 0 6px; }
+#ammoReserve { font-size: 20px; color: #8b978f; }
+
+/* оверлеи урона/флеша */
+#flashOverlay { position: absolute; inset: 0; background: #fff; opacity: 0; }
+#dmgVignette {
+  position: absolute; inset: 0; opacity: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(255,20,30,.65) 100%);
+  transition: opacity .25s;
+}
+#blindHint { position: absolute; top: 38%; width: 100%; text-align: center; font-size: 22px; font-weight: 800; letter-spacing: .3em; color: #222; opacity: 0; }
+
+/* ===== Закупка ===== */
+#buyMenu {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20;
+  width: min(760px, 92vw); background: var(--panel); border: 1px solid rgba(236,232,225,.15);
+  padding: 20px 24px; pointer-events: auto;
+}
+.buy-head { font-size: 18px; font-weight: 800; letter-spacing: .3em; display: flex; justify-content: space-between; margin-bottom: 14px; }
+#creditsVal { color: #d9c98a; }
+#buyGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; max-height: 62vh; overflow-y: auto; }
+.buy-cat { grid-column: 1 / -1; font-size: 10px; letter-spacing: .3em; color: #6d7a72; margin-top: 4px; }
+.buy-item {
+  padding: 12px 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(236,232,225,.12);
+  cursor: pointer; transition: border-color .12s;
+}
+.buy-item:hover { border-color: var(--teal); }
+.buy-item.owned { border-color: var(--teal); background: rgba(10,200,185,.1); }
+.buy-item.cant { opacity: .4; cursor: not-allowed; }
+.buy-item .bi-name { font-size: 14px; font-weight: 700; letter-spacing: .08em; }
+.buy-item .bi-price { font-size: 12px; color: #d9c98a; margin-top: 3px; }
+.buy-item .bi-stat { font-size: 10px; color: #8b978f; margin-top: 4px; }
+.buy-hint { margin-top: 12px; font-size: 11px; color: #6d7a72; letter-spacing: .15em; text-align: center; }
+
+/* ===== Таблица ===== */
+#scoreboard {
+  position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 20;
+  min-width: 480px; background: var(--panel); border: 1px solid rgba(236,232,225,.15); padding: 18px 24px;
+}
+.sb-title { font-size: 14px; letter-spacing: .35em; margin-bottom: 12px; color: #8b978f; }
+#scoreboard table { width: 100%; border-collapse: collapse; }
+#scoreboard th { font-size: 10px; letter-spacing: .2em; color: #6d7a72; text-align: left; padding: 4px 10px; }
+#scoreboard td { padding: 8px 10px; font-size: 15px; border-top: 1px solid rgba(236,232,225,.08); }
+
+/* ===== Пауза/конец ===== */
+.pause-inner, .end-inner { text-align: center; }
+.pause-inner h2, .end-inner h2 { font-size: 42px; font-weight: 900; letter-spacing: .25em; margin-bottom: 24px; }
+.controls { font-size: 14px; line-height: 2.1; color: #aab4ad; }
+.controls b { color: var(--white); background: rgba(255,255,255,.08); padding: 1px 8px; border: 1px solid rgba(236,232,225,.2); border-radius: 3px; font-size: 12px; }
+#endTitle.win { color: var(--teal); } #endTitle.lose { color: var(--red); }
+#endScore { font-size: 54px; font-weight: 900; letter-spacing: .1em; margin-bottom: 16px; }
+#endStats { font-size: 15px; color: #aab4ad; line-height: 1.9; }
+.end-hint { margin-top: 26px; font-size: 12px; color: #6d7a72; letter-spacing: .2em; }
+
+/* ===== Чат ===== */
+#chatLog { position: fixed; left: 16px; bottom: 110px; z-index: 15; font-size: 13px; pointer-events: none; }
+.chat-row { background: rgba(15,25,35,.7); padding: 4px 10px; margin-top: 4px; max-width: 420px; }
+.chat-row b { color: var(--teal); }
+#chatInput {
+  position: fixed; left: 16px; bottom: 80px; z-index: 21; width: 320px; padding: 8px 12px;
+  background: var(--panel); border: 1px solid var(--teal); color: var(--white); outline: none; font-size: 14px;
+}

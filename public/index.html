@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>VALORANT: ЛОКАЛКА — Артемий vs Денис</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- ===== Главное меню ===== -->
+<div id="menu" class="screen">
+  <div class="menu-inner">
+    <h1 class="logo">VALORANT<span>ЛОКАЛКА · 1 НА 1</span></h1>
+    <div class="menu-row">
+      <label>ПОЗЫВНОЙ<input id="nameInput" maxlength="16" placeholder="Твой ник" autocomplete="off"></label>
+      <label>СЕРВЕР<input id="addrInput" placeholder="ip:порт" autocomplete="off"></label>
+    </div>
+    <div class="pick-title">ВЫБЕРИ АГЕНТА</div>
+    <div id="charSelect"></div>
+    <button id="btnPlay">В БОЙ</button>
+    <div id="menuError"></div>
+    <div class="menu-hint">Первый до 5 раундов. Атака ставит шип (4) на сайте A или B — защита обезвреживает (F).</div>
+  </div>
+</div>
+
+<!-- ===== Лобби: команды, карта, боты ===== -->
+<div id="lobbyOverlay" class="screen hidden">
+  <div class="lobby-inner">
+    <div class="lobby-title">ЛОББИ</div>
+    <div id="lobbyStatus">Подключение…</div>
+    <div id="lobbyTeams">
+      <div class="team-col">
+        <div class="team-head teamA">КОМАНДА А <button id="btnAddBotA" class="host-only mini-btn">+ БОТ</button><button id="btnDelBotA" class="host-only mini-btn">− БОТ</button></div>
+        <div id="teamARoster"></div>
+      </div>
+      <div class="team-col">
+        <div class="team-head teamB">КОМАНДА Б <button id="btnAddBotB" class="host-only mini-btn">+ БОТ</button><button id="btnDelBotB" class="host-only mini-btn">− БОТ</button></div>
+        <div id="teamBRoster"></div>
+      </div>
+    </div>
+    <div id="mapRow" class="host-only">КАРТА: <span id="mapButtons"></span></div>
+    <div id="mapRowGuest" class="hidden">КАРТА: <b id="mapNameGuest"></b></div>
+    <div class="lobby-actions">
+      <button id="btnSwitchTeam" class="mini-btn">СМЕНИТЬ КОМАНДУ</button>
+      <button id="btnStart" class="host-only">НАЧАТЬ МАТЧ</button>
+    </div>
+    <div id="lobbyHint"></div>
+    <div id="lobbyLinks"></div>
+  </div>
+</div>
+
+<!-- ===== Игра ===== -->
+<div id="game" class="hidden"></div>
+
+<div id="hud" class="hidden">
+  <!-- верх -->
+  <div id="topbar">
+    <div id="scoreMe" class="score">0</div>
+    <div id="timerBox"><div id="timer">1:40</div><div id="roundLabel">РАУНД 1</div></div>
+    <div id="scoreOpp" class="score">0</div>
+  </div>
+  <div id="roleLabel"></div>
+  <div id="killfeed"></div>
+  <canvas id="minimap" width="220" height="164"></canvas>
+  <div id="mapTargetHint" class="hidden"></div>
+
+  <!-- центр -->
+  <div id="announce"></div>
+  <div id="subAnnounce"></div>
+  <div id="crosshair"><i></i><i></i><i></i><i></i><b></b></div>
+  <div id="hitmarker"></div>
+  <div id="progressWrap" class="hidden"><div id="progressLabel"></div><div class="pbar"><div id="progressFill"></div></div></div>
+
+  <!-- низ -->
+  <div id="hpWrap">
+    <div class="hp-num" id="hpVal">100</div>
+    <div class="bars">
+      <div class="bar hp"><div id="hpBar"></div></div>
+      <div class="bar armor"><div id="armorBar"></div></div>
+    </div>
+    <div class="armor-num" id="armorVal">0</div>
+  </div>
+  <div id="abilities"></div>
+  <div id="gunWrap">
+    <div id="creditsHud">¤ 800</div>
+    <div id="weaponName">КЛАССИК</div>
+    <div id="ammo"><span id="ammoMag">12</span><span class="sep">/</span><span id="ammoReserve">36</span></div>
+  </div>
+
+  <!-- оверлеи -->
+  <div id="flashOverlay"></div>
+  <div id="dmgVignette"></div>
+  <div id="blindHint"></div>
+</div>
+
+<!-- ===== Закупка ===== -->
+<div id="buyMenu" class="hidden">
+  <div class="buy-head">ЗАКУПКА <span id="creditsVal">¤ 800</span></div>
+  <div id="buyGrid"></div>
+  <div class="buy-hint">B — закрыть · клик — купить</div>
+</div>
+
+<!-- ===== Таблица (Tab) ===== -->
+<div id="scoreboard" class="hidden">
+  <div class="sb-title">СЧЁТ МАТЧА</div>
+  <table><thead><tr><th>ИГРОК</th><th>АГЕНТ</th><th>У</th><th>С</th><th>УЛЬТА</th></tr></thead>
+  <tbody id="sbRows"></tbody></table>
+</div>
+
+<!-- ===== Пауза / захват мыши ===== -->
+<div id="pauseOverlay" class="screen hidden">
+  <div class="pause-inner">
+    <h2>НАЖМИ, ЧТОБЫ ИГРАТЬ</h2>
+    <div class="controls">
+      <div><b>WASD</b> движение · <b>Shift</b> тихий шаг · <b>Ctrl</b> присесть · <b>Пробел</b> прыжок</div>
+      <div><b>ЛКМ</b> огонь · <b>ПКМ</b> прицел (Оператор) · <b>R</b> перезарядка · <b>1/2/3</b> оружие</div>
+      <div><b>C / Q / E</b> способности · <b>X</b> ульта · <b>B</b> закупка · <b>Tab</b> счёт</div>
+      <div><b>4 (держать)</b> установить шип · <b>F (держать)</b> обезвредить · <b>Enter</b> чат</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Конец матча ===== -->
+<div id="endOverlay" class="screen hidden">
+  <div class="end-inner">
+    <h2 id="endTitle">ПОБЕДА</h2>
+    <div id="endScore"></div>
+    <div id="endStats"></div>
+    <div class="end-hint">Новый матч начнётся автоматически…</div>
+  </div>
+</div>
+
+<!-- чат -->
+<div id="chatLog"></div>
+<input id="chatInput" class="hidden" maxlength="80" placeholder="Сообщение…" autocomplete="off">
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

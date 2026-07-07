@@ -1,0 +1,755 @@
+// Точка входа v2: меню → лобби (команды/боты/карта) → матч.
+import * as THREE from './three.module.js';
+import { Net } from './net.js';
+import { Sfx } from './audio.js';
+import { buildMap } from './map.js';
+import { Effects } from './effects.js';
+import { LocalPlayer } from './player.js';
+import { WeaponSystem } from './weapons.js';
+import { RemotePlayer } from './remote.js';
+import { Abilities } from './abilities.js';
+import { HUD } from './hud.js';
+import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY } from './shared.js';
+
+const $ = (id) => document.getElementById(id);
+const now = () => performance.now() / 1000;
+
+const ABILITY_WEAPON_NAMES = {
+  hook: 'Мясной крюк', fire: 'Огонь', puddle: 'Тухлятина', acid: 'Кислота',
+  orbital: 'Орбитальный удар', turret: 'Турель', knives: 'Стальные перья', zone: 'Зона',
+  mangal: 'Мангал', horseshoe: 'Подкова', stampede: 'Табун',
+};
+
+// ===== Глобальное состояние =====
+const G = {
+  scene: null, camera: null, renderer: null,
+  net: null, myId: 0, myTeam: 'A', side: 'attack',
+  me: { name: 'Игрок', char: 'artemiy', hp: 100, maxHp: 100, armor: 0, credits: 800, ult: 0, alive: true },
+  players: new Map(),   // id -> {id, name, char, team, bot}
+  remotes: new Map(),   // id -> RemotePlayer
+  stats: {},            // id -> {kills, deaths}
+  phase: PHASES.WAIT, round: 0, score: { A: 0, B: 0 },
+  deadline: 0,
+  freeze: true,
+  map: null, player: null,
+  weapons: null, abilities: null, fx: null, sfx: new Sfx(), hud: null,
+  spikePos: null, spikeFx: null,
+  pulled: null, stunnedUntil: 0, slowMul: 1, blindUntil: 0, blindStink: false, shake: 0,
+  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
+  banquets: [], cloneMode: false, clonedIds: new Set(),
+  scoped: false, aimT: 0, buyOpen: false, chatOpen: false, holdAction: null,
+  spottedUntil: new Map(), revealed: new Map(),
+  shootables: [],
+  worldReady: false,
+  relock: null,
+  liveish() { return this.phase === PHASES.LIVE || this.phase === PHASES.PLANTED; },
+};
+window.G = G;
+
+// ===== Меню =====
+let selChar = localStorage.getItem('valChar') || 'artemiy';
+
+function buildMenu() {
+  const wrap = $('charSelect');
+  wrap.innerHTML = '';
+  for (const [id, c] of Object.entries(CHARACTERS)) {
+    const card = document.createElement('div');
+    card.className = 'char-card' + (id === selChar ? ' sel' : '');
+    card.style.setProperty('--card-color', c.color);
+    const abils = Object.entries(c.abilities)
+      .map(([k, a]) => `<div class="char-ab"><b>${k}</b> ${a.name} — ${a.desc}</div>`).join('');
+    card.innerHTML = `
+      <div class="char-name" style="color:${c.color}">${c.name}</div>
+      <div class="char-title" style="color:${c.color}">${c.title.toUpperCase()}</div>
+      <div class="char-desc">${c.desc}</div>${abils}`;
+    card.addEventListener('click', () => {
+      selChar = id;
+      localStorage.setItem('valChar', id);
+      for (const el of wrap.children) el.classList.remove('sel');
+      card.classList.add('sel');
+      if (G.net) G.net.send({ t: 'setChar', char: id });
+    });
+    wrap.appendChild(card);
+  }
+  $('nameInput').value = localStorage.getItem('valName') || '';
+  $('addrInput').value = location.host || 'localhost:27015';
+}
+buildMenu();
+
+$('btnPlay').addEventListener('click', () => {
+  G.sfx.init();
+  const name = $('nameInput').value.trim() || 'Игрок' + Math.floor(Math.random() * 100);
+  localStorage.setItem('valName', name);
+  G.me.name = name;
+  G.me.char = selChar;
+  const addr = $('addrInput').value.trim() || location.host;
+  $('btnPlay').disabled = true;
+  $('menuError').textContent = '';
+  connect(addr);
+});
+
+function connect(addr) {
+  G.net = new Net(`ws://${addr}`, onMessage, onDisconnect, () => {
+    G.net.send({ t: 'join', name: G.me.name, char: G.me.char });
+    $('menu').classList.add('hidden');
+    $('lobbyOverlay').classList.remove('hidden');
+    $('lobbyLinks').innerHTML = `Друзья заходят по адресу: <b>http://${addr}</b> <span style="color:#8b978f;font-size:11px">(точный LAN-адрес — в консоли сервера)</span>`;
+  });
+  setTimeout(() => {
+    if (G.net.ws.readyState !== 1 && !G.worldReady) {
+      $('btnPlay').disabled = false;
+      $('menuError').textContent = 'Не удалось подключиться к ' + addr;
+    }
+  }, 4000);
+}
+
+function onDisconnect() {
+  if (!G.worldReady) {
+    $('menu').classList.remove('hidden');
+    $('lobbyOverlay').classList.add('hidden');
+    $('btnPlay').disabled = false;
+    $('menuError').textContent = 'Соединение закрыто';
+    return;
+  }
+  $('lobbyOverlay').classList.remove('hidden');
+  $('lobbyStatus').textContent = 'Связь с сервером потеряна. Обнови страницу (F5).';
+}
+
+// ===== Мир =====
+function initWorld(mapId) {
+  if (!G.worldReady) {
+    G.scene = new THREE.Scene();
+    G.camera = new THREE.PerspectiveCamera(74, innerWidth / innerHeight, 0.05, 400);
+    G.scene.add(G.camera);
+    G.renderer = new THREE.WebGLRenderer({ antialias: true });
+    G.renderer.setSize(innerWidth, innerHeight);
+    G.renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+    G.renderer.shadowMap.enabled = true;
+    G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    G.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    G.renderer.toneMappingExposure = 0.95;
+    $('game').appendChild(G.renderer.domElement);
+    addEventListener('resize', () => {
+      G.camera.aspect = innerWidth / innerHeight;
+      G.camera.updateProjectionMatrix();
+      G.renderer.setSize(innerWidth, innerHeight);
+    });
+    G.map = buildMap(G.scene, MAPS[mapId]);
+    G.fx = new Effects(G.scene);
+    G.player = new LocalPlayer(G);
+    G.hud = new HUD(G);
+    G.hud.bindLobby(lobbyHooks);
+    G.weapons = new WeaponSystem(G);
+    G.abilities = new Abilities(G);
+    G.hud.buildBuy((item) => G.net.send({ t: 'buy', item }));
+    G.hud.prepMinimap(G.map.def);
+    $('game').classList.remove('hidden');
+    $('hud').classList.remove('hidden');
+    bindGameKeys();
+    startLoops();
+    G.worldReady = true;
+  } else if (G.map.def.id !== mapId) {
+    G.scene.remove(G.map.group);
+    G.map = buildMap(G.scene, MAPS[mapId]);
+    G.hud.prepMinimap(G.map.def);
+  }
+}
+
+// лобби-кнопки (навешиваются в HUD.bindLobby)
+const lobbyHooks = {
+  addBot: (team) => G.net.send({ t: 'addBot', team }),
+  delBot: (team) => G.net.send({ t: 'removeBot', team }),
+  setMap: (map) => G.net.send({ t: 'setMap', map }),
+  switchTeam: () => G.net.send({ t: 'switchTeam' }),
+  start: () => G.net.send({ t: 'startMatch' }),
+};
+let lastLobby = null;
+
+// ===== Обработка сообщений =====
+function onMessage(msg) {
+  switch (msg.t) {
+    case 'welcome':
+      G.myId = msg.id;
+      break;
+    case 'full':
+      $('menuError').textContent = 'Сервер полон.';
+      $('btnPlay').disabled = false;
+      break;
+    case 'lobby': {
+      lastLobby = msg;
+      // реестр игроков (нужен и в матче — имена, команды)
+      for (const p of msg.players) {
+        G.players.set(p.id, p);
+        if (p.id === G.myId) G.myTeam = p.team;
+      }
+      // удаляем ушедших
+      const ids = new Set(msg.players.map(p => p.id));
+      for (const id of [...G.players.keys()]) {
+        if (!ids.has(id)) {
+          G.players.delete(id);
+          const r = G.remotes.get(id);
+          if (r) { r.dispose(); G.remotes.delete(id); }
+        }
+      }
+      if (!msg.inMatch) {
+        G.phase = PHASES.WAIT;
+        G.freeze = true;
+        if (G.hud) G.hud.hideEnd();
+        $('lobbyOverlay').classList.remove('hidden');
+        // renderLobby нужен и до создания мира
+        if (!G.hud) {
+          // временный рендер без HUD-класса: создаём мир заранее нельзя (карта неизвестна ок)
+        }
+      }
+      renderLobbySafe(msg);
+      break;
+    }
+    case 'matchStart': {
+      G.stats = {};
+      for (const p of msg.players) {
+        G.players.set(p.id, p);
+        G.stats[p.id] = { kills: 0, deaths: 0 };
+        if (p.id === G.myId) { G.myTeam = p.team; }
+      }
+      initWorld(msg.map);
+      // пересоздаём модели всех остальных
+      for (const r of G.remotes.values()) r.dispose();
+      G.remotes.clear();
+      for (const p of msg.players) {
+        if (p.id !== G.myId) G.remotes.set(p.id, new RemotePlayer(G, p.id, p));
+      }
+      G.hud.hideEnd();
+      $('lobbyOverlay').classList.add('hidden');
+      $('pauseOverlay').classList.remove('hidden');
+      break;
+    }
+    case 'roundStart': onRoundStart(msg); break;
+    case 'phase':
+      if (msg.phase === PHASES.LIVE) {
+        G.phase = PHASES.LIVE;
+        G.freeze = false;
+        G.deadline = now() + msg.tLeft;
+        G.hud.closeBuy();
+        G.hud.announce('БОЙ!', roleHint(), 2);
+        G.sfx.roundStart();
+        relock();
+      }
+      break;
+    case 'state': {
+      const r = G.remotes.get(msg.id);
+      if (r) r.onState(msg);
+      break;
+    }
+    case 'shoot': {
+      const r = G.remotes.get(msg.id);
+      if (r) r.onShoot(msg);
+      break;
+    }
+    case 'ability':
+      if (G.abilities) G.abilities.onAbility(msg.id, msg.kind, msg.data);
+      break;
+    case 'hp': onHp(msg); break;
+    case 'death': onDeath(msg); break;
+    case 'revive': onRevive(msg); break;
+    case 'ultPts': G.me.ult = msg.pts; break;
+    case 'credits':
+      G.me.credits = msg.credits;
+      G.hud.setCredits(msg.credits);
+      break;
+    case 'stun':
+      G.stunnedUntil = now() + (msg.dur || 1);
+      G.shake = Math.max(G.shake, 2);
+      G.hud.announce('', 'ОГЛУШЕНИЕ', 1.2);
+      break;
+    case 'buyOk':
+      G.me.credits = msg.credits;
+      G.me.armor = msg.armor;
+      G.hud.setCredits(msg.credits);
+      G.hud.setArmor(msg.armor);
+      G.weapons.setLoadout(msg.loadout, true);
+      G.hud.refreshBuy();
+      G.sfx.buy();
+      break;
+    case 'buyFail':
+      G.sfx.error();
+      G.hud.announce('', msg.reason.toUpperCase(), 1.5);
+      break;
+    case 'cocoon': {
+      G.cocoonedId = msg.victim;
+      G.abilities.makeCocoonRope(msg.victim, msg.by);
+      G.sfx.hookHit();
+      if (msg.victim === G.myId) {
+        G.stunnedUntil = now() + msg.tLeft + 0.3;
+        const denis = G.remotes.get(msg.by);
+        G.pulled = { follow: () => (denis ? denis.pos : G.player.pos) };
+        G.shake = 2;
+        G.hud.announce('ТЕБЯ ТАЩИТ ДЕНИС!', 'СОЮЗНИКИ МОГУТ ОТСТРЕЛИТЬ КОКОН', msg.tLeft);
+      } else {
+        const info = G.players.get(msg.victim);
+        if (info && info.team === G.myTeam) {
+          G.hud.announce('', `${info.name} В КОКОНЕ — СТРЕЛЯЙ ПО КОКОНУ!`, 2.5);
+        }
+      }
+      break;
+    }
+    case 'cocoonEnd': {
+      G.cocoonedId = null;
+      G.abilities.disposeCocoonRope();
+      if (msg.victim === G.myId) {
+        G.pulled = null;
+        G.stunnedUntil = 0;
+        if (msg.freed) G.hud.announce('СВОБОДЕН!', 'КОКОН УНИЧТОЖЕН', 2);
+      }
+      break;
+    }
+    case 'plantProg':
+      if (msg.pct < 0) {
+        G.hud.progress('', -1);
+        if (G.holdAction === 'plant') G.holdAction = null;
+      } else {
+        G.hud.progress('УСТАНОВКА ШИПА', msg.pct);
+        if (now() - (G._lastTickSnd || 0) > 0.25) { G._lastTickSnd = now(); G.sfx.plantTick(); }
+      }
+      break;
+    case 'planted':
+      G.phase = PHASES.PLANTED;
+      G.deadline = now() + msg.tLeft;
+      G.spikePos = msg.pos;
+      G.spikeFx = G.fx.spikeMesh(new THREE.Vector3(msg.pos[0], msg.pos[1] || 0, msg.pos[2]));
+      G.hud.progress('', -1);
+      G.holdAction = null;
+      G.hud.announce('ШИП УСТАНОВЛЕН', G.side === 'defend' ? 'ОБЕЗВРЕДЬ (ДЕРЖИ F) ИЛИ ВСЁ ВЗОРВЁТСЯ' : 'ЗАЩИЩАЙ ШИП', 3);
+      G.sfx.planted();
+      break;
+    case 'defuseProg':
+      if (msg.pct < 0) {
+        G.hud.progress('', -1);
+        if (G.holdAction === 'defuse') G.holdAction = null;
+      } else {
+        G.hud.progress('ОБЕЗВРЕЖИВАНИЕ', msg.pct);
+        if (now() - (G._lastTickSnd || 0) > 0.25) { G._lastTickSnd = now(); G.sfx.plantTick(); }
+      }
+      break;
+    case 'defused':
+      G.hud.progress('', -1);
+      G.sfx.defused();
+      if (G.spikeFx) { G.spikeFx.kill(); G.spikeFx = null; }
+      break;
+    case 'boom': {
+      const p = new THREE.Vector3(msg.pos[0], 0.5, msg.pos[2]);
+      G.fx.explosion(p);
+      G.sfx.explosion();
+      G.shake = 5;
+      G.blindUntil = Math.max(G.blindUntil, now() + 0.5);
+      G.blindStink = false;
+      if (G.spikeFx) { G.spikeFx.kill(); G.spikeFx = null; }
+      break;
+    }
+    case 'roundEnd': onRoundEnd(msg); break;
+    case 'matchEnd': onMatchEnd(msg); break;
+    case 'matchAbort':
+      G.hud && G.hud.announce('', msg.reason.toUpperCase(), 2.5);
+      break;
+    case 'chat': {
+      if (msg.id === 0) {
+        G.hud && G.hud.chat('СЕРВЕР', msg.text, '#8b978f');
+        break;
+      }
+      const info = G.players.get(msg.id);
+      const mine = msg.id === G.myId;
+      G.hud && G.hud.chat(info ? info.name : '?', msg.text, mine || (info && info.team === G.myTeam) ? '#0ac8b9' : '#ff4655');
+      break;
+    }
+  }
+}
+
+function renderLobbySafe(msg) {
+  // HUD может ещё не существовать (мир не создан) — рендерим лобби напрямую
+  if (G.hud) {
+    G.hud.renderLobby(msg, G.myId);
+  } else {
+    // создаём временный HUD-объект нельзя; используем минимальный рендер
+    tempRenderLobby(msg);
+  }
+}
+
+// минимальный рендер лобби до создания мира
+let tempLobbyBound = false;
+function tempRenderLobby(msg) {
+  if (!tempLobbyBound) {
+    tempLobbyBound = true;
+    HUDLobbyBindOnce();
+  }
+  HUDLobbyRender(msg);
+}
+function HUDLobbyBindOnce() {
+  $('btnAddBotA').addEventListener('click', () => lobbyHooks.addBot('A'));
+  $('btnAddBotB').addEventListener('click', () => lobbyHooks.addBot('B'));
+  $('btnDelBotA').addEventListener('click', () => lobbyHooks.delBot('A'));
+  $('btnDelBotB').addEventListener('click', () => lobbyHooks.delBot('B'));
+  $('btnSwitchTeam').addEventListener('click', () => lobbyHooks.switchTeam());
+  $('btnStart').addEventListener('click', () => lobbyHooks.start());
+  const mb = $('mapButtons');
+  mb.innerHTML = '';
+  for (const [id, m] of Object.entries(MAPS)) {
+    const b = document.createElement('button');
+    b.textContent = m.name.toUpperCase();
+    b.dataset.map = id;
+    b.title = m.desc;
+    b.addEventListener('click', () => lobbyHooks.setMap(id));
+    mb.appendChild(b);
+  }
+}
+function HUDLobbyRender(data) {
+  const myId = G.myId;
+  const isHost = data.hostId === myId;
+  $('lobbyOverlay').classList.toggle('hide-host', !isHost);
+  $('mapRowGuest').classList.toggle('hidden', isHost);
+  $('mapNameGuest').textContent = (MAPS[data.map] || {}).name || data.map;
+  for (const b of $('mapButtons').children) b.classList.toggle('sel', b.dataset.map === data.map);
+  const render = (team, el) => {
+    el.innerHTML = '';
+    for (const p of data.players.filter(x => x.team === team)) {
+      const row = document.createElement('div');
+      row.className = 'roster-row' + (p.id === myId ? ' me' : '');
+      const star = p.id === data.hostId ? '<span class="r-host">★</span> ' : '';
+      row.innerHTML = `${star}${p.bot ? '🤖 ' : ''}<b>${p.name.replace(/[<>&]/g, '')}</b><span class="r-char">${CHARACTERS[p.char].name.toUpperCase()}</span>`;
+      el.appendChild(row);
+    }
+  };
+  render('A', $('teamARoster'));
+  render('B', $('teamBRoster'));
+  const a = data.players.filter(p => p.team === 'A').length;
+  const b = data.players.filter(p => p.team === 'B').length;
+  $('btnStart').disabled = !(a >= 1 && b >= 1) || data.inMatch;
+  $('lobbyStatus').textContent = data.inMatch
+    ? 'Матч идёт — дождись конца'
+    : isHost ? 'Ты хост: собери команды (боты — кнопкой «+ БОТ») и жми «Начать матч»' : 'Ждём, пока хост начнёт матч';
+  $('lobbyHint').textContent = isHost && (a < 1 || b < 1) ? 'В каждой команде нужен хотя бы один игрок или бот' : '';
+}
+
+function roleHint() {
+  return G.side === 'attack' ? 'ТЫ АТАКУЕШЬ — УСТАНОВИ ШИП (4) НА САЙТЕ A ИЛИ B' : 'ТЫ ЗАЩИЩАЕШЬ — НЕ ДАЙ ПОСТАВИТЬ ШИП';
+}
+
+function onRoundStart(msg) {
+  G.phase = PHASES.BUY;
+  G.freeze = true;
+  G.round = msg.round;
+  G.score = msg.score;
+  G.deadline = now() + msg.buyTime;
+  G.side = msg.sides[G.myTeam];
+  G.holdAction = null; G.pulled = null; G.stunnedUntil = 0; G.blindUntil = 0;
+  G.slowMul = 1; G.cocoonedId = null; G.xrayUntil = 0; G.banquetUntil = 0; G.boostUntil = 0;
+  G.spottedUntil.clear(); G.revealed.clear();
+  G.spikePos = null;
+  if (G.spikeFx) { G.spikeFx.kill(); G.spikeFx = null; }
+  G.shootables = [];
+
+  const st = msg.status[G.myId];
+  G.me.hp = st.hp; G.me.maxHp = st.maxHp; G.me.armor = st.armor; G.me.ult = st.ult;
+  G.me.credits = msg.credits[G.myId];
+  G.me.alive = true;
+  G.player.teleport(st.pos, st.yaw);
+
+  for (const [pid, r] of G.remotes) {
+    const s = msg.status[pid];
+    if (s) r.resetRound(s.pos, s.yaw);
+  }
+
+  G.abilities.resetRound();
+  G.weapons.setLoadout(st.loadout, true);
+  G.weapons.vmRoot.visible = true;
+  G.weapons.toggleScope(false);
+
+  G.hud.setHp(G.me.hp, G.me.maxHp);
+  G.hud.setArmor(G.me.armor);
+  G.hud.setCredits(G.me.credits);
+  G.hud.setScore(G.score[G.myTeam], G.score[G.myTeam === 'A' ? 'B' : 'A']);
+  G.hud.setRound(G.round);
+  G.hud.setRole(G.side === 'attack' ? '— АТАКА —' : '— ЗАЩИТА —');
+  G.hud.progress('', -1);
+  G.hud.announce(`РАУНД ${G.round}`, roleHint(), 3);
+  G.hud.openBuy();
+}
+
+function onHp(msg) {
+  if (msg.id === G.myId) {
+    const dropped = msg.hp < G.me.hp;
+    G.me.hp = msg.hp;
+    G.me.armor = msg.armor;
+    G.hud.setHp(G.me.hp, G.me.maxHp);
+    G.hud.setArmor(G.me.armor);
+    if (dropped && msg.part !== 'heal') {
+      G.hud.damage();
+      G.sfx.hurt();
+    }
+  }
+}
+
+function weaponLabel(w) {
+  return WEAPONS[w] ? WEAPONS[w].name : (ABILITY_WEAPON_NAMES[w] || w);
+}
+
+function nameOf(id) {
+  if (id === G.myId) return G.me.name;
+  const info = G.players.get(id);
+  return info ? info.name : '?';
+}
+
+function onDeath(msg) {
+  const victimMe = msg.id === G.myId;
+  if (G.stats[msg.id]) G.stats[msg.id].deaths++;
+  if (G.stats[msg.by] && msg.by !== msg.id) G.stats[msg.by].kills++;
+
+  G.hud.killfeed(nameOf(msg.by), weaponLabel(msg.weapon), nameOf(msg.id), msg.part === 'head');
+  G.abilities.onPlayerDeath(msg.id);
+
+  if (victimMe) {
+    G.me.alive = false;
+    G.me.hp = 0;
+    G.hud.setHp(0, G.me.maxHp);
+    G.weapons.vmRoot.visible = false;
+    G.weapons.toggleScope(false);
+    G.holdAction = null;
+    G.pulled = null;
+    G.hud.announce('ВЫ ПОГИБЛИ', '', 2.5);
+  } else {
+    const r = G.remotes.get(msg.id);
+    if (r) r.die();
+    if (msg.by === G.myId) {
+      G.sfx.kill();
+      // ножи Макса обновляются за убийство
+      if (G.knives) {
+        G.knives.count = ABILITY.KNIVES_COUNT;
+        G.knives.until = now() + ABILITY.KNIVES_TIME;
+        G.weapons.updateHud();
+      }
+    }
+  }
+}
+
+function onRevive(msg) {
+  G.abilities.clearAll ? null : null;
+  // маркеры ульты Артемия убираем
+  for (const m of G.abilities.ultMarkers) m.fx.kill();
+  G.abilities.ultMarkers = [];
+  if (msg.id === G.myId) {
+    G.me.alive = true;
+    G.me.hp = msg.hp;
+    G.player.teleport(msg.pos, msg.yaw);
+    G.weapons.vmRoot.visible = true;
+    G.hud.setHp(G.me.hp, G.me.maxHp);
+    G.hud.announce('ВТОРОЕ ДЫХАНИЕ', 'ТЫ ВЕРНУЛСЯ', 2);
+  } else {
+    const r = G.remotes.get(msg.id);
+    if (r) { r.revive(msg.pos); }
+  }
+  G.fx.explosion(new THREE.Vector3(msg.pos[0], 0.5, msg.pos[2]));
+  G.sfx.phoenixUlt();
+}
+
+const REASONS = {
+  elim: 'Команда противника уничтожена',
+  time: 'Время вышло',
+  boom: 'Шип взорвался',
+  defuse: 'Шип обезврежен',
+};
+
+function onRoundEnd(msg) {
+  G.phase = PHASES.ROUND_END;
+  G.freeze = true;
+  G.score = msg.score;
+  G.me.credits = msg.credits[G.myId];
+  G.hud.setCredits(G.me.credits);
+  G.hud.setScore(G.score[G.myTeam], G.score[G.myTeam === 'A' ? 'B' : 'A']);
+  G.hud.progress('', -1);
+  G.holdAction = null;
+  const win = msg.winner === G.myTeam;
+  G.hud.announce(win ? 'РАУНД ВЫИГРАН' : 'РАУНД ПРОИГРАН', (REASONS[msg.reason] || '').toUpperCase(), 4);
+  win ? G.sfx.roundWin() : G.sfx.roundLose();
+}
+
+function onMatchEnd(msg) {
+  G.phase = PHASES.MATCH_END;
+  const win = msg.winner === G.myTeam;
+  const lines = Object.values(msg.stats)
+    .sort((a, b) => b.kills - a.kills)
+    .map(s => `${s.team === G.myTeam ? '🟦' : '🟥'} ${s.name}: ${s.kills} / ${s.deaths}`)
+    .join('<br>');
+  G.hud.endScreen(win, `${msg.score[G.myTeam]} : ${msg.score[G.myTeam === 'A' ? 'B' : 'A']}`, lines);
+  win ? G.sfx.matchWin() : G.sfx.matchLose();
+}
+
+// ===== Клавиши =====
+function inSite(pos) {
+  for (const s of Object.values(G.map.def.sites)) {
+    if (Math.abs(pos.x - s.x) <= s.w / 2 && Math.abs(pos.z - s.z) <= s.d / 2) {
+      if (s.yMin !== undefined && pos.y < s.yMin - 0.3) continue;
+      return true;
+    }
+  }
+  return false;
+}
+
+function relock() {
+  if (!G.buyOpen && !G.chatOpen && G.phase !== PHASES.MATCH_END && G.renderer && !G.hud.mapTargetCb) {
+    G.renderer.domElement.requestPointerLock();
+  }
+}
+G.relock = relock;
+
+function bindGameKeys() {
+  window.addEventListener('keydown', (e) => {
+    if (e.code === 'Tab') { e.preventDefault(); G.hud.scoreboard(true); return; }
+    if (G.chatOpen) {
+      if (e.code === 'Enter') {
+        const text = $('chatInput').value.trim();
+        if (text) G.net.send({ t: 'chat', text });
+        $('chatInput').value = '';
+        $('chatInput').classList.add('hidden');
+        $('chatInput').blur();
+        G.chatOpen = false;
+        relock();
+      } else if (e.code === 'Escape') {
+        $('chatInput').classList.add('hidden');
+        $('chatInput').blur();
+        G.chatOpen = false;
+      }
+      return;
+    }
+    if (e.repeat) return;
+    switch (e.code) {
+      case 'Enter':
+        if (G.phase === PHASES.WAIT) return;
+        G.chatOpen = true;
+        $('chatInput').classList.remove('hidden');
+        $('chatInput').focus();
+        break;
+      case 'KeyB':
+        if (G.phase === PHASES.BUY) {
+          G.buyOpen ? (G.hud.closeBuy(), relock()) : G.hud.openBuy();
+        }
+        break;
+      case 'Escape':
+        if (G.buyOpen) { G.hud.closeBuy(); relock(); }
+        if (G.hud.mapTargetCb) G.hud.endMapTarget();
+        break;
+      case 'KeyC': G.abilities && G.abilities.use('C'); break;
+      case 'KeyQ': G.abilities && G.abilities.use('Q'); break;
+      case 'KeyE': G.abilities && G.abilities.use('E'); break;
+      case 'KeyX': G.abilities && G.abilities.use('X'); break;
+      case 'Digit4':
+        if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive && inSite(G.player.pos) && G.player.grounded) {
+          G.holdAction = 'plant';
+          G.net.send({ t: 'plantStart' });
+        }
+        break;
+      case 'KeyF':
+        if (G.phase === PHASES.PLANTED && G.side === 'defend' && G.me.alive && G.spikePos) {
+          const d = Math.hypot(G.player.pos.x - G.spikePos[0], G.player.pos.z - G.spikePos[2]);
+          if (d < 2.5) {
+            G.holdAction = 'defuse';
+            G.net.send({ t: 'defuseStart' });
+          }
+        }
+        break;
+    }
+  });
+  window.addEventListener('keyup', (e) => {
+    if (e.code === 'Tab') { G.hud.scoreboard(false); return; }
+    if (e.code === 'Digit4' && G.holdAction === 'plant') {
+      G.holdAction = null;
+      G.net.send({ t: 'plantCancel' });
+    }
+    if (e.code === 'KeyF' && G.holdAction === 'defuse') {
+      G.holdAction = null;
+      G.net.send({ t: 'defuseCancel' });
+    }
+  });
+
+  $('pauseOverlay').addEventListener('click', () => {
+    G.sfx.init();
+    relock();
+  });
+  document.addEventListener('pointerlockchange', () => {
+    const locked = !!document.pointerLockElement;
+    const lobbyShown = !$('lobbyOverlay').classList.contains('hidden');
+    $('pauseOverlay').classList.toggle('hidden',
+      locked || G.buyOpen || G.phase === PHASES.MATCH_END || G.chatOpen || !!G.hud.mapTargetCb || lobbyShown);
+  });
+}
+
+// ===== Циклы =====
+let lastFrame = 0, lastLos = 0, lastBeep = 0, lastAbHud = 0;
+
+function startLoops() {
+  setInterval(() => {
+    if (!G.worldReady || !G.net || G.phase === PHASES.WAIT) return;
+    G.net.send({
+      t: 'state',
+      p: [+G.player.pos.x.toFixed(3), +G.player.pos.y.toFixed(3), +G.player.pos.z.toFixed(3)],
+      yaw: +G.player.yaw.toFixed(3),
+      pitch: +G.player.pitch.toFixed(3),
+      crouch: G.player.crouch,
+    });
+  }, 50);
+
+  requestAnimationFrame(frame);
+}
+
+function frame(tms) {
+  requestAnimationFrame(frame);
+  const t = tms / 1000;
+  const dt = Math.min(0.05, t - lastFrame || 0.016);
+  lastFrame = t;
+
+  G.player.update(dt);
+  G.weapons.update(dt);
+  G.abilities.update(dt);
+  for (const r of G.remotes.values()) r.update(dt);
+  G.fx.update(dt);
+
+  if (G.phase === PHASES.BUY || G.phase === PHASES.LIVE || G.phase === PHASES.PLANTED) {
+    const remain = G.deadline - now();
+    G.hud.setTimer(remain, remain < 12 || G.phase === PHASES.PLANTED);
+  }
+
+  if (G.phase === PHASES.PLANTED && G.spikeFx) {
+    const remain = Math.max(0, G.deadline - now());
+    const rate = Math.max(0.13, remain / 45);
+    G.spikeFx.blinkRate = rate;
+    if (now() - lastBeep > rate) {
+      lastBeep = now();
+      const d = G.spikePos ? Math.hypot(G.player.pos.x - G.spikePos[0], G.player.pos.z - G.spikePos[2]) : 99;
+      if (d < 45) G.sfx.spikeBeep(remain < 10);
+    }
+  }
+
+  // кто из врагов виден (миникарта)
+  if (t - lastLos > 0.25 && G.me.alive) {
+    lastLos = t;
+    const eye = G.player.eyePos();
+    for (const [pid, r] of G.remotes) {
+      const info = G.players.get(pid);
+      if (!info || info.team === G.myTeam || !r.alive) continue;
+      const target = r.eyePos();
+      if (eye.distanceTo(target) < 60 && G.abilities.losClear(eye, target)) {
+        G.spottedUntil.set(pid, now() + 0.8);
+      }
+    }
+  }
+
+  if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive) {
+    G.hud.setRole(inSite(G.player.pos) ? '⯁ ТЫ НА САЙТЕ — ДЕРЖИ [4], ЧТОБЫ ПОСТАВИТЬ ШИП' : '— АТАКА —');
+  }
+
+  if (t - lastAbHud > 0.2) {
+    lastAbHud = t;
+    G.hud.updateAbilities(G.abilities.hudState());
+  }
+
+  G.hud.frame();
+  G.renderer.render(G.scene, G.camera);
+}
