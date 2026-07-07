@@ -151,7 +151,7 @@ export function buildMap(scene, def) {
   };
 
   // ===== пол и земля =====
-  const floorColor = isHeight ? '#c2b494' : '#b9bdb4';
+  const floorColor = def.id === 'bastion' ? '#b3aca0' : isHeight ? '#c2b494' : '#b9bdb4';
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(def.SIZE.w + 2, def.SIZE.d + 2),
     new THREE.MeshStandardMaterial({ color: floorColor, map: texFor(T.floor, (def.SIZE.w + 2) / 8, (def.SIZE.d + 2) / 8), roughness: 0.92 })
@@ -223,8 +223,8 @@ export function buildMap(scene, def) {
   }
 
   // ===== небо-купол и атмосфера =====
-  const skyTop = isHeight ? '#7d97b8' : '#5f83a8';
-  const skyHor = isHeight ? '#e0c9a2' : '#c3cfd6';
+  const skyTop = def.id === 'bastion' ? '#6a7fa0' : isHeight ? '#7d97b8' : '#5f83a8';
+  const skyHor = def.id === 'bastion' ? '#d8cdb8' : isHeight ? '#e0c9a2' : '#c3cfd6';
   const sky = new THREE.Mesh(
     new THREE.SphereGeometry(340, 24, 12),
     new THREE.MeshBasicMaterial({ map: skyTex(skyTop, skyHor), side: THREE.BackSide, fog: false, depthWrite: false })
