@@ -82,7 +82,7 @@ export function buildHumanoid(char, forLocalHands = false) {
   const head = mk(new THREE.SphereGeometry(0.21, 16, 14), skin, 0, 0.12, 0, 'head');
   headPivot.add(head);
   // затылок/причёска — тёмная шапочка
-  const hair = mk(new THREE.SphereGeometry(0.215, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), dark, 0, 0.13, -0.02, 'head');
+  const hair = mk(new THREE.SphereGeometry(0.215, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), dark, 0, 0.13, 0.02, 'head');
   headPivot.add(hair);
 
   // --- руки ---
@@ -151,7 +151,7 @@ function addCostume(char, cfg, ctx) {
     // огненные полосы
     for (const s of [-1, 1]) {
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.5, 0.34), new THREE.MeshStandardMaterial({ color: 0xffaa33, emissive: 0xff5500, emissiveIntensity: 0.6, roughness: 0.4 }));
-      stripe.position.set(s * 0.2, 0.4, 0.16);
+      stripe.position.set(s * 0.2, 0.4, -0.16);
       hips.add(stripe);
     }
     const crest = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.3, 6), new THREE.MeshStandardMaterial({ color: 0xff6622, emissive: 0xff3300, emissiveIntensity: 0.5 }));
@@ -160,21 +160,21 @@ function addCostume(char, cfg, ctx) {
   } else if (char === 'max') {
     // визор + плавники за спиной
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.05), new THREE.MeshStandardMaterial({ color: 0x0af0ff, emissive: 0x00aaff, emissiveIntensity: 0.7, roughness: 0.2 }));
-    visor.position.set(0, 0.12, 0.19);
+    visor.position.set(0, 0.12, -0.19);
     headPivot.add(visor);
     for (const s of [-1, 1]) {
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.4, 0.18), S('#2aa8c8'));
-      fin.position.set(s * 0.22, 0.42, -0.2);
-      fin.rotation.x = 0.3;
+      fin.position.set(s * 0.22, 0.42, 0.2);
+      fin.rotation.x = -0.3;
       hips.add(fin);
     }
   } else if (char === 'vova') {
     // капюшон
     const hood = new THREE.Mesh(new THREE.SphereGeometry(0.28, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), S('#5a4a86'));
-    hood.position.set(0, 0.14, -0.03);
+    hood.position.set(0, 0.14, 0.03);
     headPivot.add(hood);
     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.08, 12, 12), new THREE.MeshStandardMaterial({ color: 0xb090ff, emissive: 0x8060ff, emissiveIntensity: 0.8 }));
-    orb.position.set(0, 0.45, 0.12);
+    orb.position.set(0, 0.45, -0.12);
     hips.add(orb);
   } else if (char === 'sanek') {
     // каска + визор
@@ -182,16 +182,16 @@ function addCostume(char, cfg, ctx) {
     helmet.position.set(0, 0.16, 0);
     headPivot.add(helmet);
     const visor = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.1, 0.06), new THREE.MeshStandardMaterial({ color: 0x44ff88, emissive: 0x22aa44, emissiveIntensity: 0.6 }));
-    visor.position.set(0, 0.1, 0.18);
+    visor.position.set(0, 0.1, -0.18);
     headPivot.add(visor);
     // ранец с инструментами
     const pack = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.34, 0.14), S('#6b5518'));
-    pack.position.set(0, 0.4, -0.22);
+    pack.position.set(0, 0.4, 0.22);
     hips.add(pack);
   } else if (char === 'denis') {
     // мясницкий фартук + тесак
     const apron = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.5, 0.06), S('#8a2020'));
-    apron.position.set(0, 0.25, 0.32);
+    apron.position.set(0, 0.25, -0.32);
     hips.add(apron);
     const cleaver = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.22, 0.16), S('#cfd6dd', { metalness: 0.6, roughness: 0.3 }));
     cleaver.position.set(0, -0.24, -0.1);
@@ -201,7 +201,7 @@ function addCostume(char, cfg, ctx) {
     // красная куртка с белыми полосками
     for (const zoff of [0.1, -0.1]) {
       const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.06, 0.02), S('#f4f0e6'));
-      stripe.position.set(0, 0.42, zoff + 0.17);
+      stripe.position.set(0, 0.42, -(zoff + 0.17));
       hips.add(stripe);
     }
     const collar = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.04, 8, 16), S('#f4f0e6'));
@@ -214,12 +214,12 @@ function addCostume(char, cfg, ctx) {
     headPivot.add(helmet);
     for (let i = 0; i < 4; i++) {
       const seg = new THREE.Mesh(new THREE.SphereGeometry(0.06 - i * 0.008, 10, 8), new THREE.MeshStandardMaterial({ color: 0xff3b36, roughness: 0.5 }));
-      seg.position.set(0, 0.34 - i * 0.01, 0.12 - i * 0.075);
+      seg.position.set(0, 0.34 - i * 0.01, -0.12 + i * 0.075);
       headPivot.add(seg);
     }
     // жёлтый клюв-козырёк
     const beak = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.14, 4), S('#ffcf3f'));
-    beak.position.set(0, 0.08, 0.22);
+    beak.position.set(0, 0.08, -0.22);
     beak.rotation.x = Math.PI / 2;
     headPivot.add(beak);
     // перчатки-когти
@@ -229,21 +229,20 @@ function addCostume(char, cfg, ctx) {
       arm.elbow.add(glove);
       for (let c = -1; c <= 1; c++) {
         const claw = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.1, 4), S('#ffcf3f'));
-        claw.position.set(c * 0.05, -0.34, 0.05);
+        claw.position.set(c * 0.05, -0.34, -0.05);
         claw.rotation.x = -0.5;
         arm.elbow.add(claw);
       }
     }
     // рюкзак IRAFRIED
     const pack = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.4, 0.16), S('#e8302c'));
-    pack.position.set(0, 0.4, -0.24);
+    pack.position.set(0, 0.4, 0.24);
     hips.add(pack);
     const logo = new THREE.Mesh(
       new THREE.PlaneGeometry(0.32, 0.16),
       new THREE.MeshBasicMaterial({ map: labelTexture('IRAFRIED', '#f4f0e6', '#e8302c') })
     );
-    logo.position.set(0, 0.44, -0.325);
-    logo.rotation.y = Math.PI;
+    logo.position.set(0, 0.44, 0.325);
     hips.add(logo);
     // белый пояс
     const belt = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.08, 0.42), S('#f4f0e6'));
@@ -255,28 +254,28 @@ function addCostume(char, cfg, ctx) {
     for (const arm of [armL, armR]) {
       for (let i = 0; i < 3; i++) {
         const stripe = new THREE.Mesh(new THREE.BoxGeometry(0.02, 0.24, 0.02), S('#e6e6e6'));
-        stripe.position.set((i - 1) * 0.05, -0.14, 0.08);
+        stripe.position.set((i - 1) * 0.05, -0.14, -0.08);
         arm.shoulder.add(stripe);
       }
     }
     // лампасы на груди
     const zip = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.5, 0.03), S('#e6e6e6'));
-    zip.position.set(0, 0.35, 0.18);
+    zip.position.set(0, 0.35, -0.18);
     hips.add(zip);
     // кепка
     const cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 12, 10, 0, Math.PI * 2, 0, Math.PI * 0.5), S('#22304d'));
     cap.position.set(0, 0.17, 0);
     headPivot.add(cap);
     const brim = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.03, 0.16), S('#22304d'));
-    brim.position.set(0, 0.16, 0.18);
+    brim.position.set(0, 0.16, -0.18);
     headPivot.add(brim);
     // усы
     const mus = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.03, 0.04), S('#4a3a2a'));
-    mus.position.set(0, 0.03, 0.2);
+    mus.position.set(0, 0.03, -0.2);
     headPivot.add(mus);
     // барсетка
     const bag = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.12, 0.05), S('#3a2a1a'));
-    bag.position.set(0.22, 0.2, 0.12);
+    bag.position.set(0.22, 0.2, -0.12);
     hips.add(bag);
   } else if (char === 'koniliy') {
     // ===== наездник =====
@@ -289,17 +288,17 @@ function addCostume(char, cfg, ctx) {
     headPivot.add(hatBrim);
     // подкова на груди
     const shoe = new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.03, 8, 16, Math.PI * 1.3), S('#d9b06a', { metalness: 0.5, roughness: 0.4 }));
-    shoe.position.set(0, 0.4, 0.19);
+    shoe.position.set(0, 0.4, -0.19);
     shoe.rotation.z = Math.PI;
     hips.add(shoe);
     // шейный платок
     const scarf = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.2, 4), S('#a83232'));
-    scarf.position.set(0, 0.5, 0.1);
-    scarf.rotation.x = 0.3;
+    scarf.position.set(0, 0.5, -0.1);
+    scarf.rotation.x = -0.3;
     hips.add(scarf);
     // лассо на поясе
     const lasso = new THREE.Mesh(new THREE.TorusGeometry(0.08, 0.02, 6, 14), S('#8a6a3a'));
-    lasso.position.set(0.24, 0.12, 0.05);
+    lasso.position.set(0.24, 0.12, -0.05);
     lasso.rotation.x = Math.PI / 2;
     hips.add(lasso);
   }
