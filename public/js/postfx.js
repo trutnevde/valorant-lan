@@ -6,6 +6,7 @@ import { RenderPass } from './three/postprocessing/RenderPass.js';
 import { ShaderPass } from './three/postprocessing/ShaderPass.js';
 import { OutputPass } from './three/postprocessing/OutputPass.js';
 import { UnrealBloomPass } from './three/postprocessing/UnrealBloomPass.js';
+import { SSAOPass } from './three/postprocessing/SSAOPass.js';
 import { FXAAShader } from './three/shaders/FXAAShader.js';
 
 // финальный грейд: мягкий контраст, насыщенность, виньетка, лёгкое зерно
@@ -40,7 +41,17 @@ export function makeComposer(renderer, scene, camera) {
   const composer = new EffectComposer(renderer);
   composer.setPixelRatio(1);           // постпроцессинг в CSS-пикселях — вчетверо дешевле на hi-dpi
 
-  composer.addPass(new RenderPass(scene, camera));
+  const renderPass = new RenderPass(scene, camera);
+  composer.addPass(renderPass);
+
+  // SSAO — контактные тени в углах/стыках. Тяжёлый, потому выключен по умолчанию;
+  // включается только на сильном GPU (см. авто-замер в main.js) или вручную клавишей O.
+  const ssao = new SSAOPass(scene, camera, window.innerWidth, window.innerHeight);
+  ssao.kernelRadius = 0.7;
+  ssao.minDistance = 0.003;
+  ssao.maxDistance = 0.10;
+  ssao.enabled = false;
+  composer.addPass(ssao);
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5), // bloom в полразрешения
@@ -62,12 +73,18 @@ export function makeComposer(renderer, scene, camera) {
   const setSize = (w, h) => {
     composer.setSize(w, h);
     bloom.setSize(w * 0.5, h * 0.5);
+    ssao.setSize(w, h);
     fxaa.material.uniforms.resolution.value.set(1 / w, 1 / h);
   };
   setSize(window.innerWidth, window.innerHeight);
 
+  // включить/выключить SSAO без двойного рендера сцены: renderPass и ssao взаимоисключающи
+  const setSSAO = (on) => { ssao.enabled = on; renderPass.enabled = !on; };
+
   return {
-    composer, bloom, grade, setSize,
+    composer, bloom, grade, ssao, setSSAO,
+    ssaoOn: () => ssao.enabled,
+    setSize,
     render: (dt) => { grade.material.uniforms.time.value += dt; composer.render(); },
   };
 }

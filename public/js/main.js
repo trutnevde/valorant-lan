@@ -34,6 +34,29 @@ function makeEnvMap(renderer) {
   return env;
 }
 
+// Настоящее небо + IBL из HDRI (Poly Haven CC0), если скачано. Иначе остаётся процедурное окружение.
+async function loadHdriEnv(renderer, scene) {
+  let manifest;
+  try { manifest = await (await fetch('assets/manifest.json')).json(); } catch (e) { return false; }
+  const url = manifest?.hdri?.sky;
+  if (!url) return false;
+  const { RGBELoader } = await import('./three/loaders/RGBELoader.js');
+  const tex = await new Promise((res, rej) => new RGBELoader().load(url, res, undefined, rej));
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromEquirectangular(tex).texture;
+  pmrem.dispose();
+  scene.environment = env;             // IBL: настоящие отражения/свет
+  scene.environmentIntensity = 0.55;   // приглушаем, иначе яркое небо флудит ambient и роняет контраст
+  scene.background = tex;              // настоящее небо в фоне
+  scene.backgroundIntensity = 0.9;
+  const dome = scene.getObjectByName('proceduralSky');
+  if (dome) dome.visible = false;      // прячем процедурный купол
+  if (scene.fog) scene.fog.far = 260;  // отодвигаем туман, чтобы небо читалось
+  G.hdriOn = true;
+  return true;
+}
+
 const $ = (id) => document.getElementById(id);
 const now = () => performance.now() / 1000;
 
@@ -158,10 +181,11 @@ function initWorld(mapId) {
     G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     G.renderer.outputColorSpace = THREE.SRGBColorSpace;
     G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    G.renderer.toneMappingExposure = 1.0;
+    G.renderer.toneMappingExposure = 0.98;
     $('game').appendChild(G.renderer.domElement);
-    // IBL — отражения неба на металле
+    // IBL — процедурное окружение мгновенно, потом асинхронно подменяется настоящим HDRI (если скачан)
     try { G.scene.environment = makeEnvMap(G.renderer); } catch (e) { console.warn('IBL fail', e); }
+    loadHdriEnv(G.renderer, G.scene).catch(e => console.warn('HDRI fail', e));
     // постпроцессинг (bloom/FXAA/грейд) с фолбэком на прямой рендер
     try { G.post = makeComposer(G.renderer, G.scene, G.camera); } catch (e) { console.warn('postfx fail', e); G.post = null; }
     addEventListener('resize', () => {
@@ -170,7 +194,7 @@ function initWorld(mapId) {
       G.renderer.setSize(innerWidth, innerHeight);
       if (G.post) G.post.setSize(innerWidth, innerHeight);
     });
-    G.map = buildMap(G.scene, MAPS[mapId]);
+    G.map = buildMap(G.scene, MAPS[mapId], G.renderer);
     G.fx = new Effects(G.scene);
     G.player = new LocalPlayer(G);
     G.hud = new HUD(G);
@@ -186,7 +210,8 @@ function initWorld(mapId) {
     G.worldReady = true;
   } else if (G.map.def.id !== mapId) {
     G.scene.remove(G.map.group);
-    G.map = buildMap(G.scene, MAPS[mapId]);
+    G.map = buildMap(G.scene, MAPS[mapId], G.renderer);
+    if (G.hdriOn) { const d = G.scene.getObjectByName('proceduralSky'); if (d) d.visible = false; }
     G.hud.prepMinimap(G.map.def);
   }
 }
@@ -782,6 +807,13 @@ function bindGameKeys() {
         if (G.post) { disablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВЫКЛ', 1.2); }
         else { enablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВКЛ', 1.2); }
         break;
+      case 'KeyO': // тумблер SSAO (контактные тени в углах) — тяжёлый
+        if (G.post && G.post.setSSAO) {
+          G.ssaoOn = !G.post.ssaoOn();
+          G.post.setSSAO(G.ssaoOn);
+          G.hud.announce('', G.ssaoOn ? 'SSAO ВКЛ' : 'SSAO ВЫКЛ', 1.2);
+        } else G.hud.announce('', 'SSAO НЕДОСТУПНО (включи пост — P)', 1.2);
+        break;
       case 'Digit4':
         if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive && G.spikeCarrier !== G.myId) {
           G.sfx.error();
@@ -841,7 +873,7 @@ function disablePost() {
 }
 function enablePost() {
   if (!G.post && G.renderer) {
-    try { G.post = makeComposer(G.renderer, G.scene, G.camera); } catch (e) { G.post = null; }
+    try { G.post = makeComposer(G.renderer, G.scene, G.camera); if (G.ssaoOn) G.post.setSSAO(true); } catch (e) { G.post = null; }
   }
 }
 
@@ -928,6 +960,7 @@ function frame(tms) {
     perfT += dt; perfN++;
     if (perfT > 2.5) {
       perfChecked = true;
+      // SSAO не включаем автоматически: он тяжёлый и на части драйверов капризен — только вручную (O)
       if (perfN / perfT < 30) { disablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВЫКЛ (слабое GPU) · P — вернуть', 3); }
     }
   }

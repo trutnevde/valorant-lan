@@ -3,6 +3,7 @@
 import * as THREE from './three.module.js';
 import { CHARACTERS, MOVE, WEAPONS } from './shared.js';
 import { tracerStyle } from './weapons.js';
+import { getCharacterGltf, makeGltfCharacter } from './loaders.js';
 
 function nameSprite(text, color, occlude) {
   const cv = document.createElement('canvas');
@@ -381,6 +382,25 @@ export class RemotePlayer {
     this.spikeCoreMat = spCoreMat;
 
     this.G.scene.add(group);
+
+    // если для агента есть GLTF-модель (или включён демо-режим) — подменяем процедурного человечка
+    this._trySwapModel();
+  }
+
+  // Асинхронно грузит GLTF-модель и заменяет процедурный визуал + хитбоксы. Ошибка → остаёмся на процедурном.
+  async _trySwapModel() {
+    let gltf;
+    try { gltf = await getCharacterGltf(this.char); } catch { gltf = null; }
+    if (!gltf || !this.group) return;
+    const api = makeGltfCharacter(gltf, this.char, CHARACTERS[this.char], this.pid);
+    // прячем процедурное тело (его меши были и хитбоксами) и подключаем модель
+    if (this.rig && this.rig.body) this.rig.body.visible = false;
+    this.group.add(api.group);
+    this.gltf = api;
+    this.useGltf = true;
+    this.hitMeshes = api.hitMeshes;   // новые стабильные хитбоксы (шутабельный список берётся из hitMeshes)
+    this.head = api.head;
+    if (!this.alive) api.playDeath();
   }
 
   onState(msg) {
@@ -398,6 +418,7 @@ export class RemotePlayer {
     this.deadT = 0;
     this.cocoonMesh.visible = false;
     this.G.fx.blood(this.pos.clone().add(new THREE.Vector3(0, 1.2, 0)));
+    if (this.useGltf && this.gltf) this.gltf.playDeath();
   }
   revive(pos) {
     this.alive = true;
@@ -405,6 +426,7 @@ export class RemotePlayer {
     this.group.visible = true;
     if (pos) this.group.position.set(pos[0], pos[1] || 0, pos[2]);
     this.buffer = [];
+    if (this.useGltf && this.gltf) this.gltf.reset();
   }
   resetRound(pos, yaw) {
     this.alive = true;
@@ -415,6 +437,7 @@ export class RemotePlayer {
     this.buffer = [];
     this.cocoonMesh.visible = false;
     this.revealedUntil = 0;
+    if (this.useGltf && this.gltf) this.gltf.reset();
   }
   dispose() { this.G.scene.remove(this.group); }
 
@@ -422,8 +445,12 @@ export class RemotePlayer {
     const t = performance.now() / 1000;
     if (!this.alive) {
       this.deadT += dt;
-      this.group.rotation.z = Math.min(Math.PI / 2, this.deadT * 4);
-      this.group.position.y = Math.max(this.group.position.y - dt * 0.3, this.pos.y - 0.2);
+      if (this.useGltf && this.gltf) {
+        this.gltf.update(dt);   // проигрываем клип смерти (модель падает сама)
+      } else {
+        this.group.rotation.z = Math.min(Math.PI / 2, this.deadT * 4);
+        this.group.position.y = Math.max(this.group.position.y - dt * 0.3, this.pos.y - 0.2);
+      }
       if (this.deadT > 3) this.group.visible = false;
       return;
     }
@@ -460,7 +487,15 @@ export class RemotePlayer {
     this.lastPos.copy(this.group.position);
     const rig = this.rig;
     const walking = this.speedSmoothed > 0.6 && moved < 1;
-    if (walking) {
+    // GLTF-модель: анимация через миксер (процедурный риг скрыт). Ники/подсветка/шаги ниже — общие.
+    if (this.useGltf && this.gltf) {
+      this.gltf.setMotion(walking, this.speedSmoothed);
+      const g = this.gltf.group;
+      const targetScale = b.crouch ? 0.8 : 1;   // присед — сжимаем модель
+      g.scale.y += (targetScale - g.scale.y) * Math.min(1, dt * 10);
+      this.crouchK = b.crouch;
+      this.gltf.update(dt);
+    } else if (walking) {
       const spd = Math.min(this.speedSmoothed, 7);
       this.animPhase += dt * (6 + spd * 1.35);
       const amp = Math.min(1.05, 0.28 + spd * 0.115);

@@ -1,0 +1,32 @@
+{
+  "license": "CC0 — polyhaven.com",
+  "textures": {
+    "floor": {
+      "slug": "concrete_floor_02",
+      "diffuse": "assets/textures/floor/diffuse.jpg",
+      "normal": "assets/textures/floor/normal.jpg",
+      "arm": "assets/textures/floor/arm.jpg"
+    },
+    "ground": {
+      "slug": "gravel_concrete_03",
+      "diffuse": "assets/textures/ground/diffuse.jpg",
+      "normal": "assets/textures/ground/normal.jpg",
+      "arm": "assets/textures/ground/arm.jpg"
+    },
+    "wall": {
+      "slug": "concrete_wall_008",
+      "diffuse": "assets/textures/wall/diffuse.jpg",
+      "normal": "assets/textures/wall/normal.jpg",
+      "arm": "assets/textures/wall/arm.jpg"
+    },
+    "wood": {
+      "slug": "wood_planks",
+      "diffuse": "assets/textures/wood/diffuse.jpg",
+      "normal": "assets/textures/wood/normal.jpg",
+      "arm": "assets/textures/wood/arm.jpg"
+    }
+  },
+  "hdri": {
+    "sky": "assets/hdri/sky.hdr"
+  }
+}

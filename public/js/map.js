@@ -3,6 +3,46 @@
 import * as THREE from './three.module.js';
 import { expandStairs, mapAabbs } from './shared.js';
 
+// ===== настоящие PBR-текстуры (Poly Haven CC0), если скачаны в public/assets/ =====
+// Если ассетов нет — тихо остаёмся на процедурных текстурах ниже. Всё офлайн.
+let _manifestPromise;
+function loadManifest() {
+  if (!_manifestPromise) {
+    _manifestPromise = fetch('assets/manifest.json')
+      .then(r => (r.ok ? r.json() : null)).catch(() => null);
+  }
+  return _manifestPromise;
+}
+async function applyPbr(targets, renderer) {
+  const manifest = await loadManifest();
+  if (!manifest || !manifest.textures) return;
+  const tl = new THREE.TextureLoader();
+  const load = (url) => url ? new Promise(res => tl.load(url, res, undefined, () => res(null))) : Promise.resolve(null);
+  const aniso = renderer ? renderer.capabilities.getMaxAnisotropy() : 8;
+  const cfg = (t, srgb) => {
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
+    t.anisotropy = aniso; t.needsUpdate = true; return t;
+  };
+  for (const kind of Object.keys(targets)) {
+    if (!targets[kind].length) continue;
+    const set = manifest.textures[kind];
+    if (!set) continue;
+    const [dif, nor, arm] = await Promise.all([load(set.diffuse), load(set.normal), load(set.arm)]);
+    if (!dif) continue;
+    cfg(dif, true); if (nor) cfg(nor, false); if (arm) cfg(arm, false);
+    // одна текстура на весь тип поверхности (тайлинг запечён в UV) — память минимальна
+    for (const { material, tint } of targets[kind]) {
+      material.map = dif;
+      if (nor) { material.normalMap = nor; material.normalScale.set(0.8, 0.8); }
+      if (arm) { material.roughnessMap = arm; material.metalness = 0; }
+      if (tint) material.color.lerp(new THREE.Color(0xffffff), 0.4); // приглушить оттенок, но не выбеливать
+      else material.color.set(0xffffff);
+      material.needsUpdate = true;
+    }
+  }
+}
+
 // ===== процедурные текстуры (без единого файла) =====
 function canvasTex(draw, w = 256, h = 256) {
   const cv = document.createElement('canvas');
@@ -136,50 +176,61 @@ function textPlane(text, color, size) {
   return m;
 }
 
-export function buildMap(scene, def) {
+export function buildMap(scene, def, renderer) {
   const group = new THREE.Group();
   const solids = [];
   const aabbs = mapAabbs(def);
   const isHeight = def.id === 'height';
 
-  const T = { concrete: concreteTex(), wood: woodTex(), floor: floorTex() };
-  const texFor = (baseTex, rx, ry) => {
-    const t = baseTex.clone();
-    t.needsUpdate = true;
-    t.repeat.set(Math.max(0.5, rx), Math.max(0.5, ry));
-    return t;
+  // процедурные текстуры — мгновенный фолбэк; PBR подменит их когда/если скачаны
+  const T = { concrete: concreteTex(), wood: woodTex(), floor: floorTex(), ground: concreteTex() };
+  Object.values(T).forEach(t => { t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(1, 1); });
+  // цели для подмены на настоящие PBR-текстуры, сгруппированы по типу поверхности
+  const pbr = { floor: [], ground: [], wall: [], wood: [] };
+  // тайлинг «запекаем» в UV, а не в texture.repeat — так все меши делят ОДНУ текстуру (память ↓)
+  const bakeUv = (geo, rx, ry) => {
+    const uv = geo.attributes.uv;
+    for (let i = 0; i < uv.count; i++) {
+      uv.setXY(i, uv.getX(i) * Math.max(0.5, rx), uv.getY(i) * Math.max(0.5, ry));
+    }
+    uv.needsUpdate = true;
   };
 
   // ===== пол и земля =====
   const floorColor = def.id === 'bastion' ? '#b3aca0' : isHeight ? '#c2b494' : '#b9bdb4';
-  const floor = new THREE.Mesh(
-    new THREE.PlaneGeometry(def.SIZE.w + 2, def.SIZE.d + 2),
-    new THREE.MeshStandardMaterial({ color: floorColor, map: texFor(T.floor, (def.SIZE.w + 2) / 8, (def.SIZE.d + 2) / 8), roughness: 0.92 })
-  );
+  const floorGeo = new THREE.PlaneGeometry(def.SIZE.w + 2, def.SIZE.d + 2);
+  bakeUv(floorGeo, (def.SIZE.w + 2) / 8, (def.SIZE.d + 2) / 8);
+  const floorMat = new THREE.MeshStandardMaterial({ color: floorColor, map: T.floor, roughness: 0.92 });
+  const floor = new THREE.Mesh(floorGeo, floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.receiveShadow = true;
   group.add(floor);
   solids.push(floor);
-  const ground = new THREE.Mesh(
-    new THREE.PlaneGeometry(500, 500),
-    new THREE.MeshStandardMaterial({ color: '#4e5c50', roughness: 1 })
-  );
+  pbr.floor.push({ material: floorMat, tint: false });
+  const groundGeo = new THREE.PlaneGeometry(500, 500);
+  bakeUv(groundGeo, 50, 50);
+  const groundMat = new THREE.MeshStandardMaterial({ color: '#5a6a5a', map: T.ground, roughness: 1 });
+  const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.rotation.x = -Math.PI / 2;
   ground.position.y = -0.02;
   ground.receiveShadow = true;
   group.add(ground);
+  pbr.ground.push({ material: groundMat, tint: false });
 
   // ===== стены, ящики, лестницы =====
   const addBox = ([cx, cz, w, d, h, ci, yBase], kind) => {
     const y0 = yBase || 0;
     const crate = kind === 'crate' && h <= 2.6 && w <= 4; // маленькие — деревянные ящики
     const base = crate ? T.wood : T.concrete;
+    const geo = new THREE.BoxGeometry(w, h, d);
+    bakeUv(geo, Math.max(w, d) / (crate ? 1.6 : 3.2), h / (crate ? 1.6 : 3.2));
     const mat = new THREE.MeshStandardMaterial({
       color: def.COLORS[ci] || '#cccccc',
-      map: texFor(base, Math.max(w, d) / (crate ? 1.6 : 3.2), h / (crate ? 1.6 : 3.2)),
+      map: base,
       roughness: crate ? 0.85 : 0.94,
     });
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    (crate ? pbr.wood : pbr.wall).push({ material: mat, tint: true });
+    const mesh = new THREE.Mesh(geo, mat);
     mesh.position.set(cx, y0 + h / 2, cz);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -229,6 +280,7 @@ export function buildMap(scene, def) {
     new THREE.SphereGeometry(340, 24, 12),
     new THREE.MeshBasicMaterial({ map: skyTex(skyTop, skyHor), side: THREE.BackSide, fog: false, depthWrite: false })
   );
+  sky.name = 'proceduralSky'; // прячется, когда загрузится HDRI-небо
   group.add(sky);
   scene.background = new THREE.Color(skyHor);
   scene.fog = new THREE.Fog(new THREE.Color(skyHor).getHex(), 65, 190);
@@ -253,6 +305,9 @@ export function buildMap(scene, def) {
   const fill = new THREE.DirectionalLight('#bcd0e8', 0.28);
   fill.position.set(-24, 30, -18);
   group.add(fill);
+
+  // подменяем процедурные текстуры на настоящие PBR (CC0), если скачаны — иначе остаёмся на процедурных
+  applyPbr(pbr, renderer).catch(() => {});
 
   scene.add(group);
   return { group, aabbs, solids, def };
