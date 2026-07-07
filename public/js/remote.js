@@ -531,7 +531,23 @@ export class RemotePlayer {
       this.tag.visible = near;
     } else {
       const spotted = t < (this.G.spottedUntil.get(this.pid) || 0) || t < this.G.xrayUntil || t < (this.G.revealed.get(this.pid) || 0) || t < this.revealedUntil;
-      this.tag.visible = near && spotted;
+      // дым перекрывает ник (спрайты не пишут depth — проверяем вручную)
+      let smokeBlocked = false;
+      if (spotted && near) {
+        const cam = this.G.camera.position, ex = this.pos.x, ey = this.pos.y + 1.6, ez = this.pos.z;
+        for (const sm of this.G.abilities.smokes) {
+          if (t >= sm.until) continue;
+          // отрезок камера→враг против сферы дыма
+          const ax = cam.x, ay = cam.y, az = cam.z;
+          const bx = ex - ax, by = ey - ay, bz = ez - az;
+          const cx = sm.pos.x - ax, cy = sm.pos.y - ay, cz = sm.pos.z - az;
+          const len2 = bx * bx + by * by + bz * bz || 1;
+          let k = (cx * bx + cy * by + cz * bz) / len2; k = Math.max(0, Math.min(1, k));
+          const px = ax + bx * k - sm.pos.x, py = ay + by * k - sm.pos.y, pz = az + bz * k - sm.pos.z;
+          if (px * px + py * py + pz * pz <= sm.r * sm.r) { smokeBlocked = true; break; }
+        }
+      }
+      this.tag.visible = near && spotted && !smokeBlocked;
     }
 
     // подсветка (рентген/сигналка/дозор), но банкет скрывает союзника противника

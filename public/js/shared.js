@@ -52,6 +52,12 @@ export const WEAPONS = {
 
   marshal:  { name: 'Маршал',   cat: 'sniper',  slot: 'primary', price: 950,  dmg: 101, head: 202, leg: 85,  rpm: 90,  mag: 5,  reserve: 15,  auto: false, spread: 0.06,  recoil: 0.040, reload: 2.5, scope: true, scopeSpread: 0.004 },
   operator: { name: 'Оператор', cat: 'sniper',  slot: 'primary', price: 4700, dmg: 150, head: 255, leg: 120, rpm: 45,  mag: 5,  reserve: 10,  auto: false, spread: 0.09,  recoil: 0.055, reload: 3.7, scope: true, scopeSpread: 0.001 },
+
+  // ===== новые стволы =====
+  frenzy:   { name: 'Френзи',   cat: 'pistol',  slot: 'sidearm', price: 500,  dmg: 26,  head: 78,  leg: 22,  rpm: 720, mag: 13, reserve: 26,  auto: true,  spread: 0.020, recoil: 0.009, reload: 1.5, falloffStart: 16, falloffMin: 0.7 },
+  shorty:   { name: 'Коротыш',  cat: 'shotgun', slot: 'sidearm', price: 150,  dmg: 12,  head: 22,  leg: 10,  rpm: 200, mag: 2,  reserve: 6,   auto: false, spread: 0.09,  recoil: 0.03,  reload: 1.8, pellets: 10, falloffStart: 7, falloffMin: 0.2 },
+  outlaw:   { name: 'Отступник', cat: 'sniper', slot: 'primary', price: 2400, dmg: 140, head: 238, leg: 118, rpm: 68,  mag: 2,  reserve: 6,   auto: false, spread: 0.05,  recoil: 0.045, reload: 3.5, scope: true, scopeSpread: 0.002 },
+  odin:     { name: 'Один',     cat: 'lmg',     slot: 'primary', price: 3200, dmg: 38,  head: 95,  leg: 32,  rpm: 780, mag: 100, reserve: 200, auto: true,  spread: 0.018, recoil: 0.009, reload: 5.0 },
 };
 
 // Мобильность и время доставания по категориям.
@@ -99,7 +105,7 @@ export const CHARACTERS = {
   },
   max: {
     name: 'Макс', title: 'Дуэлянт', color: '#7ec8e3', darkColor: '#23566b',
-    speedMul: 1.05, ultCost: 5,
+    speedMul: 1.05, ultCost: 7,
     desc: 'Ветер. Самый быстрый: рывки, вертикаль и ножи, от которых не убежать.',
     abilities: {
       C: { name: 'Рывок',          desc: 'Мгновенный рывок в направлении движения (2 заряда)', charges: 2 },
@@ -121,7 +127,7 @@ export const CHARACTERS = {
   },
   sanek: {
     name: 'Санёк', title: 'Специалист', color: '#e8c14d', darkColor: '#6b5518',
-    speedMul: 0.98, ultCost: 5,
+    speedMul: 0.98, ultCost: 7,
     desc: 'Инженер. Ставит железо, знает, где враг, и заливает подходы кислотой.',
     abilities: {
       C: { name: 'Сигналка', desc: 'Датчик на полу: враг рядом — подсвечен 3 сек (2 заряда)', charges: 2 },
@@ -165,7 +171,7 @@ export const CHARACTERS = {
   },
   koniliy: {
     name: 'Конилий', title: 'Наездник', color: '#8a5a2b', darkColor: '#4d3117', accent: '#d9b06a',
-    speedMul: 1.0, ultCost: 7,
+    speedMul: 1.0, ultCost: 6,
     desc: 'Всё про коней. Подковы, ржание, галоп и табун призрачных коней сносят всё на пути.',
     abilities: {
       C: { name: 'Подкова',  desc: 'Брошенная подкова оставляет зону — враги вязнут и получают урон (2 заряда)', charges: 2 },
@@ -193,7 +199,7 @@ export const ABILITY = {
   // Санёк
   TURRET_R: 20, TURRET_DMG: 5, TURRET_TICK: 0.5, TURRET_HP: 60,
   TRAP_R: 3, TRAP_REVEAL: 3,
-  XRAY_TIME: 8,
+  XRAY_TIME: 6,
   // Денис
   PUDDLE_R: 3.5, PUDDLE_TIME: 7, PUDDLE_DPS: 10, PUDDLE_SLOW: 0.65,
   ACID_R: 3.2, ACID_TIME: 6, ACID_DPS: 12, ACID_SLOW: 0.7,

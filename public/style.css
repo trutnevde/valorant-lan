@@ -151,8 +151,9 @@ body { font-family: 'Segoe UI', 'Arial', sans-serif; color: var(--white); }
 #subAnnounce.show { opacity: 1; }
 
 /* прицел */
-#crosshair { position: absolute; top: 50%; left: 50%; width: 0; height: 0; }
-#crosshair i { position: absolute; background: #00ffcc; box-shadow: 0 0 2px #000; }
+/* fixed + нулевой бокс = точный центр вьюпорта в любом браузере */
+#crosshair { position: fixed; top: 50%; left: 50%; width: 0; height: 0; z-index: 11; }
+#crosshair i { position: absolute; background: #00ffcc; box-shadow: 0 0 2px #000, 0 0 1px #000; }
 #crosshair i:nth-child(1) { width: 2px; height: 7px; left: -1px; top: -12px; }
 #crosshair i:nth-child(2) { width: 2px; height: 7px; left: -1px; top: 5px; }
 #crosshair i:nth-child(3) { width: 7px; height: 2px; left: -12px; top: -1px; }
@@ -298,3 +299,135 @@ body { font-family: 'Segoe UI', 'Arial', sans-serif; color: var(--white); }
   position: fixed; left: 16px; bottom: 80px; z-index: 21; width: 320px; padding: 8px 12px;
   background: var(--panel); border: 1px solid var(--teal); color: var(--white); outline: none; font-size: 14px;
 }
+
+/* ==================================================================== */
+/* ===== СОВРЕМЕННЫЙ UI (ночной патч) — переопределения ниже по каскаду == */
+/* ==================================================================== */
+:root {
+  --bg0: #0a111c; --bg1: #0e1826;
+  --glass: rgba(16,26,40,.72); --glass-brd: rgba(255,255,255,.09);
+  --red: #ff4655; --teal: #14d3c0; --gold: #e8c14d; --ink: #eaeef3;
+}
+html, body { background: radial-gradient(1200px 800px at 70% -10%, #14243a 0%, var(--bg0) 60%); color: var(--ink); }
+.screen { background: radial-gradient(1000px 700px at 30% 10%, #16273e 0%, var(--bg0) 65%); }
+.screen::before {
+  background:
+    linear-gradient(115deg, transparent 47%, rgba(255,70,85,.06) 47%, rgba(255,70,85,.06) 53%, transparent 53%),
+    radial-gradient(600px 400px at 80% 90%, rgba(20,211,192,.05), transparent 70%);
+}
+
+/* стеклянные панели */
+.menu-inner, .lobby-inner, .ap-inner, .pause-inner, .end-inner,
+#buyMenu, #scoreboard {
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  border-radius: 16px; backdrop-filter: blur(12px) saturate(1.2);
+  -webkit-backdrop-filter: blur(12px) saturate(1.2);
+  box-shadow: 0 30px 80px -20px rgba(0,0,0,.7), inset 0 1px 0 rgba(255,255,255,.05);
+  padding: 26px 30px;
+}
+.menu-inner, .lobby-inner { padding: 32px 38px; }
+
+/* кнопки — общий вид */
+#btnPlay, #btnStart {
+  border-radius: 12px; letter-spacing: .22em; font-weight: 800;
+  background: linear-gradient(180deg, #ff5a68, var(--red));
+  box-shadow: 0 10px 30px -8px rgba(255,70,85,.6), inset 0 1px 0 rgba(255,255,255,.25);
+  transition: transform .12s, filter .12s, box-shadow .12s;
+}
+#btnPlay:hover:not(:disabled), #btnStart:hover:not(:disabled) { transform: translateY(-2px); filter: brightness(1.08); }
+#btnPlay:active, #btnStart:active { transform: translateY(0); }
+.mini-btn, #mapButtons button {
+  border-radius: 9px; background: rgba(255,255,255,.06); border: 1px solid var(--glass-brd);
+  color: var(--ink); letter-spacing: .08em; transition: border-color .12s, background .12s, transform .1s;
+}
+.mini-btn:hover, #mapButtons button:hover { border-color: var(--teal); background: rgba(20,211,192,.12); }
+#mapButtons button.sel { border-color: var(--red); background: rgba(255,70,85,.16); box-shadow: 0 0 0 1px rgba(255,70,85,.3) inset; }
+
+.logo { text-shadow: 0 6px 30px rgba(255,70,85,.35); }
+.menu-row input { border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid var(--glass-brd); }
+.menu-row input:focus { border-color: var(--teal); box-shadow: 0 0 0 3px rgba(20,211,192,.15); }
+.char-card { border-radius: 14px; }
+.char-card.sel { box-shadow: 0 0 0 1px var(--card-color, var(--red)) inset, 0 12px 30px -12px var(--card-color, var(--red)); }
+
+/* ===== ЛОББИ: строки ростера интерактивные ===== */
+.team-col { border-radius: 14px; }
+.roster-row {
+  border-radius: 10px; margin: 4px 0; gap: 8px; padding: 8px 10px;
+  transition: background .12s; background: rgba(255,255,255,.03);
+}
+.roster-row:hover { background: rgba(255,255,255,.07); }
+.roster-row.me { background: rgba(20,211,192,.1); box-shadow: inset 0 0 0 1px rgba(20,211,192,.3); }
+.roster-row .r-name { flex: 0 1 auto; overflow: hidden; text-overflow: ellipsis; }
+.roster-row .r-char { margin-left: auto; font-size: 11px; letter-spacing: .12em; font-weight: 800; opacity: .95; }
+.roster-row .r-acts { display: inline-flex; gap: 4px; margin-left: 8px; }
+.roster-row .r-acts button {
+  width: 24px; height: 22px; padding: 0; font-size: 12px; line-height: 1; border-radius: 7px; cursor: pointer;
+  background: rgba(255,255,255,.08); color: var(--ink); border: 1px solid var(--glass-brd);
+}
+.roster-row .r-acts button:hover { border-color: var(--teal); background: rgba(20,211,192,.18); }
+.r-host { color: var(--gold); }
+
+/* ===== ВЫБОР АГЕНТА из лобби ===== */
+#agentPicker { z-index: 60; }
+.ap-inner { width: min(920px, 94vw); text-align: center; }
+.ap-title { font-size: 15px; letter-spacing: .4em; color: #9fb0bf; margin-bottom: 16px; }
+#apGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; max-height: 60vh; overflow-y: auto; }
+.ap-card {
+  text-align: left; padding: 12px 14px; border-radius: 12px; cursor: pointer;
+  background: rgba(255,255,255,.04); border: 2px solid rgba(255,255,255,.08);
+  transition: transform .12s, border-color .12s;
+}
+.ap-card:hover { transform: translateY(-3px); border-color: var(--card-color, var(--red)); }
+.ap-card.sel { border-color: var(--card-color, var(--red)); background: rgba(255,255,255,.07); }
+.ap-name { font-size: 20px; font-weight: 900; }
+.ap-role { font-size: 10px; letter-spacing: .28em; color: #9fb0bf; margin: 2px 0 6px; }
+.ap-desc { font-size: 11px; color: #aeb9c4; line-height: 1.35; min-height: 46px; }
+#apClose { margin-top: 16px; padding: 8px 26px; }
+
+/* ===== HUD: панели-стекло ===== */
+.score, #timerBox, .abSlot, .kf-row, #minimap {
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
+#topbar { gap: 3px; }
+.score { border-radius: 0; }
+#timerBox { border-bottom: 2px solid rgba(255,255,255,.06); }
+.abSlot { border-radius: 10px; }
+.abSlot.ready { box-shadow: 0 0 18px rgba(255,70,85,.55); }
+#hpVal { text-shadow: 0 2px 12px rgba(0,0,0,.6); }
+.bar { border-radius: 4px; overflow: hidden; }
+#minimap { border-radius: 10px; box-shadow: 0 8px 24px -10px rgba(0,0,0,.7); }
+
+/* ===== КИЛЛФИД: свои/враги, своя смерть ===== */
+#killfeed { font-size: 13px; }
+.kf-row {
+  border-radius: 8px; padding: 5px 12px; display: flex; align-items: center; gap: 8px;
+  border-left: 3px solid transparent; background: rgba(10,18,28,.72);
+}
+.kf-row.kf-me { border-left-color: var(--red); background: rgba(60,14,18,.8); }
+.kf-row .kf-w { color: #8fa0ad; font-size: 11px; letter-spacing: .06em; }
+.kf-hs { color: var(--gold); }
+
+/* ===== ТАБ: секции команд + чипы агентов ===== */
+#scoreboard { min-width: 560px; }
+#scoreboard td { padding: 7px 12px; }
+.sb-team td { font-size: 12px; letter-spacing: .25em; font-weight: 800; padding-top: 12px !important; border: none; }
+.sb-me { background: rgba(20,211,192,.1); }
+.sb-chip { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; box-shadow: 0 0 8px currentColor; }
+.sb-role { font-size: 10px; letter-spacing: .12em; color: #8fa0ad; margin-left: 6px; }
+
+/* ===== СПЕКТАТОР ===== */
+#specHint {
+  position: fixed; left: 50%; bottom: 88px; transform: translateX(-50%); z-index: 14;
+  padding: 8px 20px; border-radius: 10px; font-size: 14px; letter-spacing: .12em;
+  background: var(--glass); border: 1px solid var(--glass-brd); color: var(--ink);
+  backdrop-filter: blur(8px); box-shadow: 0 10px 30px -12px rgba(0,0,0,.7);
+}
+
+/* ===== ПАУЗА ===== */
+.pause-sub { font-size: 13px; color: #9fb0bf; letter-spacing: .1em; margin: -14px 0 20px; }
+.pause-inner h2, .end-inner h2 { text-shadow: 0 6px 30px rgba(0,0,0,.6); }
+
+/* ===== ЗАКУПКА ===== */
+.buy-item { border-radius: 10px; transition: transform .1s, border-color .12s; }
+.buy-item:hover { transform: translateY(-2px); border-color: var(--teal); }
+.buy-item.owned { box-shadow: inset 0 0 0 1px var(--teal); }

@@ -50,6 +50,15 @@
   </div>
 </div>
 
+<!-- ===== Выбор агента (из лобби) ===== -->
+<div id="agentPicker" class="screen hidden">
+  <div class="ap-inner">
+    <div class="ap-title">ВЫБЕРИ АГЕНТА</div>
+    <div id="apGrid"></div>
+    <button id="apClose" class="mini-btn">ЗАКРЫТЬ</button>
+  </div>
+</div>
+
 <!-- ===== Игра ===== -->
 <div id="game" class="hidden"></div>
 
@@ -79,6 +88,7 @@
     <i class="scope-mark v" style="top:calc(50% + 40px)"></i><i class="scope-mark v" style="top:calc(50% + 70px)"></i>
   </div>
   <div id="hitmarker"></div>
+  <div id="specHint" class="hidden"></div>
   <div id="progressWrap" class="hidden"><div id="progressLabel"></div><div class="pbar"><div id="progressFill"></div></div></div>
 
   <!-- низ -->
@@ -120,12 +130,13 @@
 <!-- ===== Пауза / захват мыши ===== -->
 <div id="pauseOverlay" class="screen hidden">
   <div class="pause-inner">
-    <h2>НАЖМИ, ЧТОБЫ ИГРАТЬ</h2>
+    <h2>▶ КЛИКНИ, ЧТОБЫ ИГРАТЬ</h2>
+    <div class="pause-sub">клик захватывает мышь · <b>Esc</b> — отпустить</div>
     <div class="controls">
-      <div><b>WASD</b> движение · <b>Shift</b> тихий шаг · <b>Ctrl</b> присесть · <b>Пробел</b> прыжок</div>
-      <div><b>ЛКМ</b> огонь · <b>ПКМ</b> прицел (Оператор) · <b>R</b> перезарядка · <b>1/2/3</b> оружие</div>
-      <div><b>C / Q / E</b> способности · <b>X</b> ульта · <b>B</b> закупка · <b>Tab</b> счёт</div>
-      <div><b>4 (держать)</b> установить шип · <b>F (держать)</b> обезвредить · <b>Enter</b> чат</div>
+      <div><b>WASD</b> движение · <b>Shift</b> тихий шаг (бесшумно) · <b>Ctrl</b> присесть (бесшумно) · <b>Пробел</b> прыжок</div>
+      <div><b>ЛКМ</b> огонь · <b>ПКМ</b> прицел · <b>R</b> перезарядка · <b>1/2/3</b> оружие</div>
+      <div><b>C / Q / E</b> способности · <b>X</b> ульта · <b>B</b> закупка · <b>Tab</b> счёт · <b>Enter</b> чат</div>
+      <div><b>4 (держать)</b> установить шип · <b>F (держать)</b> обезвредить</div>
     </div>
   </div>
 </div>

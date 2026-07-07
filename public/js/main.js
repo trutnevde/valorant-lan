@@ -39,6 +39,7 @@ const G = {
   boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
   banquets: [], cloneMode: false, clonedIds: new Set(),
   scoped: false, aimT: 0, buyOpen: false, chatOpen: false, holdAction: null,
+  spectateTarget: 0,
   spottedUntil: new Map(), revealed: new Map(),
   shootables: [],
   worldReady: false,
@@ -46,6 +47,11 @@ const G = {
   liveish() { return this.phase === PHASES.LIVE || this.phase === PHASES.PLANTED; },
 };
 window.G = G;
+
+// #8 не дать случайно закрыть вкладку (Ctrl+W и пр.) посреди матча
+window.addEventListener('beforeunload', (e) => {
+  if (G.worldReady && G.phase !== PHASES.WAIT && G.phase !== PHASES.MATCH_END) { e.preventDefault(); e.returnValue = ''; }
+});
 
 // ===== Меню =====
 let selChar = localStorage.getItem('valChar') || 'artemiy';
@@ -164,6 +170,15 @@ const lobbyHooks = {
   setMap: (map) => G.net.send({ t: 'setMap', map }),
   switchTeam: () => G.net.send({ t: 'switchTeam' }),
   start: () => G.net.send({ t: 'startMatch' }),
+  movePlayer: (id, curTeam) => G.net.send({ t: 'movePlayer', target: id, team: curTeam === 'A' ? 'B' : 'A' }),
+  transferHost: (id) => G.net.send({ t: 'transferHost', target: id }),
+  kickBot: (id) => G.net.send({ t: 'kickBot', target: id }),
+  changeAgent: (charId) => {
+    selChar = charId;
+    localStorage.setItem('valChar', charId);
+    G.me.char = charId;
+    if (G.net) G.net.send({ t: 'setChar', char: charId });
+  },
 };
 let lastLobby = null;
 
@@ -431,6 +446,44 @@ function HUDLobbyBindOnce() {
     b.addEventListener('click', () => lobbyHooks.setMap(id));
     mb.appendChild(b);
   }
+  // #10/#12 клики по строкам ростера (делегирование)
+  const onRosterClick = (e) => {
+    const btn = e.target.closest('button[data-act]');
+    if (!btn) return;
+    const row = btn.closest('.roster-row');
+    const id = Number(row.dataset.id);
+    const p = (lastLobby.players || []).find(x => x.id === id);
+    if (!p) return;
+    const act = btn.dataset.act;
+    if (act === 'agent') openAgentPicker();
+    else if (act === 'move') lobbyHooks.movePlayer(id, p.team);
+    else if (act === 'host') lobbyHooks.transferHost(id);
+    else if (act === 'kick') lobbyHooks.kickBot(id);
+  };
+  $('teamARoster').addEventListener('click', onRosterClick);
+  $('teamBRoster').addEventListener('click', onRosterClick);
+  // выбор агента
+  buildAgentPicker();
+  $('apClose').addEventListener('click', () => $('agentPicker').classList.add('hidden'));
+}
+function buildAgentPicker() {
+  const grid = $('apGrid');
+  grid.innerHTML = '';
+  for (const [id, c] of Object.entries(CHARACTERS)) {
+    const card = document.createElement('div');
+    card.className = 'ap-card';
+    card.style.setProperty('--card-color', c.color);
+    card.innerHTML = `<div class="ap-name" style="color:${c.color}">${c.name}</div><div class="ap-role">${c.title.toUpperCase()}</div><div class="ap-desc">${c.desc}</div>`;
+    card.addEventListener('click', () => { lobbyHooks.changeAgent(id); $('agentPicker').classList.add('hidden'); });
+    grid.appendChild(card);
+  }
+}
+function openAgentPicker() {
+  for (const card of $('apGrid').children) {
+    const nm = card.querySelector('.ap-name').textContent;
+    card.classList.toggle('sel', CHARACTERS[selChar] && CHARACTERS[selChar].name === nm);
+  }
+  $('agentPicker').classList.remove('hidden');
 }
 function HUDLobbyRender(data) {
   const myId = G.myId;
@@ -444,8 +497,17 @@ function HUDLobbyRender(data) {
     for (const p of data.players.filter(x => x.team === team)) {
       const row = document.createElement('div');
       row.className = 'roster-row' + (p.id === myId ? ' me' : '');
-      const star = p.id === data.hostId ? '<span class="r-host">★</span> ' : '';
-      row.innerHTML = `${star}${p.bot ? '🤖 ' : ''}<b>${p.name.replace(/[<>&]/g, '')}</b><span class="r-char">${CHARACTERS[p.char].name.toUpperCase()}</span>`;
+      row.dataset.id = p.id;
+      const cfg = CHARACTERS[p.char] || { name: p.char, color: '#888' };
+      const star = p.id === data.hostId ? '<span class="r-host">★</span>' : '';
+      let acts = '';
+      if (p.id === myId) acts += `<button data-act="agent" title="Сменить агента">⇄</button>`;
+      if (isHost && p.id !== myId) acts += `<button data-act="move" title="В другую команду">⇆</button>`;
+      if (isHost && p.id !== myId && !p.bot) acts += `<button data-act="host" title="Сделать хостом">★</button>`;
+      if (isHost && p.bot) acts += `<button data-act="kick" title="Убрать бота">✕</button>`;
+      row.innerHTML = `${star}${p.bot ? '🤖' : ''}<b class="r-name">${p.name.replace(/[<>&]/g, '')}</b>` +
+        `<span class="r-char" style="color:${cfg.color}">${cfg.name.toUpperCase()}</span>` +
+        `<span class="r-acts">${acts}</span>`;
       el.appendChild(row);
     }
   };
@@ -456,7 +518,7 @@ function HUDLobbyRender(data) {
   $('btnStart').disabled = !(a >= 1 && b >= 1) || data.inMatch;
   $('lobbyStatus').textContent = data.inMatch
     ? 'Матч идёт — дождись конца'
-    : isHost ? 'Ты хост: собери команды (боты — кнопкой «+ БОТ») и жми «Начать матч»' : 'Ждём, пока хост начнёт матч';
+    : isHost ? 'Ты хост: собери команды, жми «Начать». Клик по агенту в строке — сменить перса' : 'Ждём хоста. Кликни свою строку, чтобы сменить агента';
   $('lobbyHint').textContent = isHost && (a < 1 || b < 1) ? 'В каждой команде нужен хотя бы один игрок или бот' : '';
 }
 
@@ -542,7 +604,10 @@ function onDeath(msg) {
   if (G.stats[msg.id]) G.stats[msg.id].deaths++;
   if (G.stats[msg.by] && msg.by !== msg.id) G.stats[msg.by].kills++;
 
-  G.hud.killfeed(nameOf(msg.by), weaponLabel(msg.weapon), nameOf(msg.id), msg.part === 'head');
+  const teamOfId = (id) => (id === G.myId ? G.myTeam : (G.players.get(id) || {}).team);
+  const killerAlly = teamOfId(msg.by) === G.myTeam;
+  const victimAlly = teamOfId(msg.id) === G.myTeam;
+  G.hud.killfeed(nameOf(msg.by), killerAlly, weaponLabel(msg.weapon), nameOf(msg.id), victimAlly, msg.part === 'head', victimMe);
   G.abilities.onPlayerDeath(msg.id);
 
   if (victimMe) {
@@ -553,6 +618,8 @@ function onDeath(msg) {
     G.weapons.toggleScope(false);
     G.holdAction = null;
     G.pulled = null;
+    G.spectateTarget = 0;
+    pickSpectate(1); // сразу начать наблюдать за живым союзником
     G.hud.announce('ВЫ ПОГИБЛИ', '', 2.5);
   } else {
     const r = G.remotes.get(msg.id);
@@ -717,6 +784,10 @@ function bindGameKeys() {
     G.sfx.init();
     relock();
   });
+  // клик по мёртвому — следующий союзник в спектаторе
+  window.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && !G.me.alive && G.liveish() && document.pointerLockElement) pickSpectate(1);
+  });
   document.addEventListener('pointerlockchange', () => {
     const locked = !!document.pointerLockElement;
     const lobbyShown = !$('lobbyOverlay').classList.contains('hidden');
@@ -800,6 +871,39 @@ function frame(tms) {
     G.hud.updateAbilities(G.abilities.hudState());
   }
 
+  // #17 спектатор после смерти — камера следит за живым союзником
+  if (!G.me.alive && G.liveish()) updateSpectator();
+  else $('specHint').classList.add('hidden');
+
   G.hud.frame();
   G.renderer.render(G.scene, G.camera);
+}
+
+// ===== Спектатор (#17) =====
+function livingAllies() {
+  return [...G.remotes.entries()]
+    .filter(([pid, r]) => r.alive && (G.players.get(pid) || {}).team === G.myTeam)
+    .map(([pid]) => pid);
+}
+function pickSpectate(dir) {
+  const allies = livingAllies();
+  if (!allies.length) { G.spectateTarget = 0; return; }
+  let idx = allies.indexOf(G.spectateTarget);
+  G.spectateTarget = allies[(idx + (dir || 1) + allies.length) % allies.length];
+}
+function updateSpectator() {
+  const info = G.players.get(G.spectateTarget);
+  let r = G.remotes.get(G.spectateTarget);
+  if (!r || !r.alive || !info || info.team !== G.myTeam) { pickSpectate(1); r = G.remotes.get(G.spectateTarget); }
+  const hint = $('specHint');
+  if (!r) { hint.textContent = 'ОЖИДАНИЕ КОНЦА РАУНДА…'; hint.classList.remove('hidden'); return; }
+  const yaw = r.group.rotation.y;
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  const eye = r.pos.clone().add(new THREE.Vector3(0, 1.75, 0));
+  G.camera.position.copy(eye).addScaledVector(fwd, -2.4).add(new THREE.Vector3(0, 0.55, 0));
+  G.camera.lookAt(eye.clone().addScaledVector(fwd, 5));
+  if (G.camera.fov !== 74) { G.camera.fov = 74; G.camera.updateProjectionMatrix(); }
+  const nm = (G.players.get(G.spectateTarget) || {}).name || '';
+  hint.textContent = '👁 СЛЕЖУ ЗА: ' + nm + '  ·  клик — следующий';
+  hint.classList.remove('hidden');
 }

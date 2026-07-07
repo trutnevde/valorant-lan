@@ -38,15 +38,16 @@ const httpServer = http.createServer((req, res) => {
 const players = new Map(); // id -> P (люди id 1..99, боты id 100+)
 let nextHumanId = 1;
 let nextBotId = 100;
-const BOT_NAMES = ['Бот Витёк', 'Бот Толян', 'Бот Серый', 'Бот Колян', 'Бот Жека', 'Бот Санчо', 'Бот Диман', 'Бот Лёха'];
+const BOT_NAMES = ['Коня', 'Никита Грицина', 'Игорь Емцов', 'Вафлист', 'Стульчак', 'Ростислав Зиныч', 'Бот Витёк', 'Бот Толян'];
 
-const lobby = { map: DEFAULT_MAP };
+const lobby = { map: DEFAULT_MAP, hostId: 0 };
 
 const match = {
   running: false,
   state: PHASES.WAIT,
   round: 0,
   score: { A: 0, B: 0 },
+  lossStreak: { A: 0, B: 0 },
   attackTeam: 'A',
   deadline: 0,
   planting: null,     // {by, start, pos}
@@ -78,17 +79,23 @@ function newPlayer(id, ws, bot = false) {
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
     ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0,
-    ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0 } : null,
+    ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0, reactAt: 0, holdSpot: null } : null,
   };
 }
 
 const humans = () => [...players.values()].filter(p => !p.bot);
-const hostId = () => Math.min(...humans().map(p => p.id), Infinity);
+const hostId = () => {
+  const ov = players.get(lobby.hostId);
+  if (ov && !ov.bot) return ov.id;
+  return Math.min(...humans().map(p => p.id), Infinity);
+};
 const teamOf = (t) => [...players.values()].filter(p => p.team === t);
 const enemyTeam = (t) => (t === 'A' ? 'B' : 'A');
 const teamAliveCount = (t) => teamOf(t).filter(p => p.alive).length;
 const sideOfTeam = (t) => (t === match.attackTeam ? 'attack' : 'defend');
 const liveish = () => match.state === PHASES.LIVE || match.state === PHASES.PLANTED;
+const ultCap = (p) => (CHARACTERS[p.char] ? CHARACTERS[p.char].ultCost : 7);
+function gainUlt(p, n = 1) { p.ult = Math.min(ultCap(p), p.ult + n); }
 
 function send(p, msg) {
   if (p && p.ws && p.ws.readyState === 1) p.ws.send(JSON.stringify(msg));
@@ -142,6 +149,7 @@ function startMatch() {
   match.running = true;
   match.round = 0;
   match.score = { A: 0, B: 0 };
+  match.lossStreak = { A: 0, B: 0 };
   match.attackTeam = Math.random() < 0.5 ? 'A' : 'B';
   match.mapDef = MAPS[lobby.map] || MAPS[DEFAULT_MAP];
   match.aabbs = mapAabbs(match.mapDef);
@@ -175,7 +183,7 @@ function startRound() {
     p.alive = true;
     p.hp = p.maxHp;
     p.ultMark = null; p.cloneMode = false; p._healFrac = 0; p._hotUntil = 0; p.lastKillT = -99;
-    if (match.round > 1) p.ult = Math.min(9, p.ult + 1);
+    if (match.round > 1) gainUlt(p, 1);
     // позиция
     const side = sideOfTeam(p.team);
     const sp = match.mapDef.spawns[side];
@@ -210,8 +218,13 @@ function endRound(winnerTeam, reason) {
   match.deadline = now() + RULES.ROUND_END_TIME;
   match.planting = null; match.defusing = null; match.cocoon = null;
   match.score[winnerTeam]++;
+  // эко-серия: победа обнуляет, поражение эскалирует награду проигравшего (1900/2400/2900)
+  const loserTeam = enemyTeam(winnerTeam);
+  match.lossStreak[winnerTeam] = 0;
+  match.lossStreak[loserTeam] = Math.min(3, (match.lossStreak[loserTeam] || 0) + 1);
+  const lossReward = [1900, 1900, 2400, 2900][match.lossStreak[loserTeam]];
   for (const p of players.values()) {
-    const reward = p.team === winnerTeam ? RULES.WIN_REWARD : RULES.LOSS_REWARD;
+    const reward = p.team === winnerTeam ? RULES.WIN_REWARD : lossReward;
     p.credits = Math.min(RULES.MAX_CREDITS, p.credits + reward);
     if (!p.alive) { p.loadout = { primary: null, sidearm: 'classic' }; p.armor = 0; }
   }
@@ -264,13 +277,14 @@ function onDeath(victim, killerId, weapon, part) {
   victim.alive = false;
   victim.hp = 0;
   victim.deaths++;
-  victim.ult = Math.min(9, victim.ult + 1);
+  gainUlt(victim, 1);
   const killer = players.get(killerId);
   if (killer && killer.id !== victim.id && killer.team !== victim.team) {
     killer.kills++;
     killer.lastKillT = now(); // «накормлен» — усиливает Кровопир Дениса
-    killer.ult = Math.min(9, killer.ult + 1);
-    killer.credits = Math.min(RULES.MAX_CREDITS, killer.credits + RULES.KILL_REWARD);
+    gainUlt(killer, 1);
+    const abilityKill = !WEAPONS[weapon]; // не обычный ствол → способность/крюк/табун
+    killer.credits = Math.min(RULES.MAX_CREDITS, killer.credits + (abilityKill ? 300 : RULES.KILL_REWARD));
     send(killer, { t: 'ultPts', pts: killer.ult });
     send(killer, { t: 'credits', credits: killer.credits });
   }
@@ -346,8 +360,32 @@ function onMessage(p, msg) {
       if (teamOf(team).length >= RULES.TEAM_MAX) return;
       const bot = newPlayer(nextBotId++, null, true);
       bot.team = team;
+      // не дублируем уже занятых персов, пока есть свободные
+      const used = new Set([...players.values()].map(x => x.char));
+      const free = Object.keys(CHARACTERS).filter(c => !used.has(c));
+      if (free.length) bot.char = free[Math.floor(Math.random() * free.length)];
       players.set(bot.id, bot);
       broadcast(lobbyInfo());
+      break;
+    }
+    case 'transferHost': {
+      if (p.id !== hostId() || match.running) return;
+      const target = players.get(msg.target);
+      if (target && !target.bot) { lobby.hostId = target.id; broadcast(lobbyInfo()); }
+      break;
+    }
+    case 'movePlayer': {
+      if (p.id !== hostId() || match.running) return;
+      const target = players.get(msg.target);
+      if (!target) return;
+      const to = msg.team === 'B' ? 'B' : 'A';
+      if (target.team !== to && teamOf(to).length < RULES.TEAM_MAX) { target.team = to; broadcast(lobbyInfo()); }
+      break;
+    }
+    case 'kickBot': {
+      if (p.id !== hostId() || match.running) return;
+      const b = players.get(msg.target);
+      if (b && b.bot) { players.delete(b.id); broadcast(lobbyInfo()); }
       break;
     }
     case 'removeBot': {
@@ -621,7 +659,7 @@ function botResetRound(bot) {
   ai.path = []; ai.pathIdx = 0; ai.goal = null; ai.site = null;
   ai.nextThink = 0; ai.nextShot = 0; ai.engaging = 0; ai.scanYaw = bot.yaw;
   ai.nextAbility = now() + 3 + Math.random() * 3; ai.target = null;
-  ai.blindUntil = 0; ai.stunUntil = 0; ai.heardUntil = 0; ai.heardPos = null; ai._noiseAcc = 0;
+  ai.blindUntil = 0; ai.stunUntil = 0; ai.heardUntil = 0; ai.heardPos = null; ai._noiseAcc = 0; ai.reactAt = 0; ai.holdSpot = null;
   // автозакупка
   if (bot.credits >= 3900) { bot.loadout.primary = 'vandal'; bot.armor = 50; bot.credits -= 3900; }
   else if (bot.credits >= 2000) { bot.loadout.primary = 'spectre'; bot.armor = 25; bot.credits -= 2000; }
@@ -699,13 +737,17 @@ function botHearEnemy(bot) {
 
 function botVisibleEnemy(bot) {
   if (now() < bot.ai.blindUntil) return null; // ослеплённый бот не видит
-  let best = null, bd = 48;
+  const fx = -Math.sin(bot.yaw), fz = -Math.cos(bot.yaw); // куда смотрит
+  let best = null, bd = 44;
   for (const e of players.values()) {
     if (e.team === bot.team || !e.alive) continue;
-    const d = Math.hypot(e.lastPos[0] - bot.lastPos[0], e.lastPos[2] - bot.lastPos[2]);
-    if (d < bd && losClear(botEye(bot), [e.lastPos[0], e.lastPos[1] + 1.4, e.lastPos[2]])) {
-      bd = d; best = e;
-    }
+    const ex = e.lastPos[0] - bot.lastPos[0], ez = e.lastPos[2] - bot.lastPos[2];
+    const d = Math.hypot(ex, ez);
+    if (d >= bd) continue;
+    // ПОЛЕ ЗРЕНИЯ ~140° (±70). За спиной не видят — ловят слухом (можно зайти в тыл!)
+    const dot = d > 0.1 ? (ex * fx + ez * fz) / d : 1;
+    if (dot < 0.34 && d > 4.5) continue; // ближних (<4.5м) замечают периферией
+    if (losClear(botEye(bot), [e.lastPos[0], e.lastPos[1] + 1.4, e.lastPos[2]])) { bd = d; best = e; }
   }
   return best ? { enemy: best, dist: bd } : null;
 }
@@ -715,6 +757,7 @@ function botSetGoal(bot, nodeIdx, goal) {
   ai.path = navPath(navNearest(bot.lastPos), nodeIdx);
   ai.pathIdx = 0;
   ai.goal = goal;
+  ai.holdSpot = null; // новая цель — пересчитать личную позицию
 }
 
 function botPlantNode(site) {
@@ -728,28 +771,52 @@ function botPlantNode(site) {
   return best;
 }
 
+// #6 личная позиция удержания — боты РАЗБЕГАЮТСЯ по сайту, а не кучкуются в точке
+function botHoldSpot(bot, siteKey) {
+  const s = match.mapDef.sites[siteKey];
+  const idx = bot.id % 7;
+  const ang = (idx / 7) * Math.PI * 2 + bot.id * 0.9;
+  const rx = (s.w / 2 - 1.4) * (0.45 + (idx % 3) * 0.27);
+  const rz = (s.d / 2 - 1.4) * (0.45 + (idx % 2) * 0.4);
+  return [s.x + Math.cos(ang) * rx, (s.z || 0) + Math.sin(ang) * rz];
+}
+function botGoHold(bot, dt, combat, siteKey) {
+  const ai = bot.ai;
+  if (!ai.holdSpot) ai.holdSpot = botHoldSpot(bot, siteKey);
+  const hd = Math.hypot(bot.lastPos[0] - ai.holdSpot[0], bot.lastPos[2] - ai.holdSpot[1]);
+  if (hd > 1.1) { if (!combat) moveToward(bot, [ai.holdSpot[0], 0, ai.holdSpot[1]], dt); }
+  else if (!combat) bot.yaw += dt * 0.6; // держит свою позицию, сканирует
+}
+
 function botShoot(bot, e, dist) {
   const t = now();
   const ai = bot.ai;
   const w = botWeapon(bot);
-  // аим всегда на врага
-  bot.yaw = Math.atan2(-(e.lastPos[0] - bot.lastPos[0]), -(e.lastPos[2] - bot.lastPos[2]));
+  // ПЛАВНЫЙ доворот на цель (не мгновенный снап на 180)
+  const tgtYaw = Math.atan2(-(e.lastPos[0] - bot.lastPos[0]), -(e.lastPos[2] - bot.lastPos[2]));
+  let dy = tgtYaw - bot.yaw;
+  while (dy > Math.PI) dy -= Math.PI * 2;
+  while (dy < -Math.PI) dy += Math.PI * 2;
+  bot.yaw += dy * 0.22;                 // догоняет цель за несколько тиков
+  if (t < ai.reactAt) return;           // время реакции после засечки — есть окно на фланг
+  if (Math.abs(dy) > 0.5) return;       // ещё не довёл прицел — не стреляет «спиной»
   if (t < ai.nextShot) return;
-  ai.nextShot = t + Math.max(0.12, 60 / w.rpm) + Math.random() * 0.12;
+  ai.nextShot = t + Math.max(0.13, 60 / w.rpm) + Math.random() * 0.16;
+  const spr = 1.6 + Math.min(2.2, dist * 0.05); // на дистанции целятся хуже
   const dir = [
-    e.lastPos[0] - bot.lastPos[0] + (Math.random() - 0.5) * 1.6,
+    e.lastPos[0] - bot.lastPos[0] + (Math.random() - 0.5) * spr,
     (e.lastPos[1] + 1.2) - (bot.lastPos[1] + 1.6),
-    e.lastPos[2] - bot.lastPos[2] + (Math.random() - 0.5) * 1.6,
+    e.lastPos[2] - bot.lastPos[2] + (Math.random() - 0.5) * spr,
   ];
   const len = Math.hypot(...dir) || 1;
   const bw = bot.loadout.primary || bot.loadout.sidearm || 'classic';
   broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bw });
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
-  // шанс попасть падает с дистанцией и растёт вблизи
-  const pHit = Math.max(0.06, Math.min(0.32, 0.34 - dist * 0.008));
+  // ЗАМЕТНО мягче: реже попадают, головы почти не вешают
+  const pHit = Math.max(0.04, Math.min(0.20, 0.22 - dist * 0.0075));
   if (Math.random() < pHit) {
-    const head = Math.random() < 0.13;
-    applyDamage(e, head ? w.head : w.dmg, bot.id, bot.loadout.primary || 'classic', head ? 'head' : 'body');
+    const head = Math.random() < 0.06;  // 6% голов вместо 13%
+    applyDamage(e, head ? w.head : w.dmg, bot.id, bw, head ? 'head' : 'body');
   }
 }
 
@@ -903,7 +970,11 @@ function tickBot(bot, dt) {
   const side = sideOfTeam(bot.team);
   const blinded = t < ai.blindUntil;      // ослеплён вспышкой — не видит и не стреляет
   const seen = blinded ? null : botVisibleEnemy(bot);
-  if (seen) { ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist; }
+  if (seen) {
+    // засёк новую цель (или после потери) — задержка реакции: у тебя есть окно
+    if (ai.target !== seen.enemy || t >= ai.engaging) ai.reactAt = t + 0.2 + Math.random() * 0.25;
+    ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist;
+  }
   const combat = !blinded && t < ai.engaging && ai.target && ai.target.alive;
 
   // стрельба поверх движения (не замораживает бота)
@@ -955,17 +1026,18 @@ function tickBot(bot, dt) {
         if (match.planting && match.planting.by === bot.id) { if (!combat) return; }
         else if (!combat) { bot.yaw += dt * 0.8; return; }
       } else if (ai.goal === 'hold' && ai.pathIdx >= ai.path.length) {
-        if (!combat) { bot.yaw += dt * 0.8; return; } // прикрывает носителя на сайте
+        botGoHold(bot, dt, combat, ai.site); // прикрывает носителя, разбегаясь по сайту
+        if (!combat) return;
       }
     } else if (match.state === PHASES.PLANTED) {
       if (ai.goal !== 'holdSpike') botSetGoal(bot, navNearest(match.spike.pos), 'holdSpike');
-      if (ai.pathIdx >= ai.path.length && !combat) { bot.yaw += dt * 0.8; return; }
+      if (ai.pathIdx >= ai.path.length && !combat) { botGoHold(bot, dt, combat, ai.site || 'A'); return; }
     }
   } else {
     if (match.state === PHASES.LIVE) {
       if (!ai.site) { ai.site = Math.random() < 0.5 ? 'A' : 'B'; botSetGoal(bot, botPlantNode(ai.site), 'hold'); }
       if (ai.goal === 'hold' && ai.pathIdx >= ai.path.length) {
-        if (!combat) bot.yaw += dt * 0.7; // держим сайт, сканируем
+        botGoHold(bot, dt, combat, ai.site); // РАЗБЕГАЮТСЯ по сайту, не кучкуются
         return;
       }
     } else if (match.state === PHASES.PLANTED) {
@@ -1031,7 +1103,7 @@ setInterval(() => {
           match.deadline = match.spike.boomAt;
           if (planter) {
             planter.credits = Math.min(RULES.MAX_CREDITS, planter.credits + RULES.PLANT_REWARD);
-            planter.ult = Math.min(9, planter.ult + 1);
+            gainUlt(planter, 1);
             send(planter, { t: 'ultPts', pts: planter.ult });
             send(planter, { t: 'credits', credits: planter.credits });
           }
@@ -1069,7 +1141,7 @@ setInterval(() => {
         if (pct >= 1) {
           const defuser = players.get(match.defusing.by);
           match.defusing = null;
-          if (defuser) { defuser.ult = Math.min(9, defuser.ult + 1); send(defuser, { t: 'ultPts', pts: defuser.ult }); }
+          if (defuser) { gainUlt(defuser, 1); send(defuser, { t: 'ultPts', pts: defuser.ult }); }
           broadcast({ t: 'defused' });
           endRound(enemyTeam(match.attackTeam), 'defuse');
         } else {

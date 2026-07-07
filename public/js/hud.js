@@ -138,10 +138,13 @@ export class HUD {
     }, dur * 1000);
   }
 
-  killfeed(killer, weaponLabel, victim, hs) {
+  // killerAlly/victimAlly — свои (бирюза) или враги (красный); meVictim подсвечивает твою смерть
+  killfeed(killer, killerAlly, weaponLabel, victim, victimAlly, hs, meVictim) {
     const row = document.createElement('div');
-    row.className = 'kf-row';
-    row.innerHTML = `<b>${esc(killer)}</b><span class="kf-w">[${esc(weaponLabel)}${hs ? ' <span class="kf-hs">☠ В ГОЛОВУ</span>' : ''}]</span><b>${esc(victim)}</b>`;
+    row.className = 'kf-row' + (meVictim ? ' kf-me' : '');
+    const ck = killerAlly ? '#12d3c0' : '#ff5666';
+    const cv = victimAlly ? '#12d3c0' : '#ff5666';
+    row.innerHTML = `<b style="color:${ck}">${esc(killer)}</b><span class="kf-w">${esc(weaponLabel)}${hs ? ' <span class="kf-hs">☠</span>' : ''}</span><b style="color:${cv}">${esc(victim)}</b>`;
     $('killfeed').prepend(row);
     setTimeout(() => row.remove(), 6000);
     while ($('killfeed').children.length > 6) $('killfeed').lastChild.remove();
@@ -269,16 +272,23 @@ export class HUD {
     const G = this.G;
     $('scoreboard').classList.toggle('hidden', !show);
     if (!show) return;
-    const rows = [];
-    const mk = (p, stats, me) => `<tr${me ? ' style="color:#0ac8b9"' : ''}>
-      <td>${p.team === G.myTeam ? '🟦' : '🟥'} ${p.bot ? '🤖 ' : ''}${esc(p.name)}</td>
-      <td>${CHARACTERS[p.char].name}</td><td>${stats.kills}</td><td>${stats.deaths}</td>
-      <td>${p.id === G.myId ? G.me.ult : '—'}</td></tr>`;
-    const sorted = [...G.players.values()].sort((a, b) => (a.team === G.myTeam ? 0 : 1) - (b.team === G.myTeam ? 0 : 1));
-    for (const p of sorted) {
-      rows.push(mk(p, G.stats[p.id] || { kills: 0, deaths: 0 }, p.id === G.myId));
-    }
-    $('sbRows').innerHTML = rows.join('');
+    const rowsFor = (team, label, color) => {
+      const ps = [...G.players.values()].filter(p => p.team === team);
+      let html = `<tr class="sb-team"><td colspan="5" style="color:${color}">${label} · ${G.score[team] || 0}</td></tr>`;
+      for (const p of ps) {
+        const cfg = CHARACTERS[p.char] || { name: p.char, title: '', color: '#888', ultCost: 7 };
+        const st = G.stats[p.id] || { kills: 0, deaths: 0 };
+        const me = p.id === G.myId;
+        html += `<tr class="${me ? 'sb-me' : ''}">
+          <td>${p.bot ? '🤖 ' : ''}${esc(p.name)}</td>
+          <td><span class="sb-chip" style="background:${cfg.color}"></span><b>${cfg.name}</b> <span class="sb-role">${cfg.title}</span></td>
+          <td>${st.kills}</td><td>${st.deaths}</td>
+          <td>${me ? G.me.ult + '/' + cfg.ultCost : '—'}</td></tr>`;
+      }
+      return html;
+    };
+    const enemy = G.myTeam === 'A' ? 'B' : 'A';
+    $('sbRows').innerHTML = rowsFor(G.myTeam, 'СОЮЗНИКИ', '#12d3c0') + rowsFor(enemy, 'ПРОТИВНИКИ', '#ff5666');
   }
 
   // ===== конец матча =====
