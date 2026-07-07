@@ -9,7 +9,30 @@ import { WeaponSystem } from './weapons.js';
 import { RemotePlayer } from './remote.js';
 import { Abilities } from './abilities.js';
 import { HUD } from './hud.js';
+import { makeComposer } from './postfx.js';
 import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY } from './shared.js';
+
+// IBL-окружение: эквирект-небо с солнцем → PMREM. Даёт металлу оружия реалистичные отражения.
+function makeEnvMap(renderer) {
+  const cv = document.createElement('canvas');
+  cv.width = 512; cv.height = 256;
+  const c = cv.getContext('2d');
+  const g = c.createLinearGradient(0, 0, 0, 256);
+  g.addColorStop(0, '#243a56'); g.addColorStop(0.45, '#8fa6bd');
+  g.addColorStop(0.52, '#cfd6d2'); g.addColorStop(1, '#3f4a44');
+  c.fillStyle = g; c.fillRect(0, 0, 512, 256);
+  // солнце
+  const sg = c.createRadialGradient(150, 70, 4, 150, 70, 70);
+  sg.addColorStop(0, 'rgba(255,248,225,1)'); sg.addColorStop(1, 'rgba(255,248,225,0)');
+  c.fillStyle = sg; c.beginPath(); c.arc(150, 70, 70, 0, 7); c.fill();
+  const tex = new THREE.CanvasTexture(cv);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const pmrem = new THREE.PMREMGenerator(renderer);
+  const env = pmrem.fromEquirectangular(tex).texture;
+  tex.dispose(); pmrem.dispose();
+  return env;
+}
 
 const $ = (id) => document.getElementById(id);
 const now = () => performance.now() / 1000;
@@ -135,12 +158,17 @@ function initWorld(mapId) {
     G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     G.renderer.outputColorSpace = THREE.SRGBColorSpace;
     G.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    G.renderer.toneMappingExposure = 0.95;
+    G.renderer.toneMappingExposure = 1.0;
     $('game').appendChild(G.renderer.domElement);
+    // IBL — отражения неба на металле
+    try { G.scene.environment = makeEnvMap(G.renderer); } catch (e) { console.warn('IBL fail', e); }
+    // постпроцессинг (bloom/FXAA/грейд) с фолбэком на прямой рендер
+    try { G.post = makeComposer(G.renderer, G.scene, G.camera); } catch (e) { console.warn('postfx fail', e); G.post = null; }
     addEventListener('resize', () => {
       G.camera.aspect = innerWidth / innerHeight;
       G.camera.updateProjectionMatrix();
       G.renderer.setSize(innerWidth, innerHeight);
+      if (G.post) G.post.setSize(innerWidth, innerHeight);
     });
     G.map = buildMap(G.scene, MAPS[mapId]);
     G.fx = new Effects(G.scene);
@@ -389,7 +417,7 @@ function onMessage(msg) {
     case 'boom': {
       const p = new THREE.Vector3(msg.pos[0], 0.5, msg.pos[2]);
       G.fx.explosion(p);
-      G.sfx.explosion();
+      G.sfx.spatial([msg.pos[0], 0.5, msg.pos[2]], () => G.sfx.explosion());
       G.shake = 5;
       G.blindUntil = Math.max(G.blindUntil, now() + 0.5);
       G.blindStink = false;
@@ -750,6 +778,10 @@ function bindGameKeys() {
       case 'KeyQ': G.abilities && G.abilities.use('Q'); break;
       case 'KeyE': G.abilities && G.abilities.use('E'); break;
       case 'KeyX': G.abilities && G.abilities.use('X'); break;
+      case 'KeyP': // тумблер пост-эффектов (bloom/грейд)
+        if (G.post) { disablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВЫКЛ', 1.2); }
+        else { enablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВКЛ', 1.2); }
+        break;
       case 'Digit4':
         if (G.phase === PHASES.LIVE && G.side === 'attack' && G.me.alive && G.spikeCarrier !== G.myId) {
           G.sfx.error();
@@ -802,6 +834,16 @@ function bindGameKeys() {
 
 // ===== Циклы =====
 let lastFrame = 0, lastLos = 0, lastBeep = 0, lastAbHud = 0;
+let perfT = 0, perfN = 0, perfChecked = false;
+
+function disablePost() {
+  if (G.post) { try { G.post.composer.dispose(); } catch {} G.post = null; }
+}
+function enablePost() {
+  if (!G.post && G.renderer) {
+    try { G.post = makeComposer(G.renderer, G.scene, G.camera); } catch (e) { G.post = null; }
+  }
+}
 
 function startLoops() {
   setInterval(() => {
@@ -879,8 +921,20 @@ function frame(tms) {
   if (!G.me.alive && G.liveish()) updateSpectator();
   else $('specHint').classList.add('hidden');
 
+  G.sfx.setListener(G.camera); // 3D-звук: слушатель = камера
+
+  // авто-фолбэк постпроцессинга на слабых GPU (первые ~2.5 сек геймплея)
+  if (G.post && !perfChecked && G.phase !== PHASES.WAIT) {
+    perfT += dt; perfN++;
+    if (perfT > 2.5) {
+      perfChecked = true;
+      if (perfN / perfT < 30) { disablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВЫКЛ (слабое GPU) · P — вернуть', 3); }
+    }
+  }
+
   G.hud.frame();
-  G.renderer.render(G.scene, G.camera);
+  if (G.post) G.post.render(dt);
+  else G.renderer.render(G.scene, G.camera);
 }
 
 // ===== Спектатор (#17) =====

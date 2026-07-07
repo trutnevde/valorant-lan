@@ -1,20 +1,65 @@
-// Весь звук синтезируется через WebAudio — никаких файлов, работает офлайн
+// Весь звук синтезируется через WebAudio — никаких файлов, работает офлайн.
+// Позиционный 3D: мировые звуки идут через PannerNode (HRTF) → слышно направление и дистанцию.
 export class Sfx {
   constructor() {
     this.ctx = null;
     this.master = null;
     this.rotNode = null;
+    this._dest = null;   // текущий выход для tone/noise (панер при spatial, иначе master)
   }
   init() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)();
       this.master = this.ctx.createGain();
-      this.master.gain.value = 0.45;
-      this.master.connect(this.ctx.destination);
+      this.master.gain.value = 0.5;
+      // мягкий лимитер, чтобы залпы не клиппили
+      const comp = this.ctx.createDynamicsCompressor();
+      comp.threshold.value = -10; comp.knee.value = 20; comp.ratio.value = 4; comp.attack.value = 0.003; comp.release.value = 0.2;
+      this.master.connect(comp); comp.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
   get t0() { return this.ctx ? this.ctx.currentTime : 0; }
+  get dest() { return this._dest || this.master; }
+
+  // позиция/ориентация слушателя = камера (вызывать каждый кадр)
+  setListener(cam) {
+    if (!this.ctx) return;
+    cam.updateMatrixWorld();
+    const L = this.ctx.listener;
+    const p = cam.position;
+    // направление камеры из мировой матрицы
+    const m = cam.matrixWorld.elements;
+    const fx = -m[8], fy = -m[9], fz = -m[10];
+    const ux = m[4], uy = m[5], uz = m[6];
+    if (L.positionX) {
+      const t = this.ctx.currentTime, k = 0.02;
+      L.positionX.linearRampToValueAtTime(p.x, t + k);
+      L.positionY.linearRampToValueAtTime(p.y, t + k);
+      L.positionZ.linearRampToValueAtTime(p.z, t + k);
+      L.forwardX.value = fx; L.forwardY.value = fy; L.forwardZ.value = fz;
+      L.upX.value = ux; L.upY.value = uy; L.upZ.value = uz;
+    } else if (L.setPosition) {
+      L.setPosition(p.x, p.y, p.z);
+      L.setOrientation(fx, fy, fz, ux, uy, uz);
+    }
+  }
+
+  // выполнить fn() так, чтобы её звуки шли из точки pos (мировой 3D)
+  spatial(pos, fn) {
+    if (!this.ctx) { return; }
+    const g = this.ctx.createGain();
+    const pan = this.ctx.createPanner();
+    pan.panningModel = 'HRTF'; pan.distanceModel = 'inverse';
+    pan.refDistance = 5; pan.maxDistance = 70; pan.rolloffFactor = 1.3;
+    const x = pos[0] || 0, y = (pos[1] != null ? pos[1] : 1.2), z = pos[2] || 0;
+    if (pan.positionX) { pan.positionX.value = x; pan.positionY.value = y; pan.positionZ.value = z; }
+    else pan.setPosition(x, y, z);
+    g.connect(pan); pan.connect(this.master);
+    const prev = this._dest;
+    this._dest = g;
+    try { fn(); } finally { this._dest = prev; }
+  }
 
   tone({ f = 440, f2 = 0, type = 'square', dur = 0.1, vol = 0.25, delay = 0 }) {
     if (!this.ctx) return;
@@ -26,7 +71,7 @@ export class Sfx {
     if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.master);
+    o.connect(g); g.connect(this.dest);
     o.start(t); o.stop(t + dur + 0.02);
   }
   noise({ dur = 0.1, vol = 0.25, fc = 1200, q = 1, type = 'lowpass', fc2 = 0, delay = 0 }) {
@@ -44,7 +89,7 @@ export class Sfx {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(flt); flt.connect(g); g.connect(this.master);
+    src.connect(flt); flt.connect(g); g.connect(this.dest);
     src.start(t);
   }
 
@@ -60,7 +105,7 @@ export class Sfx {
     const src = this.ctx.createBufferSource(); src.buffer = buf;
     const flt = this.ctx.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = fc; flt.Q.value = 0.6;
     const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(flt); flt.connect(g); g.connect(this.master); src.start(t);
+    src.connect(flt); flt.connect(g); g.connect(this.dest); src.start(t);
   }
   // низкочастотное «тело» выстрела с искажением
   body({ f = 140, f2 = 45, vol = 0.35, dur = 0.1, delay = 0, type = 'sawtooth' }) {
@@ -71,7 +116,7 @@ export class Sfx {
     const ws = this.ctx.createWaveShaper(); const c = new Float32Array(256);
     for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 3); } ws.curve = c;
     const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(ws); ws.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(ws); ws.connect(g); g.connect(this.dest); o.start(t); o.stop(t + dur + 0.02);
   }
   // ===== оружие: транзиент + тело + хвост, всё с джиттером =====
   shot(w, vol = 1) {
@@ -184,7 +229,7 @@ export class Sfx {
     const flt = this.ctx.createBiquadFilter();
     flt.type = 'lowpass'; flt.frequency.value = 300; flt.Q.value = 4;
     const g = this.ctx.createGain(); g.gain.value = 0.14;
-    src.connect(flt); flt.connect(g); g.connect(this.master);
+    src.connect(flt); flt.connect(g); g.connect(this.dest);
     src.start();
     this.rotNode = { src, g };
   }

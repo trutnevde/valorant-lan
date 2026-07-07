@@ -32,7 +32,7 @@ function labelTexture(text, bg, fg) {
   return new THREE.CanvasTexture(cv);
 }
 
-const std = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.72, metalness: 0.06, ...opts });
+const std = (color, opts = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.62, metalness: 0.08, envMapIntensity: 0.7, ...opts });
 
 // Строит человекоподобную модель с рига́ми под конкретного агента.
 // Возвращает { group, rig, hitMeshes, head }.
@@ -63,9 +63,9 @@ export function buildHumanoid(char, forLocalHands = false) {
   };
 
   // --- торс ---
-  const torso = mk(new THREE.CapsuleGeometry(fat ? 0.34 : 0.26, fat ? 0.32 : 0.42, 5, 12), suit, 0, 0.28, 0, 'body');
+  const torso = mk(new THREE.CapsuleGeometry(fat ? 0.34 : 0.26, fat ? 0.32 : 0.42, 8, 20), suit, 0, 0.28, 0, 'body');
   hips.add(torso);
-  const chest = mk(new THREE.BoxGeometry(fat ? 0.66 : 0.52, 0.34, fat ? 0.5 : 0.34), suit, 0, 0.42, 0, 'body');
+  const chest = mk(new THREE.CylinderGeometry(fat ? 0.34 : 0.27, fat ? 0.3 : 0.24, 0.34, 16), suit, 0, 0.42, 0, 'body'); chest.scale.set(1, 1, 0.72);
   hips.add(chest);
   // живот Дениса
   let belly = null;
@@ -80,7 +80,7 @@ export function buildHumanoid(char, forLocalHands = false) {
   const headPivot = new THREE.Group();
   headPivot.position.y = 0.7;
   hips.add(headPivot);
-  const head = mk(new THREE.SphereGeometry(0.21, 16, 14), skin, 0, 0.12, 0, 'head');
+  const head = mk(new THREE.SphereGeometry(0.215, 24, 20), skin, 0, 0.12, 0, 'head');
   headPivot.add(head);
   // затылок/причёска — тёмная шапочка
   const hair = mk(new THREE.SphereGeometry(0.215, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), dark, 0, 0.13, 0.02, 'head');
@@ -91,14 +91,14 @@ export function buildHumanoid(char, forLocalHands = false) {
     const shoulder = new THREE.Group();
     shoulder.position.set(side * (fat ? 0.42 : 0.32), 0.5, 0);
     hips.add(shoulder);
-    const upper = mk(new THREE.CapsuleGeometry(0.075, 0.26, 4, 8), suit, 0, -0.14, 0, 'body');
+    const upper = mk(new THREE.CapsuleGeometry(0.078, 0.26, 6, 14), suit, 0, -0.14, 0, 'body');
     shoulder.add(upper);
     const elbow = new THREE.Group();
     elbow.position.y = -0.3;
     shoulder.add(elbow);
-    const lower = mk(new THREE.CapsuleGeometry(0.07, 0.24, 4, 8), skin, 0, -0.13, 0, 'body');
+    const lower = mk(new THREE.CapsuleGeometry(0.07, 0.24, 6, 14), skin, 0, -0.13, 0, 'body');
     elbow.add(lower);
-    const hand = mk(new THREE.SphereGeometry(0.08, 8, 8), skin, 0, -0.27, 0.02, 'body');
+    const hand = mk(new THREE.SphereGeometry(0.08, 12, 10), skin, 0, -0.27, 0.02, 'body');
     elbow.add(hand);
     return { shoulder, elbow, hand };
   };
@@ -110,12 +110,12 @@ export function buildHumanoid(char, forLocalHands = false) {
     const hip = new THREE.Group();
     hip.position.set(side * 0.14, 0, 0);
     hips.add(hip);
-    const upper = mk(new THREE.CapsuleGeometry(0.11, 0.34, 4, 8), dark, 0, -0.26, 0, 'body');
+    const upper = mk(new THREE.CapsuleGeometry(0.11, 0.34, 6, 14), dark, 0, -0.26, 0, 'body');
     hip.add(upper);
     const knee = new THREE.Group();
     knee.position.y = -0.46;
     hip.add(knee);
-    const lower = mk(new THREE.CapsuleGeometry(0.095, 0.3, 4, 8), dark, 0, -0.2, 0, 'body');
+    const lower = mk(new THREE.CapsuleGeometry(0.095, 0.3, 6, 14), dark, 0, -0.2, 0, 'body');
     knee.add(lower);
     const foot = mk(new THREE.BoxGeometry(0.16, 0.1, 0.3), boot, 0, -0.4, 0.06, 'body');
     knee.add(foot);
@@ -519,7 +519,7 @@ export class RemotePlayer {
       this.stepDist = 0;
       if (!b.crouch) {
         const d = this.G.player.pos.distanceTo(this.pos);
-        if (d < 30) this.G.sfx.footstep(Math.max(0.1, 1 - d / 30));
+        if (d < 34) this.G.sfx.spatial([this.pos.x, 0.3, this.pos.z], () => this.G.sfx.footstep(0.8)); // 3D: слышно откуда шаги
       }
     }
 
@@ -589,9 +589,8 @@ export class RemotePlayer {
     this.G.fx.muzzle(mp, d);
     const right = new THREE.Vector3().crossVectors(d, new THREE.Vector3(0, 1, 0)).normalize();
     this.G.fx.casing(mp, right);
-    const dist = this.G.player.pos.distanceTo(o);
     const w = msg.w === 'knife' ? 'knife' : msg.w;
-    this.G.sfx.shot(w, Math.max(0.12, 1 - dist / 55));
+    this.G.sfx.spatial([o.x, o.y, o.z], () => this.G.sfx.shot(w, 1)); // 3D: слышно направление выстрела
     if (!this.ally) this.G.spottedUntil.set(this.pid, performance.now() / 1000 + 1.5);
   }
 }

@@ -469,62 +469,116 @@ export class WeaponSystem {
   }
 
   buildViewmodels() {
+    // PBR-материалы (с IBL металл отражает окружение)
+    const M = {
+      metal: new THREE.MeshStandardMaterial({ color: 0x2a2e34, metalness: 0.9, roughness: 0.34 }),
+      metalD: new THREE.MeshStandardMaterial({ color: 0x1a1d22, metalness: 0.85, roughness: 0.42 }),
+      poly: new THREE.MeshStandardMaterial({ color: 0x24272c, metalness: 0.15, roughness: 0.68 }),
+      polyBrown: new THREE.MeshStandardMaterial({ color: 0x4a3527, metalness: 0.1, roughness: 0.7 }),
+      polyGreen: new THREE.MeshStandardMaterial({ color: 0x39432f, metalness: 0.12, roughness: 0.7 }),
+      steel: new THREE.MeshStandardMaterial({ color: 0x9098a2, metalness: 0.95, roughness: 0.22 }),
+      blade: new THREE.MeshStandardMaterial({ color: 0xc9d2db, metalness: 0.95, roughness: 0.18 }),
+      sightDot: new THREE.MeshStandardMaterial({ color: 0x33ff88, emissive: 0x22cc55, emissiveIntensity: 2.2 }),
+      wood: new THREE.MeshStandardMaterial({ color: 0x5a3d22, metalness: 0.05, roughness: 0.75 }),
+    };
     const mk = (id) => {
       const g = new THREE.Group();
       const w = WEAPONS[id];
-      const dark = new THREE.MeshLambertMaterial({ color: '#2b2f36' });
-      const accent = new THREE.MeshLambertMaterial({ color: '#5c6672' });
-      const add = (geo, mat, x, y, z) => {
+      const add = (geo, mat, x, y, z, rx, ry, rz) => {
         const m = new THREE.Mesh(geo, mat);
         m.position.set(x, y, z);
+        if (rx || ry || rz) m.rotation.set(rx || 0, ry || 0, rz || 0);
         g.add(m);
         return m;
       };
+      const box = (wd, ht, dp) => new THREE.BoxGeometry(wd, ht, dp);
+      const cyl = (r1, r2, h, s) => new THREE.CylinderGeometry(r1, r2, h, s || 12);
+      // рукоять + скоба (общее для всех стволов, кроме ножа)
+      const grip = (bodyMat) => {
+        add(box(0.05, 0.14, 0.07), M.poly, 0, -0.11, 0.05, 0.25, 0, 0);       // пистолетная рукоять
+        add(new THREE.TorusGeometry(0.035, 0.012, 6, 12, Math.PI), M.metalD, 0, -0.035, -0.02, Math.PI / 2, 0, 0); // скоба
+      };
+      // прицельные (мушка + целик + точка)
+      const sights = (zFront, zBack, top) => {
+        add(box(0.008, 0.03, 0.012), M.metalD, 0, top + 0.02, zFront);         // мушка
+        add(box(0.03, 0.02, 0.012), M.metalD, 0, top + 0.015, zBack);          // целик
+        add(new THREE.SphereGeometry(0.006), M.sightDot, 0, top + 0.025, zFront);
+      };
       const tip = new THREE.Object3D();
+
       if (id === 'knife') {
-        add(new THREE.BoxGeometry(0.02, 0.1, 0.28), new THREE.MeshLambertMaterial({ color: '#cfd6dd' }), 0, 0.02, -0.1);
-        add(new THREE.BoxGeometry(0.035, 0.05, 0.12), dark, 0, -0.03, 0.08);
-        tip.position.set(0, 0, -0.25);
-      } else if (w.cat === 'pistol') {
-        const L = id === 'sheriff' ? 0.24 : 0.18;
-        const col = id === 'ghost' ? '#3d4650' : '#2b2f36';
-        add(new THREE.BoxGeometry(0.05, 0.09, L), new THREE.MeshLambertMaterial({ color: col }), 0, 0, -L / 2);
-        add(new THREE.BoxGeometry(0.045, 0.1, 0.06), accent, 0, -0.07, 0.03);
-        if (id === 'ghost') add(new THREE.CylinderGeometry(0.02, 0.02, 0.1, 8), dark, 0, 0.01, -L - 0.04).rotation.x = Math.PI / 2;
-        tip.position.set(0, 0.01, -L - (id === 'ghost' ? 0.1 : 0));
+        add(box(0.014, 0.09, 0.3), M.blade, 0, 0.02, -0.12);
+        add(new THREE.ConeGeometry(0.045, 0.09, 4), M.blade, 0, 0.02, -0.3, Math.PI / 2, Math.PI / 4, 0);
+        add(box(0.03, 0.05, 0.12), M.poly, 0, -0.03, 0.08);
+        add(box(0.06, 0.02, 0.02), M.metalD, 0, 0.005, -0.02);                 // гарда
+        tip.position.set(0, 0.02, -0.34);
+        g.add(tip); g.userData.tip = tip; g.position.set(0.28, -0.26, -0.5); g.rotation.set(0.1, -0.1, 0.2); g.visible = false;
+        this.vmRoot.add(g); return g;
+      }
+
+      if (w.cat === 'pistol') {
+        const L = id === 'sheriff' ? 0.26 : 0.2;
+        const slideMat = id === 'ghost' ? M.metal : id === 'sheriff' ? M.steel : M.metal;
+        add(box(0.045, 0.06, L), slideMat, 0, 0.03, -L / 2 + 0.02);            // затвор
+        add(box(0.04, 0.05, L * 0.92), M.poly, 0, -0.02, -L / 2 + 0.03);       // рамка
+        add(cyl(0.012, 0.012, 0.06, 8), M.metalD, 0, 0.03, -L + 0.02, Math.PI / 2, 0, 0); // ствол из затвора
+        grip();
+        add(box(0.032, 0.09, 0.03), M.metalD, 0, -0.1, 0.04);                  // магазин в рукояти
+        if (id === 'ghost') add(cyl(0.018, 0.018, 0.12, 10), M.metalD, 0, 0.03, -L - 0.04, Math.PI / 2, 0, 0); // глушитель
+        sights(-L + 0.05, 0.02, 0.06);
+        tip.position.set(0, 0.03, -L - (id === 'ghost' ? 0.1 : 0.02));
       } else if (w.cat === 'shotgun') {
-        const L = 0.55;
-        add(new THREE.BoxGeometry(0.06, 0.09, L), new THREE.MeshLambertMaterial({ color: '#6b4a35' }), 0, 0, -L / 2 + 0.05);
-        add(new THREE.CylinderGeometry(0.028, 0.028, L * 0.7, 8), dark, 0, 0.05, -L * 0.55).rotation.x = Math.PI / 2;
-        add(new THREE.BoxGeometry(0.05, 0.11, 0.08), dark, 0, -0.08, 0.06);
-        tip.position.set(0, 0.03, -L);
+        const L = 0.6;
+        add(box(0.06, 0.07, L), M.polyBrown, 0, 0, -L / 2 + 0.05);             // ствольная коробка
+        add(cyl(0.03, 0.03, L * 0.85, 10), M.metal, 0, 0.045, -L * 0.5, Math.PI / 2, 0, 0); // ствол
+        add(cyl(0.028, 0.028, L * 0.7, 8), M.metalD, 0, -0.005, -L * 0.5, Math.PI / 2, 0, 0); // подствольный магазин
+        add(box(0.05, 0.1, 0.09), M.poly, 0, -0.07, 0.06);                     // рукоять-приклад
+        add(box(0.05, 0.06, 0.18), M.wood, 0, -0.02, 0.14);                    // приклад
+        sights(-L + 0.08, 0, 0.06);
+        tip.position.set(0, 0.045, -L + 0.02);
       } else if (w.cat === 'sniper') {
-        const L = id === 'operator' ? 0.85 : 0.7;
-        const col = id === 'operator' ? '#274156' : '#4a4438';
-        add(new THREE.BoxGeometry(0.06, 0.09, L), new THREE.MeshLambertMaterial({ color: col }), 0, 0, -0.32);
-        add(new THREE.CylinderGeometry(0.035, 0.035, 0.22, 8), dark, 0, 0.08, -0.15).rotation.x = Math.PI / 2;
-        add(new THREE.BoxGeometry(0.05, 0.12, 0.1), dark, 0, -0.08, 0.05);
-        tip.position.set(0, 0.01, -L + 0.1);
+        const L = id === 'operator' ? 0.9 : 0.75;
+        const bodyMat = id === 'operator' ? M.metal : M.polyGreen;
+        add(box(0.055, 0.075, L), bodyMat, 0, 0, -0.3);                        // корпус
+        add(cyl(0.02, 0.02, L * 0.75, 10), M.metalD, 0, 0.02, -L * 0.55 + 0.05, Math.PI / 2, 0, 0); // длинный ствол
+        add(cyl(0.03, 0.03, 0.09, 10), M.metalD, 0, 0.02, -L + 0.05, Math.PI / 2, 0, 0); // дульный тормоз
+        // прицел-оптика
+        add(cyl(0.035, 0.035, 0.24, 14), M.metalD, 0, 0.11, -0.1, Math.PI / 2, 0, 0);
+        add(cyl(0.05, 0.05, 0.04, 16), M.metalD, 0, 0.11, -0.24, Math.PI / 2, 0, 0);
+        add(new THREE.SphereGeometry(0.03), new THREE.MeshStandardMaterial({ color: 0x0a1a2a, metalness: 0.9, roughness: 0.1 }), 0, 0.11, -0.245);
+        add(box(0.05, 0.11, 0.1), M.poly, 0, -0.08, 0.06);                     // рукоять
+        add(box(0.05, 0.09, 0.22), bodyMat, 0, -0.02, 0.2);                    // приклад
+        tip.position.set(0, 0.02, -L + 0.02);
       } else if (w.cat === 'lmg') {
-        const L = 0.65;
-        add(new THREE.BoxGeometry(0.08, 0.12, L), new THREE.MeshLambertMaterial({ color: '#3c4433' }), 0, 0, -L / 2 + 0.05);
-        add(new THREE.BoxGeometry(0.06, 0.14, 0.1), dark, 0, -0.1, 0.02);
-        add(new THREE.BoxGeometry(0.04, 0.05, 0.2), dark, 0, -0.03, -L * 0.4);
-        tip.position.set(0, 0.01, -L + 0.02);
+        const L = 0.7;
+        add(box(0.075, 0.1, L), M.polyGreen, 0, 0, -L / 2 + 0.05);            // массивный корпус
+        add(cyl(0.022, 0.022, L * 0.6, 10), M.metalD, 0, 0.05, -L * 0.6, Math.PI / 2, 0, 0); // ствол
+        add(box(0.11, 0.14, 0.14), M.metalD, 0.06, -0.02, 0.02);              // коробчатый магазин (сбоку)
+        add(box(0.05, 0.11, 0.09), M.poly, 0, -0.09, 0.05);                   // рукоять
+        add(box(0.05, 0.07, 0.2), M.poly, 0, -0.01, 0.18);                    // приклад
+        sights(-L + 0.1, 0.02, 0.07);
+        tip.position.set(0, 0.05, -L + 0.02);
       } else {
         // smg / rifle
-        const L = w.cat === 'smg' ? 0.45 : 0.6;
-        const col = id === 'vandal' ? '#5a3f35' : id === 'phantom' ? '#37474f' : id === 'bulldog' ? '#41503c' : id === 'guardian' ? '#4e4638' : '#3a4148';
-        add(new THREE.BoxGeometry(0.055, 0.1, L), new THREE.MeshLambertMaterial({ color: col }), 0, 0, -L / 2 + 0.05);
-        add(new THREE.BoxGeometry(0.05, 0.11, 0.08), dark, 0, -0.08, 0.06);
-        add(new THREE.BoxGeometry(0.04, 0.05, 0.14), dark, 0, -0.05, -L * 0.35);
-        tip.position.set(0, 0.01, -L + 0.02);
+        const L = w.cat === 'smg' ? 0.5 : 0.64;
+        const bodyMat = id === 'vandal' ? M.polyBrown : id === 'phantom' ? M.poly : id === 'bulldog' ? M.polyGreen : id === 'guardian' ? M.wood : M.poly;
+        add(box(0.05, 0.085, L), bodyMat, 0, 0, -L / 2 + 0.06);               // ствольная коробка
+        add(cyl(0.017, 0.017, L * 0.5, 10), M.metalD, 0, 0.03, -L * 0.6, Math.PI / 2, 0, 0); // ствол
+        add(box(0.04, 0.06, L * 0.35), M.metalD, 0, 0.035, -L * 0.5);         // цевьё/планка
+        add(box(0.036, 0.13, 0.04), M.metalD, 0, -0.11, 0.04, 0.15, 0, 0);    // изогнутый магазин
+        grip();
+        if (w.cat === 'rifle') add(box(0.045, 0.07, 0.2), bodyMat, 0, -0.01, 0.2); // приклад у винтовок
+        else add(box(0.03, 0.05, 0.12), M.metalD, 0, -0.02, 0.16);            // выдвижной приклад у ПП
+        sights(-L + 0.1, 0.04, 0.055);
+        tip.position.set(0, 0.03, -L + 0.02);
       }
+
       g.add(tip);
       g.userData.tip = tip;
       g.position.set(0.28, -0.26, -0.5);
       g.rotation.y = -0.06;
       g.visible = false;
+      g.traverse((o) => { if (o.isMesh) o.frustumCulled = false; });
       this.vmRoot.add(g);
       return g;
     };
