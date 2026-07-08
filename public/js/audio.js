@@ -19,7 +19,7 @@ const SAMPLES = {
   slam: 'assets/sfx/slam.ogg', pop: 'assets/sfx/pop.ogg', buff: 'assets/sfx/buff.ogg',
   confirm: 'assets/sfx/confirm.ogg', fail: 'assets/sfx/fail.ogg',
   energy: 'assets/sfx/energy.ogg', zap: 'assets/sfx/zap.ogg',
-  beep: 'assets/sfx/beep.ogg', clunk: 'assets/sfx/clunk.ogg', boom: 'assets/sfx/boom.ogg',
+  clunk: 'assets/sfx/clunk.ogg', boom: 'assets/sfx/boom.ogg',
   ui_click: 'assets/sfx/ui_click.wav', ui_confirm: 'assets/sfx/ui_confirm.wav',
 };
 // какой ствол каким сэмплом звучит (нож — остаётся синтезом)
@@ -335,12 +335,9 @@ export class Sfx {
     if (stink) this.tone({ f: 90, f2: 60, dur: 0.5, vol: 0.15, type: 'sawtooth' });
   }
   orbitalWarn() {
-    if (this.buffers && this.buffers.beep) {
-      [0, 0.35, 0.7].forEach((d) => this.playBuf('beep', { vol: 0.45, rate: 1.25, delay: d }));
-      this.playBuf('boom', { vol: 0.7, delay: 1.35 });
-      return;
-    }
-    [0, 0.18, 0.36].forEach((d) => this.tone({ f: 880, dur: 0.12, vol: 0.3, type: 'square', delay: d }));
+    // чистые синус-бипы предупреждения + реальный «бум» удара
+    [0, 0.35, 0.7].forEach((d) => this.tone({ f: 1400, dur: 0.1, vol: 0.3, type: 'sine', delay: d }));
+    if (this.playBuf('boom', { vol: 0.7, delay: 1.35 })) return;
     this.noise({ dur: 2.5, vol: 0.35, fc: 300, fc2: 2000, delay: 1.2 });
     this.tone({ f: 60, f2: 45, dur: 2.5, vol: 0.3, type: 'sawtooth', delay: 1.4 });
   }
@@ -425,16 +422,19 @@ export class Sfx {
 
   // ===== шип =====
   spikeBeep(fast = false) {
-    if (this.playBuf('beep', { vol: 0.3, rate: fast ? 1.35 : 1.0 })) return;
-    this.tone({ f: fast ? 2300 : 1850, dur: 0.05, vol: 0.24, type: 'square' });
-    this.tone({ f: fast ? 3200 : 2600, dur: 0.03, vol: 0.1, type: 'sine', delay: 0.01 });
+    // чистый электронный бип бомбы — синус, без колокольчика и без резкого квадрата
+    const f = fast ? 2000 : 1550;
+    this.tone({ f, dur: 0.07, vol: 0.26, type: 'sine' });
+    this.tone({ f: f * 2, dur: 0.045, vol: 0.07, type: 'sine', delay: 0.004 });
   }
   plantTick() { if (this.playBuf('ui_click', { vol: 0.3, rate: 1.2 })) return; this.crack({ vol: 0.1, fc: 3500, dur: 0.02, drive: 2 }); this.tone({ f: 900, dur: 0.03, vol: 0.12, type: 'square' }); }
   // ЕДИНЫЙ тик разминирования — звучит одинаково всегда (для фейков нет «прогресса» на слух)
   defuseTick() { if (this.playBuf('ui_click', { vol: 0.28, rate: 1.5 })) return; this.tone({ f: 1400, dur: 0.05, vol: 0.16, type: 'sine' }); this.crack({ vol: 0.06, fc: 5000, dur: 0.015 }); }
   planted() {
-    if (this.buffers && this.buffers.slam) { this.playBuf('slam', { vol: 0.6 }); this.playBuf('beep', { vol: 0.4, rate: 0.8, delay: 0.28 }); return; }
-    this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); this.body({ f: 90, f2: 60, dur: 0.4, vol: 0.25, delay: 0.05, type: 'sine' });
+    // установка: глухой «бум» (реальный сэмпл) + чистый синус-бип
+    if (this.buffers && this.buffers.slam) this.playBuf('slam', { vol: 0.6 });
+    else this.body({ f: 90, f2: 55, dur: 0.4, vol: 0.35, type: 'sine' });
+    this.tone({ f: 1500, dur: 0.08, vol: 0.22, type: 'sine', delay: 0.22 });
   }
   defused() { if (this.playBuf('confirm', { vol: 0.75 })) return; this.tone({ f: 700, f2: 1200, dur: 0.18, vol: 0.28, type: 'sine' }); this.tone({ f: 1000, f2: 1500, dur: 0.25, vol: 0.24, type: 'triangle', delay: 0.14 }); }
   explosion() {

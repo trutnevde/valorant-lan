@@ -44,7 +44,7 @@ const SFX_ZIPS = [
   { url: `${OGA}/100-CC0-SFX_0.zip`, pick: {
     'hit_01.ogg': 'hit.ogg', 'metal_02.ogg': 'ting.ogg', 'slam_02.ogg': 'slam.ogg', 'plop_01.ogg': 'pop.ogg',
     'bell_02.ogg': 'buff.ogg', 'bell_01.ogg': 'confirm.ogg', 'gong_01.ogg': 'fail.ogg',
-    'weird_01.ogg': 'energy.ogg', 'weird_03.ogg': 'zap.ogg', 'bell_03.ogg': 'beep.ogg', 'metal_05.ogg': 'clunk.ogg' } },
+    'weird_01.ogg': 'energy.ogg', 'weird_03.ogg': 'zap.ogg', 'metal_05.ogg': 'clunk.ogg' } },
   { url: `${OGA}/sfx_100_v2.zip`, pick: {
     'sfx100v2_air_01.ogg': 'whoosh.ogg', 'sfx100v2_air_02.ogg': 'whoosh2.ogg',
     'sfx100v2_hit_02.ogg': 'hurt.ogg', 'sfx100v2_thunder_01.ogg': 'boom.ogg' } },
