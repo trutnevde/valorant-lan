@@ -682,6 +682,53 @@ function onAbility(p, msg) {
     for (const pos of msg.data.positions || []) {
       match.smokes.push({ pos, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
     }
+  } else if (kind === 'sovaShock') {
+    // Сова C — шок-стрела: урон по области на попадании
+    if (p.char !== 'sova') return;
+    const c = msg.data.pos || [0, 0, 0];
+    for (const e of players.values()) {
+      if (e.team === p.team || !e.alive) continue;
+      if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) < ABILITY.SOVA_SHOCK_R) applyDamage(e, ABILITY.SOVA_SHOCK_DMG, p.id, 'sovaShock', 'body');
+    }
+  } else if (kind === 'sovaMark') {
+    // Сова Q — метка-стрела: подсветить врагов у точки попадания (по прямой видимости) команде
+    if (p.char !== 'sova') return;
+    const c = msg.data.pos || [0, 0, 0];
+    for (const e of players.values()) {
+      if (e.team === p.team || !e.alive) continue;
+      if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) >= ABILITY.SOVA_MARK_R) continue;
+      if (!losClear([c[0], 1.2, c[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
+      broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
+    }
+  } else if (kind === 'sovaDrone') {
+    // Сова E — дрон-филин: скан вокруг игрока (по видимости) — палит команде
+    if (p.char !== 'sova') return;
+    for (const e of players.values()) {
+      if (e.team === p.team || !e.alive) continue;
+      if (Math.hypot(e.lastPos[0] - p.lastPos[0], e.lastPos[2] - p.lastPos[2]) >= ABILITY.SOVA_DRONE_R) continue;
+      if (!losClear([p.lastPos[0], p.lastPos[1] + 1.4, p.lastPos[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
+      broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
+    }
+  } else if (kind === 'sovaFury') {
+    // Сова X (ульта) — ярость охотника: 3 залпа энергии по направлению, пробивают стены, бьют линией
+    if (p.char !== 'sova' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+    const fromX = msg.data.from[0], fromZ = msg.data.from[2];
+    const dl = Math.hypot(msg.data.dir[0], msg.data.dir[2]) || 1;
+    const dx = msg.data.dir[0] / dl, dz = msg.data.dir[2] / dl;
+    const a = [fromX, 0, fromZ], b = [fromX + dx * ABILITY.SOVA_FURY_LEN, 0, fromZ + dz * ABILITY.SOVA_FURY_LEN];
+    let wave = 0;
+    const fire = () => {
+      wave++;
+      if (!match.running) return;
+      for (const e of players.values()) {
+        if (e.team === p.team || !e.alive) continue;
+        if (distToSeg2D(e.lastPos, a, b) < ABILITY.SOVA_FURY_WIDTH) applyDamage(e, ABILITY.SOVA_FURY_DMG, p.id, 'sovaFury', 'body');
+      }
+      if (wave < ABILITY.SOVA_FURY_WAVES) setTimeout(fire, 320);
+    };
+    fire();
   }
   broadcast({ t: 'ability', id: p.id, kind, data: msg.data || {} });
 }

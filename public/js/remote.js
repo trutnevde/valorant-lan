@@ -335,6 +335,30 @@ function addCostume(char, cfg, ctx) {
     lasso.position.set(0.24, 0.12, -0.05);
     lasso.rotation.x = Math.PI / 2;
     hips.add(lasso);
+  } else if (char === 'sova') {
+    // ===== следопыт-лучник =====
+    // капюшон
+    const hood = new THREE.Mesh(new THREE.SphereGeometry(0.24, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.62), S(cfg.darkColor));
+    hood.position.set(0, 0.14, -0.02); hood.scale.set(1.05, 1.12, 1.16);
+    headPivot.add(hood);
+    // светящийся визор-сканер
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.06, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0x9fe8ff, emissive: 0x3fa9c9, emissiveIntensity: 0.85, roughness: 0.3 }));
+    visor.position.set(0, 0.1, 0.19);
+    headPivot.add(visor);
+    // колчан со стрелами за спиной
+    const quiver = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.07, 0.4, 8), S(cfg.darkColor));
+    quiver.position.set(-0.15, 0.5, -0.18); quiver.rotation.set(0.35, 0, 0.3);
+    hips.add(quiver);
+    for (let i = 0; i < 3; i++) {
+      const arrow = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.009, 0.3, 5), S(cfg.accent || '#d6ecf5'));
+      arrow.position.set(-0.15 + (i - 1) * 0.03, 0.68, -0.2); arrow.rotation.set(0.35, 0, 0.3);
+      hips.add(arrow);
+    }
+    // наплечник
+    const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), S(cfg.color));
+    pauldron.position.set(0.2, 0.52, 0); pauldron.scale.set(1, 0.7, 1.2);
+    hips.add(pauldron);
   }
 }
 

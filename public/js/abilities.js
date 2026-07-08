@@ -258,6 +258,17 @@ export class Abilities {
         }
         break;
       }
+
+      case 'sova': {
+        if (key === 'C' && this.charges.C > 0) { const p = this.groundPoint(); send('sovaShock', { pos: [p.x, 0, p.z] }); }
+        else if (key === 'Q' && this.charges.Q > 0) { const p = this.groundPoint(); send('sovaMark', { pos: [p.x, 0, p.z] }); }
+        else if (key === 'E' && this.charges.E > 0) send('sovaDrone', {});
+        else if (key === 'X') {
+          if (this.ultReady()) send('sovaFury', { from: eye.toArray(), dir: dir.toArray() });
+          else G.sfx.error();
+        }
+        break;
+      }
     }
   }
 
@@ -273,6 +284,7 @@ export class Abilities {
       dash: 'C', launch: 'Q', boost: 'E', trap: 'C', turret: 'Q',
       scout: 'C', crispy: 'Q', buffet: 'E', neigh: 'Q', gallop: 'E',
       bloodfeast: 'C', scent: 'Q', twin: 'Q', swapCast: 'E',
+      sovaShock: 'C', sovaMark: 'Q', sovaDrone: 'E',
     };
     if (mine && keyByKind[kind] && this.charges[keyByKind[kind]] > 0) this.charges[keyByKind[kind]]--;
 
@@ -509,6 +521,48 @@ export class Abilities {
           G.hud.announce('', 'ВАС ЗАСЁК КУРИНЫЙ ДОЗОР!', 1.5);
         }
         G.sfx.chickenCluck(0.8);
+        break;
+      }
+      case 'sovaPing': {   // Сова: разведстрела/дрон подсветили врага команде
+        const ownerAlly = G.players.get(id) && G.players.get(id).team === G.myTeam;
+        if (ownerAlly) {
+          const r = G.remotes.get(data.target);
+          if (r) r.revealedUntil = now() + ABILITY.SOVA_MARK_REVEAL;
+          G.revealed.set(data.target, now() + ABILITY.SOVA_MARK_REVEAL);
+        } else if (data.target === G.myId) {
+          G.hud.announce('', 'ВАС ЗАСЕКЛА СОВА!', 1.4);
+        }
+        break;
+      }
+      case 'sovaShock': {  // взрыв шок-стрелы
+        const c = data.pos || [0, 0, 0];
+        G.fx.burst(new THREE.Vector3(c[0], 0.4, c[2]), { n: 22, color: 0x9fe8ff, speed: 6.5, life: 0.5, size: 0.13, gravity: -3 });
+        G.fx.ring(new THREE.Vector3(c[0], 0.05, c[2]), 0x3fa9c9, ABILITY.SOVA_SHOCK_R);
+        G.sfx.spatial([c[0], 0.4, c[2]], () => G.sfx.playBuf('zap', { vol: 0.6 }));
+        break;
+      }
+      case 'sovaMark': {   // метка-стрела воткнулась
+        const c = data.pos || [0, 0, 0];
+        G.fx.ring(new THREE.Vector3(c[0], 0.05, c[2]), 0x3fa9c9, 2.5);
+        G.sfx.spatial([c[0], 0.4, c[2]], () => G.sfx.playBuf('ting', { vol: 0.5 }));
+        break;
+      }
+      case 'sovaDrone': {  // скан-филин
+        if (mine) G.hud.announce('', 'ФИЛИН: СКАН', 1.0);
+        G.sfx.playBuf('ting', { vol: 0.4, rate: 1.3 });
+        break;
+      }
+      case 'sovaFury': {   // 3 энергозалпа по линии (пробивают стены)
+        const from = new THREE.Vector3(...data.from);
+        const dr = new THREE.Vector3(...data.dir).setY(0).normalize();
+        for (let w = 0; w < ABILITY.SOVA_FURY_WAVES; w++) {
+          setTimeout(() => {
+            for (let dd = 2; dd < ABILITY.SOVA_FURY_LEN; dd += 2.5) {
+              G.fx.burst(from.clone().addScaledVector(dr, dd).setY(1.1), { n: 3, color: 0x9fe8ff, speed: 2, life: 0.32, size: 0.16, gravity: 0 });
+            }
+          }, w * 320);
+        }
+        G.sfx.spatial(data.from, () => G.sfx.playBuf('energy', { vol: 0.6 }));
         break;
       }
       case 'banquet': {

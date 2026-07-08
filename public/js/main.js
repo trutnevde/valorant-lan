@@ -84,6 +84,7 @@ const ABILITY_WEAPON_NAMES = {
   hook: 'Мясной крюк', fire: 'Огонь', puddle: 'Тухлятина', acid: 'Кислота',
   orbital: 'Орбитальный удар', turret: 'Турель', knives: 'Стальные перья', zone: 'Зона',
   mangal: 'Мангал', horseshoe: 'Подкова', stampede: 'Табун',
+  sovaShock: 'Шок-стрела', sovaFury: 'Ярость охотника',
 };
 
 // ===== Глобальное состояние =====

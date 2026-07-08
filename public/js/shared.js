@@ -180,6 +180,17 @@ export const CHARACTERS = {
       X: { name: 'Табун',    desc: 'УЛЬТА: укажи направление — табун призрачных коней проносится линией и оглушает всех на пути (без урона)', charges: 1 },
     },
   },
+  sova: {
+    name: 'Сова', title: 'Следопыт', color: '#3fa9c9', darkColor: '#183f4f', accent: '#d6ecf5',
+    speedMul: 1.0, ultCost: 7,
+    desc: 'Охотник-лучник (прототип на базе Sova). Метит стрелами, вскрывает позиции разведкой и добивает сквозь стены.',
+    abilities: {
+      C: { name: 'Шок-стрела',      desc: 'Стрела-разряд: взрыв по области на попадании — урон врагам рядом (2 заряда)', charges: 2 },
+      Q: { name: 'Метка-стрела',    desc: 'Разведстрела: враги у места попадания подсвечены команде на 5 сек (по прямой видимости)', charges: 2 },
+      E: { name: 'Дрон-филин',      desc: 'Короткий скан: палит команде всех врагов в 22 м вокруг на 2.5 сек', charges: 1 },
+      X: { name: 'Ярость охотника', desc: 'УЛЬТА: три залпа энергии по направлению взгляда — пробивают стены и бьют всех на линии', charges: 1 },
+    },
+  },
 };
 
 export const ABILITY = {
@@ -226,6 +237,11 @@ export const ABILITY = {
   HORSESHOE_R: 3, HORSESHOE_TIME: 6, HORSESHOE_DPS: 10, HORSESHOE_SLOW: 0.6,
   GALLOP_MUL: 1.5, GALLOP_TIME: 3.5,
   STAMPEDE_LEN: 26, STAMPEDE_WIDTH: 3, STAMPEDE_STUN: 1.4, STAMPEDE_SPEED: 26,
+  // Сова (следопыт-лучник)
+  SOVA_SHOCK_R: 3.2, SOVA_SHOCK_DMG: 55,
+  SOVA_MARK_R: 8, SOVA_MARK_REVEAL: 5,
+  SOVA_DRONE_R: 22, SOVA_DRONE_REVEAL: 2.5,
+  SOVA_FURY_DMG: 55, SOVA_FURY_LEN: 42, SOVA_FURY_WIDTH: 1.5, SOVA_FURY_WAVES: 3,
 };
 
 export const MOVE = {
