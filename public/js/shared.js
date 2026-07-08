@@ -221,6 +221,8 @@ export const ABILITY = {
   BUFFET_R: 8, BUFFET_HEAL: 50, BUFFET_ARM_TIME: 1.2,
   SCOUT_SPEED: 9, SCOUT_RANGE: 10, SCOUT_LIFE: 7, SCOUT_REVEAL: 3,
   BANQUET_R: 6, BANQUET_TIME: 20, BANQUET_INSTANT: 30, BANQUET_REGEN: 10, BANQUET_SPEED: 1.15,
+  // Пассивка Иры (Эпоха 15): её убийство создаёт хил-зону у трупа врага для союзников
+  IRA_CORPSE_R: 4.5, IRA_CORPSE_TIME: 5, IRA_CORPSE_RATE: 14,   // радиус / сек / хил-в-сек
   // Фафик
   CLONES_COUNT: 5, CLONES_TIME: 18, CLONES_SPEED: 6.4,
   MANGAL_R: 3.6, MANGAL_TIME: 7, MANGAL_DPS: 15,

@@ -95,6 +95,7 @@ const teamAliveCount = (t) => teamOf(t).filter(p => p.alive).length;
 const sideOfTeam = (t) => (t === match.attackTeam ? 'attack' : 'defend');
 const liveish = () => match.state === PHASES.LIVE || match.state === PHASES.PLANTED;
 const ultCap = (p) => (CHARACTERS[p.char] ? CHARACTERS[p.char].ultCost : 7);
+// заряд ульты. КАНОН Эпохи 15: копится ТОЛЬКО за убийства (единственный источник — килл в onDeath)
 function gainUlt(p, n = 1) { p.ult = Math.min(ultCap(p), p.ult + n); }
 
 function send(p, msg) {
@@ -184,7 +185,7 @@ function startRound() {
     p.alive = true;
     p.hp = p.maxHp;
     p.ultMark = null; p.cloneMode = false; p._healFrac = 0; p._hotUntil = 0; p.lastKillT = -99;
-    if (match.round > 1) gainUlt(p, 1);
+    // ульта копится ТОЛЬКО за убийства (канон): раунд/смерть/плант/дефуз заряд не дают
     // позиция
     const side = sideOfTeam(p.team);
     const sp = match.mapDef.spawns[side];
@@ -278,12 +279,17 @@ function onDeath(victim, killerId, weapon, part) {
   victim.alive = false;
   victim.hp = 0;
   victim.deaths++;
-  gainUlt(victim, 1);
   const killer = players.get(killerId);
   if (killer && killer.id !== victim.id && killer.team !== victim.team) {
     killer.kills++;
     killer.lastKillT = now(); // «накормлен» — усиливает Кровопир Дениса
     gainUlt(killer, 1);
+    // Пассивка Иры (Эпоха 15): её убийство создаёт хил-зону у трупа врага для союзников
+    if (killer.char === 'ira') {
+      const cpos = [...victim.lastPos];
+      match.healZones.push({ kind: 'corpse', team: killer.team, pos: cpos, r: ABILITY.IRA_CORPSE_R, rate: ABILITY.IRA_CORPSE_RATE, until: now() + ABILITY.IRA_CORPSE_TIME });
+      broadcast({ t: 'ability', id: killer.id, kind: 'iraCorpse', data: { pos: cpos, r: ABILITY.IRA_CORPSE_R, dur: ABILITY.IRA_CORPSE_TIME } });
+    }
     const abilityKill = !WEAPONS[weapon]; // не обычный ствол → способность/крюк/табун
     killer.credits = Math.min(RULES.MAX_CREDITS, killer.credits + (abilityKill ? 300 : RULES.KILL_REWARD));
     send(killer, { t: 'ultPts', pts: killer.ult });
@@ -1218,8 +1224,7 @@ setInterval(() => {
           match.deadline = match.spike.boomAt;
           if (planter) {
             planter.credits = Math.min(RULES.MAX_CREDITS, planter.credits + RULES.PLANT_REWARD);
-            gainUlt(planter, 1);
-            send(planter, { t: 'ultPts', pts: planter.ult });
+            // плант больше не даёт ульту (канон: только за киллы)
             send(planter, { t: 'credits', credits: planter.credits });
           }
           broadcast({ t: 'planted', pos: match.spike.pos, tLeft: RULES.SPIKE_TIME });
@@ -1272,9 +1277,8 @@ setInterval(() => {
         }
         const pct = total / RULES.DEFUSE_TIME;
         if (pct >= 1) {
-          const defuser = players.get(match.defusing.by);
           match.defusing = null;
-          if (defuser) { gainUlt(defuser, 1); send(defuser, { t: 'ultPts', pts: defuser.ult }); }
+          // дефуз больше не даёт ульту (канон: только за киллы)
           broadcast({ t: 'defused' });
           endRound(enemyTeam(match.attackTeam), 'defuse');
         } else {

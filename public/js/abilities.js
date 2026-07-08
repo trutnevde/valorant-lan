@@ -513,6 +513,14 @@ export class Abilities {
         }
         break;
       }
+      case 'iraCorpse': {   // Пассивка Иры: её убийство создаёт хил-зону у трупа врага для союзников
+        const pos = new THREE.Vector3(data.pos[0], data.pos[1] || 0, data.pos[2]);
+        const r = data.r || ABILITY.IRA_CORPSE_R;
+        G.fx.steam(() => pos, r * 0.6, data.dur || ABILITY.IRA_CORPSE_TIME, 0x88ffa0);  // зелёный лечебный пар
+        G.fx.healBurst(pos.clone().add(new THREE.Vector3(0, 0.4, 0)));
+        G.sfx.buffetPop(this.volTo(pos));
+        break;
+      }
       case 'scoutPing': {
         const ownerAlly = G.players.get(id) && G.players.get(id).team === G.myTeam;
         if (ownerAlly) {
