@@ -6,6 +6,8 @@
     "maxDurationMs": 70000,
     "maxWallclip": 0,
     "maxWallstuck": 0,
+    "maxWallgraze": 2,
+    "grazeSeconds": 1.5,
     "accuracyMin": 0.15,
     "accuracyMax": 0.45,
     "tickP95MaxMs": 8,

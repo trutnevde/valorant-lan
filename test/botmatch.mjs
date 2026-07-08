@@ -52,8 +52,8 @@ const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 // телеметрия
 const pos = new Map();       // id -> [{x,z,t}]
 let rounds = 0;
-let wallclip = 0, wallstuck = 0;
-const clipSeen = new Set(), stuckSeen = new Set();
+let wallclip = 0, wallstuck = 0, wallgraze = 0;
+const clipSeen = new Set(), stuckSeen = new Set(), grazeSeen = new Set();
 
 const t0 = () => Date.now() / 1000;
 
@@ -69,6 +69,16 @@ function onState(id, p) {
     const jammed = distToWall(p[0], p[2]) < BOT_R + 0.2;
     if (moved < CFG.stuckMoveEps && jammed && !stuckSeen.has(id)) { stuckSeen.add(id); wallstuck++; }
     if (moved >= CFG.stuckMoveEps) stuckSeen.delete(id); // снова поехал — сбрасываем
+  }
+  // «скребёт стену»: жмётся к стене, активно движется, но НЕ смещается (скольжение на месте вдоль стены)
+  const gs = CFG.grazeSeconds || 1.5;
+  const gwin = arr.filter(s => now - s.t <= gs);
+  if (gwin.length >= 6 && (now - gwin[0].t) >= gs - 0.3) {
+    let pathLen = 0; for (let i = 1; i < gwin.length; i++) pathLen += Math.hypot(gwin[i].x - gwin[i - 1].x, gwin[i].z - gwin[i - 1].z);
+    const netDisp = Math.hypot(gwin[gwin.length - 1].x - gwin[0].x, gwin[gwin.length - 1].z - gwin[0].z);
+    const nearWall = distToWall(p[0], p[2]) < BOT_R + 0.12;
+    if (nearWall && pathLen > 1.0 && netDisp < 0.6 && !grazeSeen.has(id)) { grazeSeen.add(id); wallgraze++; }
+    if (netDisp >= 0.6 || !nearWall) grazeSeen.delete(id);
   }
 }
 
@@ -107,12 +117,14 @@ async function main() {
   console.log(`\n— БОТ-МАТЧ (${CFG.map}, сложность ${globalThis.__diff || '?'}, раундов ${rounds}) —`);
   console.log(`  сквозь стены: ${wallclip} (порог ${CFG.maxWallclip})`);
   console.log(`  застреваний у стен: ${wallstuck} (порог ${CFG.maxWallstuck})`);
+  console.log(`  скребут стену: ${wallgraze} (порог ${CFG.maxWallgraze != null ? CFG.maxWallgraze : 0})`);
   console.log(`  выстрелов ботов: ${shots}, попаданий: ${botHits}, точность: ${(acc * 100).toFixed(1)}% (коридор ${CFG.accuracyMin * 100}–${CFG.accuracyMax * 100}%)`);
   console.log(`  время тика: медиана p95 ${tickMed.toFixed(2)} мс (порог ${CFG.tickP95MaxMs}), макс окна ${tickMax.toFixed(2)} мс, окон ${tickWins.length}`);
 
   const fails = [];
   if (wallclip > CFG.maxWallclip) fails.push('боты проходят сквозь стены');
   if (wallstuck > CFG.maxWallstuck) fails.push('боты застревают у стен');
+  if (wallgraze > (CFG.maxWallgraze != null ? CFG.maxWallgraze : 0)) fails.push(`боты скребут стену: ${wallgraze}`);
   if (rounds < 1) fails.push('матч не пошёл (0 раундов)');
   if (shots < 20) fails.push('боты почти не стреляли (мало данных)');
   else if (!DIFF && (acc < CFG.accuracyMin || acc > CFG.accuracyMax)) fails.push(`точность вне коридора: ${(acc * 100).toFixed(1)}%`); // коридор — только для дефолтной (medium) сложности

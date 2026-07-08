@@ -949,16 +949,27 @@ function botHoldSpot(bot, siteKey) {
   const s = match.mapDef.sites[siteKey];
   const idx = bot.id % 7;
   const ang = (idx / 7) * Math.PI * 2 + bot.id * 0.9;
-  const rx = (s.w / 2 - 1.4) * (0.45 + (idx % 3) * 0.27);
-  const rz = (s.d / 2 - 1.4) * (0.45 + (idx % 2) * 0.4);
-  return [s.x + Math.cos(ang) * rx, (s.z || 0) + Math.sin(ang) * rz];
+  let rx = (s.w / 2 - 1.4) * (0.45 + (idx % 3) * 0.27);
+  let rz = (s.d / 2 - 1.4) * (0.45 + (idx % 2) * 0.4);
+  const cy = bot.lastPos[1] || 0;
+  // НЕ ставим точку холда в стену/ящик (иначе бот вечно жмётся к ней) — подтягиваем к центру, пока не освободится
+  for (let k = 0; k < 6; k++) {
+    const x = s.x + Math.cos(ang) * rx, z = (s.z || 0) + Math.sin(ang) * rz;
+    if (!botHitsWall(x, z, cy)) return [x, z];
+    rx *= 0.62; rz *= 0.62;
+  }
+  return [s.x, s.z || 0]; // фолбэк — центр сайта
 }
 function botGoHold(bot, dt, combat, siteKey) {
   const ai = bot.ai;
   if (!ai.holdSpot) ai.holdSpot = botHoldSpot(bot, siteKey);
   const hd = Math.hypot(bot.lastPos[0] - ai.holdSpot[0], bot.lastPos[2] - ai.holdSpot[1]);
-  if (hd > 1.1) { if (!combat) moveToward(bot, [ai.holdSpot[0], 0, ai.holdSpot[1]], dt); }
-  else if (!combat) bot.yaw += dt * 0.6; // держит свою позицию, сканирует
+  if (hd > 1.1 && !combat) {
+    moveToward(bot, [ai.holdSpot[0], 0, ai.holdSpot[1]], dt);
+    // упёрся по дороге к точке холда — хватит скрести стену, принимаем текущую позицию за холд
+    if (bot.ai._blocked) { ai._holdStuck = (ai._holdStuck || 0) + dt; if (ai._holdStuck > 0.5) { ai.holdSpot = [bot.lastPos[0], bot.lastPos[2]]; ai._holdStuck = 0; } }
+    else ai._holdStuck = 0;
+  } else if (!combat) bot.yaw += dt * 0.6; // держит свою позицию, сканирует
 }
 
 function botShoot(bot, e, dist) {
@@ -1255,12 +1266,19 @@ function tickBot(bot, dt) {
   if (!holdForDuel && ai.pathIdx < ai.path.length) {
     const node = match.mapDef.nav.nodes[ai.path[ai.pathIdx]];
     const target = [node[0], node[2] || 0, node[1]];
-    if (moveToward(bot, target, dt, combat) < 1.1) { ai.pathIdx++; ai._stuckT = 0; }
-    else if (ai._blocked) {                       // упёрся — копим и обходим/перестраиваемся
-      ai._stuckT = (ai._stuckT || 0) + dt;
-      if (ai._stuckT > 0.5) { ai._stuckT = 0; ai.pathIdx++; }              // пропускаем ноду
-      if (ai.pathIdx >= ai.path.length) { ai.goal = null; ai.nextThink = 0; } // путь кончился — переосмыслить
-    } else ai._stuckT = 0;
+    const d = moveToward(bot, target, dt, combat);
+    if (d < 1.1) { ai.pathIdx++; ai._stuckT = 0; ai._lastNodeD = 0; }        // дошёл до ноды
+    else {
+      // анти-упирание: следим за ПРОГРЕССОМ к ноде, а не за сырым движением.
+      // Скольжение вдоль стены = «движется», но к ноде не приближается → тоже считаем застреванием.
+      const progressing = d < (ai._lastNodeD || d + 9) - 0.015;
+      ai._lastNodeD = d;
+      if (!progressing) {
+        ai._stuckT = (ai._stuckT || 0) + dt;
+        if (ai._stuckT > 0.35) { ai._stuckT = 0; ai._lastNodeD = 0; ai.pathIdx++; }  // не приближается 0.35с — пропускаем ноду
+        if (ai.pathIdx >= ai.path.length) { ai.goal = null; ai.nextThink = 0; }      // путь кончился — переосмыслить
+      } else ai._stuckT = 0;
+    }
   }
 }
 
