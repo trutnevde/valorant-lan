@@ -242,7 +242,11 @@ export class WeaponSystem {
       const r = G.remotes.get(pid);
       let part = hit.object.userData.part || 'body';
       if (part === 'body' && r && hit.point.y < r.group.position.y + 0.75) part = 'leg';
-      const dmg = Math.round(dmgFor(part));
+      let dmg = Math.round(dmgFor(part));
+      // Пассивка Геры «Охотник за туманщиками»: +15% по врагу, стоящему в дыму
+      if (dmg > 0 && G.me && G.me.char === 'gera' && r && G.abilities && G.abilities.pointInSmoke(r.group.position.x, r.group.position.z)) {
+        dmg = Math.round(dmg * ABILITY.GERA_SMOKE_DMG_MUL);
+      }
       if (dmg > 0) {
         G.net.send({ t: 'hit', target: pid, dmg, part, weapon: weaponId });
         G.fx.blood(hit.point);

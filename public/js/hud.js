@@ -345,12 +345,16 @@ export class HUD {
     const c = $('minimap').getContext('2d');
     const t = now();
     c.drawImage(this.mmStatic, 0, 0);
-    // дымы
+    // дымы: свои — всем; ВРАЖЕСКИЕ — только Гере (пассивка «Барометр»), её мятным цветом
+    const isGera = G.me && G.me.char === 'gera';
     for (const s of G.abilities.smokes) {
       if (t > s.until) continue;
+      const enemy = s.team && s.team !== G.myTeam;
+      if (enemy && !isGera) continue;   // Барометр: чужие дымы на карте видит только Гера
       const [sx, sy] = this.mmPt(s.pos.x, s.pos.z);
-      c.fillStyle = 'rgba(160,175,190,0.55)';
+      c.fillStyle = enemy ? 'rgba(95,224,208,0.6)' : 'rgba(160,175,190,0.55)';
       c.beginPath(); c.arc(sx, sy, s.r * this.mmScaleX, 0, 7); c.fill();
+      if (enemy) { c.strokeStyle = '#5fe0d0'; c.lineWidth = 1.5; c.stroke(); }
     }
     // шип установлен — красная мигающая
     if (G.spikePos) {

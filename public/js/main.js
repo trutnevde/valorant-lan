@@ -10,7 +10,7 @@ import { RemotePlayer } from './remote.js';
 import { Abilities } from './abilities.js';
 import { HUD } from './hud.js';
 import { makeComposer } from './postfx.js';
-import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY, BOT_PRESETS } from './shared.js';
+import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY, BOT_PRESETS, PASSIVES, ICONS } from './shared.js';
 
 const DIFF_NAMES = { easy: 'ЛЁГКИЕ', medium: 'СРЕДНИЕ', hard: 'ЖЁСТКИЕ' };
 
@@ -138,10 +138,12 @@ function buildMenu() {
     card.style.setProperty('--card-color', c.color);
     const abils = Object.entries(c.abilities)
       .map(([k, a]) => `<div class="char-ab"><b>${k}</b> ${a.name} — ${a.desc}</div>`).join('');
+    const p = PASSIVES[id];
+    const passive = p ? `<div class="char-ab char-passive"><b>⚡</b> ${p.name} — ${p.desc}</div>` : '';
     card.innerHTML = `
-      <div class="char-name" style="color:${c.color}">${c.name}</div>
+      <div class="char-name" style="color:${c.color}"><span class="char-icon">${ICONS[id] || ''}</span> ${c.name}</div>
       <div class="char-title" style="color:${c.color}">${c.title.toUpperCase()}</div>
-      <div class="char-desc">${c.desc}</div>${abils}`;
+      <div class="char-desc">${c.desc}</div>${passive}${abils}`;
     card.addEventListener('click', () => {
       selChar = id;
       localStorage.setItem('valChar', id);

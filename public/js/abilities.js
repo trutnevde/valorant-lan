@@ -382,11 +382,10 @@ export class Abilities {
         break;
       }
       case 'smokes': {
-        const ownerTeam = (G.players.get(id) || {}).team;
-        const geraSees = this.char === 'gera' && ownerTeam && ownerTeam !== G.myTeam; // пассивка «Ясный глаз»: вражеский дым полупрозрачен
+        const ownerTeam = (G.players.get(id) || {}).team;  // team нужен Гере: развеивание (C), Барометр (миникарта), Охотник (+урон в дыму)
         for (const p of data.positions || []) {
           const pos = new THREE.Vector3(p[0], p[1] || 0, p[2]);
-          const fx = G.fx.smoke(pos, ABILITY.SMOKE_R, ABILITY.SMOKE_TIME, data.stink, geraSees ? 0.2 : 1);
+          const fx = G.fx.smoke(pos, ABILITY.SMOKE_R, ABILITY.SMOKE_TIME, data.stink);
           this.smokes.push({ pos: pos.clone().setY((p[1] || 0) + ABILITY.SMOKE_R * 0.55), r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME, fx, team: ownerTeam });
         }
         G.sfx.smokePop(data.stink);
@@ -893,6 +892,16 @@ export class Abilities {
   removeSovaArrow(arrowId) {
     this.G.shootables = this.G.shootables.filter(s => s.shootId !== 'sovaArrow:' + arrowId);
     if (this.sovaArrows) this.sovaArrows.delete(arrowId);
+  }
+
+  // стоит ли точка (x,z) в активном дыму? Для пассивки Геры «Охотник за туманщиками» (+урон)
+  pointInSmoke(x, z) {
+    const t = now();
+    for (const s of this.smokes) {
+      if (t > s.until) continue;
+      if (Math.hypot(x - s.pos.x, z - s.pos.z) < s.r) return true;
+    }
+    return false;
   }
 
   // регистрирует гуманоида-клона как отстреливаемую цель (cloneId одинаков у всех клиентов)
