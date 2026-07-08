@@ -55,9 +55,9 @@ export function makeComposer(renderer, scene, camera) {
 
   const bloom = new UnrealBloomPass(
     new THREE.Vector2(window.innerWidth * 0.5, window.innerHeight * 0.5), // bloom в полразрешения
-    0.5,    // strength — деликатно
-    0.55,   // radius
-    0.82    // threshold — светятся только яркие/эмиссивные (муззл, свет, способности, металл)
+    0.38,   // strength — мягче, чтобы небо/солнце не раздувалось в слепящий ореол
+    0.5,    // radius
+    0.88    // threshold — светятся только очень яркие/эмиссивные (муззл, способности, металл)
   );
   composer.addPass(bloom);
 

@@ -49,7 +49,7 @@ async function loadHdriEnv(renderer, scene) {
   scene.environment = env;             // IBL: настоящие отражения/свет
   scene.environmentIntensity = 0.55;   // приглушаем, иначе яркое небо флудит ambient и роняет контраст
   scene.background = tex;              // настоящее небо в фоне
-  scene.backgroundIntensity = 0.9;
+  scene.backgroundIntensity = 0.45;    // тусклее — солнце не слепит и не раздувает bloom (без дорогого blur неба)
   const dome = scene.getObjectByName('proceduralSky');
   if (dome) dome.visible = false;      // прячем процедурный купол
   if (scene.fog) scene.fog.far = 260;  // отодвигаем туман, чтобы небо читалось
@@ -176,7 +176,7 @@ function initWorld(mapId) {
     G.scene.add(G.camera);
     G.renderer = new THREE.WebGLRenderer({ antialias: true });
     G.renderer.setSize(innerWidth, innerHeight);
-    G.renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+    G.renderer.setPixelRatio(Math.min(1.5, devicePixelRatio)); // ниже 2 — заметно больше FPS на hi-DPI при почти той же резкости
     G.renderer.shadowMap.enabled = true;
     G.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     G.renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -960,8 +960,15 @@ function frame(tms) {
     perfT += dt; perfN++;
     if (perfT > 2.5) {
       perfChecked = true;
-      // SSAO не включаем автоматически: он тяжёлый и на части драйверов капризен — только вручную (O)
-      if (perfN / perfT < 30) { disablePost(); G.hud.announce('', 'ПОСТ-ЭФФЕКТЫ ВЫКЛ (слабое GPU) · P — вернуть', 3); }
+      // авто-снижение графики ради FPS: сначала выключаем пост, при совсем слабом — ещё и pixelRatio до 1
+      const fps = perfN / perfT;
+      if (fps < 50) {
+        disablePost();
+        try {
+          if (fps < 40) { G.renderer.setPixelRatio(1); G.renderer.setSize(innerWidth, innerHeight); } // главный рычаг FPS
+        } catch {}
+        G.hud.announce('', `ГРАФИКА СНИЖЕНА ДЛЯ FPS (~${Math.round(fps)}) · P — вернуть пост`, 3.5);
+      }
     }
   }
 
