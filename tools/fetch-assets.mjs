@@ -29,6 +29,17 @@ const MAPS = { diffuse: 'Diffuse', normal: 'nor_gl', arm: 'arm' };
 // Демо-модель только для window.USE_DEMO_MODELS (three.js examples, CC0).
 const DEMO_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
 
+// CC0-звуки (OpenGameArt, public domain): реальные выстрелы/перезарядка/шаги/взрыв → assets/sfx/
+const OGA = 'https://opengameart.org/sites/default/files';
+const SFX = [
+  ['22%20Pistol.wav', 'gun_pistol.wav'], ['22%20Magnum.wav', 'gun_magnum.wav'],
+  ['Black%20Powder.wav', 'gun_heavy.wav'], ['Unkown.wav', 'gun_rifle.wav'],
+  ['clipload1.wav', 'reload1.wav'], ['clipload2.wav', 'reload2.wav'],
+  ['01-footstep_0.ogg', 'step1.ogg'], ['02-footstep.ogg', 'step2.ogg'], ['03-footstep.ogg', 'step3.ogg'],
+  ['04-footstep.ogg', 'step4.ogg'], ['05-footstep.ogg', 'step5.ogg'], ['06-footstep.ogg', 'step6.ogg'],
+  ['explosion1_0.ogg', 'explosion.ogg'],
+];
+
 function mkdir(p) { fs.mkdirSync(p, { recursive: true }); }
 
 async function getJSON(url) {
@@ -97,6 +108,14 @@ async function main() {
   try { console.log('▶ демо-модель RobotExpressive'); await download(DEMO_URL, path.join(charDir, '_demo.glb')); }
   catch (e) { console.log('  ⚠ демо не скачалась:', e.message); }
   manifest.characterModels = {};
+
+  // ── звуки (CC0, OpenGameArt) ──
+  const sfxDir = path.join(ASSETS, 'sfx');
+  for (const [src, dst] of SFX) {
+    console.log('▶ звук', dst);
+    await download(`${OGA}/${src}`, path.join(sfxDir, dst));
+  }
+  manifest.sfxLicense = 'CC0 — OpenGameArt (public domain)';
 
   fs.writeFileSync(path.join(ASSETS, 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log('\n✅ Ассеты скачаны. manifest.json записан. Всё CC0, лежит локально.');

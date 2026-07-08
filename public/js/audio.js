@@ -1,5 +1,31 @@
-// Весь звук синтезируется через WebAudio — никаких файлов, работает офлайн.
-// Позиционный 3D: мировые звуки идут через PannerNode (HRTF) → слышно направление и дистанцию.
+// Звук: реальные CC0-сэмплы (выстрелы/шаги/перезарядка/взрыв) + синтез для всего остального.
+// Всё локально/офлайн. Позиционный 3D: мировые звуки идут через PannerNode (HRTF) → слышно направление/дистанцию.
+
+// CC0-сэмплы (OpenGameArt, public domain), лежат локально в assets/sfx/.
+// Нет файла или ещё не догрузился → тихий фолбэк на синтез (ничего не ломается).
+const SAMPLES = {
+  gun_pistol: 'assets/sfx/gun_pistol.wav',
+  gun_magnum: 'assets/sfx/gun_magnum.wav',
+  gun_heavy: 'assets/sfx/gun_heavy.wav',
+  gun_rifle: 'assets/sfx/gun_rifle.wav',
+  reload1: 'assets/sfx/reload1.wav',
+  reload2: 'assets/sfx/reload2.wav',
+  step1: 'assets/sfx/step1.ogg', step2: 'assets/sfx/step2.ogg', step3: 'assets/sfx/step3.ogg',
+  step4: 'assets/sfx/step4.ogg', step5: 'assets/sfx/step5.ogg', step6: 'assets/sfx/step6.ogg',
+  explosion: 'assets/sfx/explosion.ogg',
+};
+// какой ствол каким сэмплом звучит (нож — остаётся синтезом)
+const SHOT_SAMPLE = {
+  classic: 'gun_pistol', ghost: 'gun_pistol', frenzy: 'gun_pistol',
+  stinger: 'gun_pistol', spectre: 'gun_pistol',
+  sheriff: 'gun_magnum', guardian: 'gun_magnum', marshal: 'gun_magnum',
+  bucky: 'gun_heavy', judge: 'gun_heavy', shorty: 'gun_heavy', operator: 'gun_heavy', outlaw: 'gun_heavy',
+  ares: 'gun_rifle', odin: 'gun_rifle', bulldog: 'gun_rifle', phantom: 'gun_rifle', vandal: 'gun_rifle',
+};
+const SHOT_VOL = { gun_pistol: 0.5, gun_magnum: 0.62, gun_heavy: 0.72, gun_rifle: 0.55 };
+// длина проигрываемого окна выстрела (сек): у записей длинный хвост/очередь — режем, чтобы автоогонь был чётким
+const SHOT_DUR = { gun_pistol: 0.42, gun_magnum: 0.6, gun_heavy: 0.9, gun_rifle: 0.3 };
+
 export class Sfx {
   constructor() {
     this.ctx = null;
@@ -18,9 +44,43 @@ export class Sfx {
       this.master.connect(comp); comp.connect(this.ctx.destination);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();
+    this._loadSamples();
   }
   get t0() { return this.ctx ? this.ctx.currentTime : 0; }
   get dest() { return this._dest || this.master; }
+
+  // асинхронно грузим и декодируем CC0-сэмплы (один раз). Пока не готовы — синтез-фолбэк.
+  _loadSamples() {
+    if (this._samplesStarted || !this.ctx) return;
+    this._samplesStarted = true;
+    this.buffers = {};
+    for (const [name, url] of Object.entries(SAMPLES)) {
+      fetch(url)
+        .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('404'))))
+        .then(ab => this.ctx.decodeAudioData(ab))
+        .then(buf => { this.buffers[name] = buf; })
+        .catch(() => { /* нет файла — останется синтез */ });
+    }
+  }
+  // проиграть загруженный сэмпл через текущий выход (this.dest — 3D-панер при spatial). false = не готов.
+  // maxDur>0 — обрезать до этого окна с быстрым фейдом (для крупных записей выстрела).
+  playBuf(name, { vol = 1, rate = 1, delay = 0, maxDur = 0 } = {}) {
+    if (!this.ctx || !this.buffers || !this.buffers[name]) return false;
+    const t = this.t0 + delay;
+    const src = this.ctx.createBufferSource();
+    src.buffer = this.buffers[name];
+    src.playbackRate.value = rate;
+    const g = this.ctx.createGain();
+    g.gain.value = vol;
+    src.connect(g); g.connect(this.dest);
+    src.start(t);
+    if (maxDur > 0) {
+      g.gain.setValueAtTime(vol, t + maxDur);
+      g.gain.linearRampToValueAtTime(0.0001, t + maxDur + 0.05);
+      src.stop(t + maxDur + 0.07);
+    }
+    return true;
+  }
 
   // позиция/ориентация слушателя = камера (вызывать каждый кадр)
   setListener(cam) {
@@ -120,7 +180,12 @@ export class Sfx {
   }
   // ===== оружие: транзиент + тело + хвост, всё с джиттером =====
   shot(w, vol = 1) {
-    const j = 0.9 + Math.random() * 0.2;   // джиттер тона на каждый выстрел
+    // сначала — настоящая запись выстрела (нож остаётся синтезом)
+    if (w !== 'knife') {
+      const name = SHOT_SAMPLE[w] || 'gun_rifle';
+      if (this.playBuf(name, { vol: (SHOT_VOL[name] || 0.55) * vol, rate: 0.92 + Math.random() * 0.16, maxDur: SHOT_DUR[name] || 0.35 })) return;
+    }
+    const j = 0.9 + Math.random() * 0.2;   // джиттер тона на каждый выстрел (фолбэк-синтез)
     switch (w) {
       case 'knife':
         this.crack({ vol: 0.16 * vol, fc: 3500 * j, dur: 0.05, drive: 3 });
@@ -188,7 +253,8 @@ export class Sfx {
   }
   dry() { this.crack({ vol: 0.1, fc: 4000, dur: 0.02, drive: 2 }); this.tone({ f: 1100, dur: 0.02, vol: 0.08, type: 'square' }); }
   reload() {
-    // защёлка магазина — три разных клика с разным тембром
+    if (this.playBuf(Math.random() < 0.5 ? 'reload1' : 'reload2', { vol: 0.85 })) return;
+    // фолбэк-синтез: защёлка магазина — три разных клика с разным тембром
     this.crack({ vol: 0.18, fc: 3200, dur: 0.03, drive: 3 });
     this.tone({ f: 380, f2: 260, dur: 0.04, vol: 0.12, type: 'square', delay: 0.05 });
     this.crack({ vol: 0.22, fc: 2600, dur: 0.04, drive: 4, delay: 0.4 });
@@ -196,7 +262,8 @@ export class Sfx {
     this.crack({ vol: 0.14, fc: 4000, dur: 0.02, delay: 0.75 });
   }
   footstep(vol = 0.5, surface = 0) {
-    // разные поверхности + рандом высоты + два слоя (пятка/носок)
+    if (this.playBuf('step' + (1 + Math.floor(Math.random() * 6)), { vol: 0.95 * vol, rate: 0.9 + Math.random() * 0.2 })) return;
+    // фолбэк-синтез: поверхности + рандом высоты + два слоя (пятка/носок)
     const base = 300 + Math.random() * 260 + surface * 200;
     this.noise({ dur: 0.05, vol: 0.16 * vol, fc: base, q: 2.2 });
     this.noise({ dur: 0.035, vol: 0.09 * vol, fc: base * 2.4, q: 1.5, type: 'bandpass', delay: 0.02 });
@@ -350,6 +417,8 @@ export class Sfx {
   planted() { this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); this.body({ f: 90, f2: 60, dur: 0.4, vol: 0.25, delay: 0.05, type: 'sine' }); }
   defused() { this.tone({ f: 700, f2: 1200, dur: 0.18, vol: 0.28, type: 'sine' }); this.tone({ f: 1000, f2: 1500, dur: 0.25, vol: 0.24, type: 'triangle', delay: 0.14 }); }
   explosion() {
+    if (this.playBuf('explosion', { vol: 1.0, rate: 0.92 + Math.random() * 0.12 })) return;
+    // фолбэк-синтез
     this.noise({ dur: 1.2, vol: 1.0, fc: 400, fc2: 40 });
     this.tone({ f: 60, f2: 25, dur: 1.0, vol: 0.7, type: 'sawtooth' });
   }
