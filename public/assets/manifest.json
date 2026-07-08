@@ -29,5 +29,7 @@
   "hdri": {
     "sky": "assets/hdri/sky.hdr"
   },
-  "characterModels": {}
+  "characterModels": {},
+  "sfxLicense": "CC0 — OpenGameArt (Brian MacIntosh, rubberduck) + Kenney UI (public domain). См. ATTRIBUTION.md",
+  "modelLicense": "CC0 — _demo.glb: RobotExpressive (Quaternius / three.js). KayKit Adventurers (Kay Lousberg) — drop-in, по умолчанию неактивен. См. ATTRIBUTION.md"
 }
