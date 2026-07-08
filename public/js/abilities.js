@@ -4,7 +4,7 @@
 // Паттерн: use() шлёт ability на сервер, сервер рассылает ВСЕМ (и валидирует ульты),
 // эффекты применяются в onAbility — все клиенты видят одно и то же.
 import * as THREE from './three.module.js';
-import { ABILITY, CHARACTERS } from './shared.js';
+import { ABILITY, CHARACTERS, SIGNATURES } from './shared.js';
 import { buildHumanoid } from './remote.js';
 
 const now = () => performance.now() / 1000;
@@ -51,8 +51,11 @@ export class Abilities {
 
   resetRound() {
     this.charges = this.chargesFor(this.char);
+    this._sigReadyAt = 0;   // таймер автоперезарядки сигнатурки
     this.clearAll();
   }
+  // максимум зарядов у ключа (для кэпа автоперезарядки)
+  maxCharge(key) { const a = CHARACTERS[this.char].abilities[key]; return a ? (a.charges || 0) : 0; }
 
   clearAll() {
     const G = this.G;
@@ -331,7 +334,15 @@ export class Abilities {
       sovaShock: 'C', sovaMark: 'Q', sovaDrone: 'E',
       geraDispel: 'C', geraGrapple: 'Q', geraVortex: 'E',
     };
-    if (mine && keyByKind[kind] && this.charges[keyByKind[kind]] > 0) this.charges[keyByKind[kind]]--;
+    if (mine && keyByKind[kind] && this.charges[keyByKind[kind]] > 0) {
+      const usedKey = keyByKind[kind];
+      this.charges[usedKey]--;
+      // сигнатурка: если израсходовали её заряды — запускаем автоперезарядку (если ещё не идёт)
+      const sig = SIGNATURES[this.char];
+      if (sig && usedKey === sig.key && this.charges[usedKey] <= 0 && !this._sigReadyAt) {
+        this._sigReadyAt = now() + sig.cd;
+      }
+    }
 
     switch (kind) {
       case 'flash': case 'neigh': {
@@ -974,6 +985,18 @@ export class Abilities {
   update(dt) {
     const G = this.G;
     const t = now();
+
+    // --- автоперезарядка сигнатурки ---
+    if (this._sigReadyAt && t >= this._sigReadyAt) {
+      const sig = SIGNATURES[this.char];
+      if (sig) {
+        const mx = this.maxCharge(sig.key);
+        if ((this.charges[sig.key] || 0) < mx) this.charges[sig.key] = (this.charges[sig.key] || 0) + 1;
+        // ещё не докрутили до макса — заводим следующий цикл; иначе стоп
+        this._sigReadyAt = (this.charges[sig.key] < mx) ? t + sig.cd : 0;
+        if (G.hud && G.hud.announce) G.hud.announce('', 'СИГНАТУРКА ГОТОВА', 1.0);
+      } else this._sigReadyAt = 0;
+    }
 
     // --- вспышки ---
     for (let i = this.orbs.length - 1; i >= 0; i--) {
