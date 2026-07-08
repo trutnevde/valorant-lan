@@ -85,6 +85,7 @@ const ABILITY_WEAPON_NAMES = {
   orbital: 'Орбитальный удар', turret: 'Турель', knives: 'Стальные перья', zone: 'Зона',
   mangal: 'Мангал', horseshoe: 'Подкова', stampede: 'Табун',
   sovaShock: 'Шок-стрела', sovaFury: 'Ярость охотника',
+  geraUlt: 'Невесомость',
 };
 
 // ===== Глобальное состояние =====
@@ -103,7 +104,7 @@ const G = {
   spikePos: null, spikeFx: null,
   spikeCarrier: 0, spikeDroppedPos: null, spikeDropFx: null,
   pulled: null, stunnedUntil: 0, slowMul: 1, blindUntil: 0, blindStink: false, shake: 0,
-  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
+  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, levitUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
   banquets: [], cloneMode: false, clonedIds: new Set(),
   scoped: false, aimT: 0, buyOpen: false, chatOpen: false, holdAction: null,
   spectateTarget: 0,
@@ -351,6 +352,20 @@ function onMessage(msg) {
       G.stunnedUntil = now() + (msg.dur || 1);
       G.shake = Math.max(G.shake, 2);
       G.hud.announce('', 'ОГЛУШЕНИЕ', 1.2);
+      break;
+    case 'geraPull': {
+      // «Воронка» Геры стягивает меня к центру конуса (частичный само-подтяг)
+      const cur = G.player.pos;
+      const to = new THREE.Vector3(cur.x + (msg.to[0] - cur.x) * 0.6, cur.y, cur.z + (msg.to[1] - cur.z) * 0.6);
+      G.pulled = { from: cur.clone(), to, t: 0, dur: msg.dur || 0.9 };
+      break;
+    }
+    case 'geraLevit':
+      // «Невесомость» Геры: всплываю и вязну. Сервер шлёт маркер ~каждые 0.4с, пока я в куполе,
+      // поэтому клиенту хватает короткого окна на каждое сообщение (в серверном времени msg.until смысла не имеет).
+      G.levitUntil = now() + 0.5;   // слоу — в player.speedFactor по G.levitUntil
+      if (G.player.grounded) { G.player.vel.y = 2.2; G.player.grounded = false; } // «потерял опору»
+      G.shake = Math.max(G.shake, 1.0);
       break;
     case 'clonePopped':
       // клон лопнул у всех + шоквейв (стан приходит отдельным 'stun', если задело)

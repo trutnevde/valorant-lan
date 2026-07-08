@@ -1,6 +1,6 @@
 // Локальный игрок: движение с коллизиями, лестницы, камера с панчем отдачи
 import * as THREE from './three.module.js';
-import { MOVE, CHARACTERS, weaponFeel } from './shared.js';
+import { MOVE, CHARACTERS, ABILITY, weaponFeel } from './shared.js';
 
 export class LocalPlayer {
   constructor(G) {
@@ -57,6 +57,7 @@ export class LocalPlayer {
     if (t < G.boostUntil) f *= 1.4;          // Порыв Макса
     if (t < G.gallopUntil) f *= 1.5;         // Галоп Конилия
     if (t < G.banquetUntil) f *= 1.15;       // Финальный банкет Иры
+    if (t < G.levitUntil) f *= ABILITY.GERA_ULT_SLOW; // «Невесомость» Геры — всплыл, барахтается
     if (t < G.tagUntil) f *= 0.62;           // словил пулю — «tagging», как в CS
     if (G.weapons) f *= weaponFeel(G.weapons.currentId).speed; // с ножом бегаешь быстрее
     return f;

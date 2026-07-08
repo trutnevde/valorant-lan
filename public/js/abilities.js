@@ -271,6 +271,29 @@ export class Abilities {
         }
         break;
       }
+
+      case 'gera': {
+        const flat = new THREE.Vector3(dir.x, 0, dir.z).normalize();
+        if (key === 'C' && this.charges.C > 0) {
+          const p = this.groundPoint(22);   // «Развеятель» — по точке прицела
+          send('geraDispel', { pos: [p.x, p.y, p.z] });
+        } else if (key === 'Q' && this.charges.Q > 0) {
+          // грэпл: рейкаст к твёрдой поверхности, подтягиваемся туда (в т.ч. на уступ)
+          this.ray.set(eye, dir); this.ray.far = ABILITY.GERA_GRAPPLE_RANGE;
+          const hits = this.ray.intersectObjects(G.map.solids, false);
+          if (hits[0]) {
+            const to = hits[0].point.clone().addScaledVector(dir, -0.8);   // встать чуть НЕ доходя
+            to.y = Math.max(0, hits[0].point.y);                            // на высоту уступа
+            send('geraGrapple', { from: eye.toArray(), to: [to.x, to.y, to.z] });
+          } else G.sfx.error();
+        } else if (key === 'E' && this.charges.E > 0) {
+          send('geraVortex', { from: [G.player.pos.x, 0, G.player.pos.z], dir: [flat.x, 0, flat.z] });
+        } else if (key === 'X') {
+          if (this.ultReady()) { const p = this.groundPoint(9); send('geraUlt', { pos: [p.x, 0, p.z] }); }
+          else G.sfx.error();
+        }
+        break;
+      }
     }
   }
 
@@ -287,6 +310,7 @@ export class Abilities {
       scout: 'C', crispy: 'Q', buffet: 'E', neigh: 'Q', gallop: 'E',
       bloodfeast: 'C', scent: 'Q', twin: 'Q', swapCast: 'E',
       sovaShock: 'C', sovaMark: 'Q', sovaDrone: 'E',
+      geraDispel: 'C', geraGrapple: 'Q', geraVortex: 'E',
     };
     if (mine && keyByKind[kind] && this.charges[keyByKind[kind]] > 0) this.charges[keyByKind[kind]]--;
 
@@ -328,10 +352,12 @@ export class Abilities {
         break;
       }
       case 'smokes': {
+        const ownerTeam = (G.players.get(id) || {}).team;
+        const geraSees = this.char === 'gera' && ownerTeam && ownerTeam !== G.myTeam; // пассивка «Ясный глаз»: вражеский дым полупрозрачен
         for (const p of data.positions || []) {
           const pos = new THREE.Vector3(p[0], p[1] || 0, p[2]);
-          G.fx.smoke(pos, ABILITY.SMOKE_R, ABILITY.SMOKE_TIME, data.stink);
-          this.smokes.push({ pos: pos.clone().setY((p[1] || 0) + ABILITY.SMOKE_R * 0.55), r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
+          const fx = G.fx.smoke(pos, ABILITY.SMOKE_R, ABILITY.SMOKE_TIME, data.stink, geraSees ? 0.2 : 1);
+          this.smokes.push({ pos: pos.clone().setY((p[1] || 0) + ABILITY.SMOKE_R * 0.55), r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME, fx, team: ownerTeam });
         }
         G.sfx.smokePop(data.stink);
         break;
@@ -587,6 +613,46 @@ export class Abilities {
         G.banquets.push({ owner: id, team, pos, r: ABILITY.BANQUET_R, until: now() + ABILITY.BANQUET_TIME, fx });
         G.sfx.banquetSummon();
         G.hud.announce(mine ? 'ФИНАЛЬНЫЙ БАНКЕТ' : (team === G.myTeam ? 'СОЮЗНЫЙ БАНКЕТ — В УКРЫТИЕ!' : 'ВРАЖЕСКИЙ БАНКЕТ'), '', 2.5);
+        break;
+      }
+
+      // ===== Гера: анти-смокер =====
+      case 'geraDispel': {   // развеивает вражеские дымы в радиусе + вспышка
+        const pos = new THREE.Vector3(data.pos[0], data.pos[1] || 0, data.pos[2]);
+        G.fx.burst(pos.clone().add(new THREE.Vector3(0, 1, 0)), { n: 22, color: 0x5fe0d0, speed: 7, life: 0.5, size: 0.2, gravity: 1 });
+        const gTeam = (G.players.get(id) || {}).team;
+        for (const s of this.smokes) {   // локально гасим ТОЛЬКО вражеские дымы (свои не трогаем)
+          if (s.team && s.team !== gTeam && Math.hypot(s.pos.x - pos.x, s.pos.z - pos.z) < ABILITY.GERA_DISPEL_R + s.r) { if (s.fx) s.fx.kill(); s.until = 0; }
+        }
+        this.smokes = this.smokes.filter(s => s.until > now());
+        G.sfx.flashPop(0.5);
+        if (mine) G.hud.announce('', 'РАЗВЕЯТЕЛЬ', 1.2);
+        break;
+      }
+      case 'geraGrapple': {   // грэпл-ропа + зип у владельца
+        const from = new THREE.Vector3(...data.from);
+        const to = new THREE.Vector3(...data.to);
+        const rope = new THREE.Line(new THREE.BufferGeometry().setFromPoints([from, to]), new THREE.LineBasicMaterial({ color: 0x5fe0d0 }));
+        G.scene.add(rope);
+        setTimeout(() => G.scene.remove(rope), 350);
+        if (mine) G.pulled = { from: G.player.pos.clone(), to: to.clone(), t: 0, dur: Math.max(0.18, from.distanceTo(to) / ABILITY.GERA_GRAPPLE_SPEED) };
+        G.sfx.hookThrow();
+        break;
+      }
+      case 'geraVortex': {   // конус стягивания — цепочка искр по направлению
+        const f = new THREE.Vector3(data.from[0], 0.8, data.from[2]);
+        const dr = new THREE.Vector3(data.dir[0], 0, data.dir[2]).normalize();
+        for (let dd = 2; dd < ABILITY.GERA_VORTEX_RANGE; dd += 2) {
+          G.fx.burst(f.clone().addScaledVector(dr, dd), { n: 4, color: 0x5fe0d0, speed: 4, life: 0.4, size: 0.15, gravity: 0 });
+        }
+        G.sfx.dash(0.6);
+        break;
+      }
+      case 'geraUlt': {   // купол невесомости
+        const pos = new THREE.Vector3(data.pos[0], 0, data.pos[2]);
+        G.fx.steam(() => pos, ABILITY.GERA_ULT_R, ABILITY.GERA_ULT_TIME, 0x9fe8ff);
+        G.hud.announce('', mine ? 'НЕВЕСОМОСТЬ' : 'НЕВЕСОМОСТЬ ГЕРЫ!', 1.5);
+        G.sfx.xray();
         break;
       }
 

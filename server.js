@@ -57,7 +57,10 @@ const match = {
   spikeCarrier: null, // id игрока с шипом (плантить может только он)
   spikeDropped: null, // {pos} — шип лежит на земле (носитель погиб)
   defuseHalfDone: false,
-  smokes: [],         // {pos:[x,y,z], r, until} — для LOS ботов
+  smokes: [],         // {pos:[x,y,z], r, until, team} — для LOS ботов; team нужен Гере (свой/вражеский)
+  noSmokeZones: [],   // {team, pos:[x,y,z], r, until} — «Развеятель» Геры: тут нельзя ставить вражеские дымы
+  vortexPulls: [],    // {by, team, until, cx, cz} — «Воронка» Геры: активные стягивания врагов
+  levit: null,        // {by, team, pos, r, until} — «Невесомость» Геры: купол всплытия
   zones: [],          // {type, pos|a/b, r, dps, from, until, owner} — урон ботам
   healZones: [],      // {kind, team, a?/b?/pos?/r?, rate, until} — хилки Иры
   noises: [],         // {team, pos:[x,z], until, loud} — что боты СЛЫШАТ
@@ -78,7 +81,7 @@ function newPlayer(id, ws, bot = false) {
     loadout: { primary: null, sidearm: 'classic' },
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
-    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0,
+    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0, levitUntil: 0,
     ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0, reactAt: 0, holdSpot: null } : null,
   };
 }
@@ -145,6 +148,16 @@ function losClear(a, b) {
   return true;
 }
 
+// «Развеятель» Геры: нельзя поставить дым команды `team` внутри активной анти-смок зоны ВРАГА
+function smokeBlocked(pos, team) {
+  const t = now();
+  for (const z of match.noSmokeZones) {
+    if (t >= z.until || z.team === team) continue;
+    if (Math.hypot(pos[0] - z.pos[0], (pos[2] || 0) - z.pos[2]) < z.r) return true;
+  }
+  return false;
+}
+
 // ===== Матч =====
 function startMatch() {
   match.running = true;
@@ -172,6 +185,7 @@ function startRound() {
   match.deadline = now() + RULES.BUY_TIME;
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
+  match.noSmokeZones = []; match.vortexPulls = []; match.levit = null; // Гера: развеивание/воронка/невесомость
   match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = []; match._poppedClones = new Set();
   match.corpses = []; match.pickups = []; match._pickupSeq = 1; // трупы (для кровопира) и брошенное оружие
   // шип получает ОДИН случайный атакер (людям — приоритет)
@@ -525,7 +539,7 @@ function onMessage(p, msg) {
       const dur = Math.min(15, Number(msg.dur) || 5);
       const r = Math.min(6.5, Number(msg.r) || 3);
       if (msg.ztype === 'smoke') {
-        match.smokes.push({ pos: msg.pos, r, until: now() + dur });
+        if (!smokeBlocked(msg.pos, p.team)) match.smokes.push({ pos: msg.pos, r, until: now() + dur, team: p.team });
       } else if (msg.ztype === 'firewall') {
         match.zones.push({ type: 'seg', a: msg.a, b: msg.b, r: 1.3, dps: ABILITY.FIRE_DPS, from: now(), until: now() + dur, owner: p.id });
       } else {
@@ -684,9 +698,9 @@ function onAbility(p, msg) {
     if (p.char !== 'denis') return;
     match.scents.push({ owner: p.id, team: p.team, pos: [msg.data.pos[0], msg.data.pos[2]], until: now() + ABILITY.SCENT_LIFE, pinged: new Map() });
   } else if (kind === 'smokes') {
-    // дымы: запоминаем для LOS ботов
+    // дымы: запоминаем для LOS ботов (team нужен Гере, чтобы отличать вражеский дым)
     for (const pos of msg.data.positions || []) {
-      match.smokes.push({ pos, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
+      if (!smokeBlocked(pos, p.team)) match.smokes.push({ pos, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME, team: p.team });
     }
   } else if (kind === 'sovaShock') {
     // Сова C — шок-стрела: летит и на ПОПАДАНИИ (после долёта) бьёт по области
@@ -735,6 +749,43 @@ function onAbility(p, msg) {
       if (wave < ABILITY.SOVA_FURY_WAVES) setTimeout(fire, 320);
     };
     fire();
+  } else if (kind === 'geraDispel') {
+    // Гера C — «Развеятель»: развеивает ВРАЖЕСКИЕ дымы в радиусе + не даёт ставить новые пару секунд
+    if (p.char !== 'gera') return;
+    const c = msg.data.pos || msg.data.to || p.lastPos;
+    match.smokes = match.smokes.filter(s => s.team === p.team || Math.hypot(s.pos[0] - c[0], (s.pos[2] || 0) - c[2]) >= ABILITY.GERA_DISPEL_R);
+    match.noSmokeZones.push({ team: p.team, pos: [c[0], c[1] || 0, c[2]], r: ABILITY.GERA_DISPEL_R, until: now() + ABILITY.GERA_DISPEL_BLOCK });
+  } else if (kind === 'geraGrapple') {
+    // Гера Q — грэпл: движение считает клиент (как дэш Макса); сервер только ретранслирует FX
+    if (p.char !== 'gera') return;
+  } else if (kind === 'geraVortex') {
+    // Гера E — «Воронка»: конус перед собой стягивает врагов к центру
+    if (p.char !== 'gera') return;
+    if (msg.data.from && msg.data.dir) {
+      const f = msg.data.from;
+      const dl = Math.hypot(msg.data.dir[0], msg.data.dir[2]) || 1;
+      const dx = msg.data.dir[0] / dl, dz = msg.data.dir[2] / dl;
+      const cx = f[0] + dx * ABILITY.GERA_VORTEX_RANGE * 0.55, cz = f[2] + dz * ABILITY.GERA_VORTEX_RANGE * 0.55;
+      const botIds = [];
+      for (const e of players.values()) {
+        if (e.team === p.team || !e.alive) continue;
+        const ex = e.lastPos[0] - f[0], ez = e.lastPos[2] - f[2];
+        const ed = Math.hypot(ex, ez);
+        if (ed > ABILITY.GERA_VORTEX_RANGE || ed < 0.3) continue;
+        if ((ex / ed) * dx + (ez / ed) * dz < Math.cos(ABILITY.GERA_VORTEX_HALFANG)) continue;  // вне конуса
+        if (!losClear([f[0], 1.3, f[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
+        if (e.bot) botIds.push(e.id);
+        else send(e, { t: 'geraPull', to: [cx, cz], dur: ABILITY.GERA_VORTEX_TIME });  // человек тянет себя сам
+      }
+      if (botIds.length) match.vortexPulls.push({ team: p.team, until: now() + ABILITY.GERA_VORTEX_TIME, cx, cz, bots: botIds });
+    }
+  } else if (kind === 'geraUlt') {
+    // Гера X (ульта) — «Невесомость»: купол, враги теряют опору (слоу + всплытие + подсветка команде Геры)
+    if (p.char !== 'gera' || p.ult < cost) return;
+    p.ult -= cost;
+    send(p, { t: 'ultPts', pts: p.ult });
+    const c = msg.data.pos || p.lastPos;
+    match.levit = { by: p.id, team: p.team, pos: [c[0], c[1] || 0, c[2]], r: ABILITY.GERA_ULT_R, until: now() + ABILITY.GERA_ULT_TIME, _pingT: 0 };
   }
   broadcast({ t: 'ability', id: p.id, kind, data: msg.data || {} });
 }
@@ -900,7 +951,8 @@ function botShoot(bot, e, dist) {
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
   if (TICK_TELEMETRY) _botShots++;
   // адекватный вызов: попадают заметно чаще, иногда вешают голову
-  const pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
+  let pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
+  if (now() < bot.levitUntil) pHit *= 0.35; // всплыл в «Невесомости» — мажет
   if (Math.random() < pHit) {
     if (TICK_TELEMETRY) _botHits++;
     const head = Math.random() < 0.13;  // 13% голов
@@ -934,7 +986,8 @@ function botFlash(bot, enemy, tapok) {
 }
 function botSmoke(bot) {
   const p = [bot.lastPos[0] - Math.sin(bot.yaw) * 6, 0, bot.lastPos[2] - Math.cos(bot.yaw) * 6];
-  match.smokes.push({ pos: p, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
+  if (smokeBlocked(p, bot.team)) return;   // «Развеятель» Геры не даёт поставить дым здесь
+  match.smokes.push({ pos: p, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME, team: bot.team });
   botBroadcastAbility(bot, 'smokes', { positions: [p], stink: bot.char === 'denis' });
 }
 function botHealAllies(bot, pos, r, amount) {
@@ -1044,6 +1097,24 @@ function botUseAbility(bot, seen, combat) {
         cd(7);
       }
       break;
+    case 'gera': {
+      // анти-смокер: развеивает ближайший ВРАЖЕСКИЙ дым; в бою с зарядом — «Невесомость» по врагу
+      const es = match.smokes.find(s => s.team && s.team !== bot.team && t < s.until && Math.hypot(s.pos[0] - bot.lastPos[0], (s.pos[2] || 0) - bot.lastPos[2]) < 13);
+      if (es) {
+        const c = [es.pos[0], es.pos[1] || 0, es.pos[2]];
+        match.smokes = match.smokes.filter(s => s.team === bot.team || Math.hypot(s.pos[0] - c[0], (s.pos[2] || 0) - c[2]) >= ABILITY.GERA_DISPEL_R);
+        match.noSmokeZones.push({ team: bot.team, pos: c, r: ABILITY.GERA_DISPEL_R, until: t + ABILITY.GERA_DISPEL_BLOCK });
+        botBroadcastAbility(bot, 'geraDispel', { pos: c });
+        cd(9);
+      } else if (bot.ult >= cost && combat && e) {
+        bot.ult -= cost;
+        const c = [e.lastPos[0], 0, e.lastPos[2]];
+        match.levit = { by: bot.id, team: bot.team, pos: c, r: ABILITY.GERA_ULT_R, until: t + ABILITY.GERA_ULT_TIME, _pingT: 0 };
+        botBroadcastAbility(bot, 'geraUlt', { pos: c });
+        cd(14);
+      }
+      break;
+    }
   }
 }
 
@@ -1181,6 +1252,7 @@ function moveToward(bot, target, dt, combat = false) {
   const d = Math.hypot(dx, dz);
   let speed = combat ? 3.6 : 5.5; // в бою идут медленнее (осторожнее)
   if (now() < bot.tagUntil) speed *= 0.62; // словил пулю — вязнет
+  if (now() < bot.levitUntil) speed *= ABILITY.GERA_ULT_SLOW; // «Невесомость» Геры — всплыл, барахтается
   if (d > 0.01) {
     const step = Math.min(d, speed * dt);
     const bx = bot.lastPos[0], bz = bot.lastPos[2];
@@ -1338,6 +1410,45 @@ setInterval(() => {
       }
     }
   }
+
+  // Гера «Воронка»: тянем ботов-врагов к центру конуса (люди тянут себя сами по маркеру geraPull)
+  if (match.vortexPulls.length) {
+    for (const vp of match.vortexPulls) {
+      if (t >= vp.until) continue;
+      for (const id of vp.bots) {
+        const e = players.get(id);
+        if (!e || !e.alive || !e.bot) continue;
+        const dx = vp.cx - e.lastPos[0], dz = vp.cz - e.lastPos[2], d = Math.hypot(dx, dz);
+        if (d > 0.8) {
+          const step = Math.min(d - 0.6, ABILITY.GERA_VORTEX_PULL * 0.05);
+          const [nx, nz] = collideXZ(e.lastPos[0], e.lastPos[2], e.lastPos[0] + dx / d * step, e.lastPos[2] + dz / d * step, e.lastPos[1]);
+          e.lastPos[0] = nx; e.lastPos[2] = nz;
+        }
+      }
+    }
+    match.vortexPulls = match.vortexPulls.filter(vp => t < vp.until);
+  }
+
+  // Гера «Невесомость»: враги в куполе всплывают — слоу+мажут (levitUntil, см. moveToward/botShoot) + подсветка команде Геры
+  if (match.levit) {
+    if (t >= match.levit.until) match.levit = null;
+    else {
+      const L = match.levit;
+      const ping = t > L._pingT;
+      if (ping) L._pingT = t + 0.4;
+      for (const e of players.values()) {
+        if (e.team === L.team || !e.alive) continue;
+        if (Math.hypot(e.lastPos[0] - L.pos[0], e.lastPos[2] - L.pos[2]) >= L.r) continue;
+        e.levitUntil = t + 0.15;   // «потерял опору»: боты замедляются и мажут
+        if (ping) {
+          broadcast({ t: 'ability', id: L.by, kind: 'sovaPing', data: { target: e.id } }); // лёгкая мишень — подсветка команде Геры
+          if (!e.bot) send(e, { t: 'geraLevit', until: L.until });  // человек: клиент сам всплывает/вязнет
+        }
+      }
+    }
+  }
+  // истёкшие анти-смок зоны Геры
+  if (match.noSmokeZones.length) match.noSmokeZones = match.noSmokeZones.filter(z => t < z.until);
 
   if (liveish()) {
     // урон зон по ботам (люди сами репортят selfDamage)

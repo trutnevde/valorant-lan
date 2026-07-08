@@ -471,7 +471,7 @@ export class Effects {
   // ===== дым (обычный серый или зелёная вонючка Дениса) =====
   // Плотный ОБЪЁМНЫЙ дым: ядро-сфера (DoubleSide, чтобы изнутри тоже было глухо)
   // + густое облако клубов-биллбордов, заполняющих объём — внутри ничего не видно.
-  smoke(pos, r, dur, stink = false) {
+  smoke(pos, r, dur, stink = false, maxOp = 1) {   // maxOp<1 — пассивка Геры «Ясный глаз»: вражеский дым полупрозрачен
     const color = stink ? 0x5c7a3e : 0x9aa6b0;
     const group = new THREE.Group();
     group.position.set(pos.x, Math.max(pos.y, 0), pos.z);
@@ -510,9 +510,9 @@ export class Effects {
       update: (dt) => {
         t += dt;
         const env = t < 0.35 ? t / 0.35 : (t > dur - 0.7 ? Math.max(0, (dur - t) / 0.7) : 1);
-        coreMat.opacity = env;               // ПОЛНОСТЬЮ плотный (1.0)
-        innerMat.opacity = env;
-        puffMat.opacity = env * 0.92;        // общий материал — задаём один раз (не ×12)
+        coreMat.opacity = env * maxOp;       // ПОЛНОСТЬЮ плотный (1.0), кроме взгляда Геры сквозь вражеский дым
+        innerMat.opacity = env * maxOp;
+        puffMat.opacity = env * 0.92 * maxOp; // общий материал — задаём один раз (не ×12)
         puffMat.rotation += dt * 0.1;
         for (const s of puffs) s.position.y = s.userData.baseY + Math.sin(t * 0.8 + s.userData.ph) * 0.15;
         core.rotation.y += dt * 0.15;

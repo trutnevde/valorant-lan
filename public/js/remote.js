@@ -359,6 +359,24 @@ function addCostume(char, cfg, ctx) {
     const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), S(cfg.color));
     pauldron.position.set(0.2, 0.52, 0); pauldron.scale.set(1, 0.7, 1.2);
     hips.add(pauldron);
+  } else if (char === 'gera') {
+    // ===== анти-смокер: очки-сканер (видит сквозь дым) + ранец-«Развеятель» =====
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.09, 0.05),
+      new THREE.MeshStandardMaterial({ color: 0xeafffb, emissive: 0x5fe0d0, emissiveIntensity: 0.9, roughness: 0.2 }));
+    visor.position.set(0, 0.08, 0.19);
+    headPivot.add(visor);
+    const pack = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.3, 0.12), S(cfg.darkColor));
+    pack.position.set(0, 0.5, -0.2);
+    hips.add(pack);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8),
+      new THREE.MeshStandardMaterial({ color: 0x5fe0d0, emissive: 0x5fe0d0, emissiveIntensity: 1.1, roughness: 0.3 }));
+    core.position.set(0, 0.52, -0.27);
+    hips.add(core);
+    for (const sx of [-0.2, 0.2]) {
+      const pauldron = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), S(cfg.color));
+      pauldron.position.set(sx, 0.52, 0); pauldron.scale.set(1, 0.7, 1.2);
+      hips.add(pauldron);
+    }
   }
 }
 
