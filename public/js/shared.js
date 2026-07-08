@@ -241,6 +241,7 @@ export const ABILITY = {
   ACID_R: 3.2, ACID_TIME: 6, ACID_DPS: 12, ACID_SLOW: 0.7,
   COCOON_RANGE: 30, COCOON_SPEED: 45, COCOON_HIT_DMG: 30,
   COCOON_TIME: 2.6, COCOON_HP: 150, COCOON_FREE_DMG: 20,
+  DENIS_REGEN: 3.5, DENIS_REGEN_CAP: 100, DENIS_REGEN_DELAY: 4,  // пассивка Дениса: медленный саморег HP до кэпа, если не били DELAY сек
   // Ира (KFC-поддержка)
   CRISPY_LEN: 10, CRISPY_TIME: 15, CRISPY_SLOW: 0.6, CRISPY_HEAL: 20,   // хил/сек, пока союзник в стене
   BUFFET_R: 8, BUFFET_HEAL: 50, BUFFET_ARM_TIME: 1.2,

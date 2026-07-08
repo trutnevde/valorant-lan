@@ -61,7 +61,7 @@ const $ = (id) => document.getElementById(id);
 const now = () => performance.now() / 1000;
 
 // маркер брошенного оружия на земле (силуэт ствола + подсветка-кольцо)
-function makePickupMarker(pos) {
+function makePickupMarker(pos, seeThrough = false) {
   const g = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.13),
     new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.5, metalness: 0.4 }));
@@ -71,6 +71,9 @@ function makePickupMarker(pos) {
     new THREE.MeshBasicMaterial({ color: 0x14d3c0, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
   ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
   g.add(ring);
+  if (seeThrough) {   // пассивка Совы: видит иконки брошенного оружия СКВОЗЬ стены
+    g.traverse(o => { if (o.material) { o.material.depthTest = false; o.material.transparent = true; o.renderOrder = 999; } });
+  }
   g.position.set(pos[0], pos[1] || 0, pos[2]);
   return g;
 }
@@ -348,11 +351,13 @@ function onMessage(msg) {
       G.me.credits = msg.credits;
       G.hud.setCredits(msg.credits);
       break;
-    case 'stun':
-      G.stunnedUntil = now() + (msg.dur || 1);
+    case 'stun': {
+      const cc = (G.me && G.me.char === 'fafik') ? 0.7 : 1;  // пассивка Фафика: контузия короче на 30%
+      G.stunnedUntil = now() + (msg.dur || 1) * cc;
       G.shake = Math.max(G.shake, 2);
       G.hud.announce('', 'ОГЛУШЕНИЕ', 1.2);
       break;
+    }
     case 'geraPull': {
       // «Воронка» Геры стягивает меня к центру конуса (частичный само-подтяг)
       const cur = G.player.pos;
@@ -373,7 +378,7 @@ function onMessage(msg) {
       break;
     case 'weaponDrop': {
       if (!G.pickupMarkers) G.pickupMarkers = new Map();
-      const m = makePickupMarker(msg.pos);
+      const m = makePickupMarker(msg.pos, G.me && G.me.char === 'sova');  // Сова видит сквозь стены
       G.scene.add(m);
       G.pickupMarkers.set(msg.id, m);
       break;

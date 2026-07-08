@@ -56,6 +56,7 @@ export class LocalPlayer {
     let f = cs.speedMul * G.slowMul;
     if (t < G.boostUntil) f *= 1.4;          // Порыв Макса
     if (t < G.gallopUntil) f *= 1.5;         // Галоп Конилия
+    if (this._konRampActive) f *= 1.12;      // пассивка Конилия «Разгон»: разогнался бегом прямо
     if (t < G.banquetUntil) f *= 1.15;       // Финальный банкет Иры
     if (t < G.levitUntil) f *= ABILITY.GERA_ULT_SLOW; // «Невесомость» Геры — всплыл, барахтается
     if (t < G.tagUntil) f *= 0.62;           // словил пулю — «tagging», как в CS
@@ -161,6 +162,20 @@ export class LocalPlayer {
 
     this.moveCollide(dt);
 
+    // Пассивка Конилия «Разгон»: 2с бега прямо без стрельбы/резкого поворота → +12% скорости; сброс поворотом/выстрелом
+    if (G.me && G.me.char === 'koniliy') {
+      const tt = performance.now() / 1000;
+      const hS = Math.hypot(this.vel.x, this.vel.z);
+      let dyaw = Math.abs(this.yaw - (this._konYaw != null ? this._konYaw : this.yaw));
+      if (dyaw > Math.PI) dyaw = Math.abs(dyaw - Math.PI * 2);
+      this._konYaw = this.yaw;
+      const shotRecent = tt - (G.lastShotT || -99) < 0.5;
+      this._konRamp = (this.grounded && hS > 3.5 && dyaw < 0.06 && !shotRecent) ? (this._konRamp || 0) + dt : 0;
+      this._konRampActive = this._konRamp >= 2;
+    } else {
+      this._konRampActive = false;
+    }
+
     // шаги: слышны и создают шум ТОЛЬКО при беге (шифт/присед — бесшумны)
     if (this.grounded && !this.walk && !this.crouch) {
       const hSpeed = Math.hypot(this.vel.x, this.vel.z);
@@ -168,8 +183,9 @@ export class LocalPlayer {
         this.stepDist += hSpeed * dt;
         if (this.stepDist > 2.7) {
           this.stepDist = 0;
-          G.sfx.footstep(0.55);
-          if (G.me.alive && G.liveish()) G.net.send({ t: 'noise', kind: 'step' }); // боты слышат
+          const silent = G.me.char === 'max';   // пассивка Макса «Ветер»: бесшумный бег — тише и без шума для ботов
+          G.sfx.footstep(silent ? 0.22 : 0.55);
+          if (!silent && G.me.alive && G.liveish()) G.net.send({ t: 'noise', kind: 'step' }); // боты слышат
         }
       }
     }

@@ -944,7 +944,8 @@ export class Abilities {
         const dot = this.lookDir().dot(toOrb);
         if (G.me.alive && dist < 40 && dot > 0.3 && this.losClear(eye, o.pos)) {
           const k = (dot - 0.3) / 0.7;
-          G.blindUntil = t + 0.4 + k * (ABILITY.FLASH_MAX_BLIND - 0.4);
+          const cc = this.char === 'fafik' ? 0.7 : 1;   // пассивка Фафика «Батина закалка»: ослепление короче на 30%
+          G.blindUntil = t + (0.4 + k * (ABILITY.FLASH_MAX_BLIND - 0.4)) * cc;
           G.blindStink = o.stink;
         }
         // владелец сообщает серверу — тот ослепляет смотрящих ботов

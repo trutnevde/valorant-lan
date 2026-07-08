@@ -264,6 +264,7 @@ export class WeaponSystem {
 
   shoot() {
     const G = this.G, w = this.w, id = this.currentId;
+    G.lastShotT = now();   // сбрасывает «Разгон» Конилия
     const eye = G.player.eyePos();
     const baseDir = this.aimDir();
     const pellets = w.pellets || 1;

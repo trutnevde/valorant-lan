@@ -81,7 +81,7 @@ function newPlayer(id, ws, bot = false) {
     loadout: { primary: null, sidearm: 'classic' },
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
-    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0, levitUntil: 0,
+    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0, levitUntil: 0, lastDmgT: -99, _regFrac: 0,
     ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0, reactAt: 0, holdSpot: null } : null,
   };
 }
@@ -276,6 +276,7 @@ function applyDamage(victim, rawDmg, attackerId, weapon, part) {
   }
   victim.hp = Math.round(victim.hp - dmg);
   victim.tagUntil = now() + 0.45; // «tagging»: пуля вяжет ноги (для ботов — серверно)
+  victim.lastDmgT = now();        // для пассивного регена Дениса (реген только вне боя)
   broadcast({ t: 'hp', id: victim.id, hp: victim.hp, armor: victim.armor, by: attackerId, part });
   if (victim.hp <= 0) onDeath(victim, attackerId, weapon, part);
 }
@@ -1497,6 +1498,14 @@ setInterval(() => {
       if (!p.alive || t >= p._hotUntil || p.hp >= p.maxHp) continue;
       p._healFrac = (p._healFrac || 0) + p._hotRate * 0.05;
       if (p._healFrac >= 1) { const whole = Math.floor(p._healFrac); p._healFrac -= whole; heal(p, whole); }
+    }
+
+    // Пассивка Дениса «Регенерация мясника»: медленный саморег HP вне боя до кэпа
+    for (const p of players.values()) {
+      if (!p.alive || p.char !== 'denis' || p.hp >= Math.min(p.maxHp, ABILITY.DENIS_REGEN_CAP)) continue;
+      if (t - (p.lastDmgT || -99) < ABILITY.DENIS_REGEN_DELAY) continue;  // недавно били — не регенит
+      p._regFrac = (p._regFrac || 0) + ABILITY.DENIS_REGEN * 0.05;
+      if (p._regFrac >= 1) { const whole = Math.floor(p._regFrac); p._regFrac -= whole; heal(p, whole); }
     }
 
     // Денис: «нюх мясника» — приманки палят врагов команде (раненых чуют вдвое дальше)
