@@ -13,6 +13,14 @@ const SAMPLES = {
   step1: 'assets/sfx/step1.ogg', step2: 'assets/sfx/step2.ogg', step3: 'assets/sfx/step3.ogg',
   step4: 'assets/sfx/step4.ogg', step5: 'assets/sfx/step5.ogg', step6: 'assets/sfx/step6.ogg',
   explosion: 'assets/sfx/explosion.ogg',
+  // фидбек/скиллы/шип/UI — реальные записи вместо синтезированных «пик»
+  whoosh: 'assets/sfx/whoosh.ogg', whoosh2: 'assets/sfx/whoosh2.ogg',
+  hit: 'assets/sfx/hit.ogg', ting: 'assets/sfx/ting.ogg', hurt: 'assets/sfx/hurt.ogg',
+  slam: 'assets/sfx/slam.ogg', pop: 'assets/sfx/pop.ogg', buff: 'assets/sfx/buff.ogg',
+  confirm: 'assets/sfx/confirm.ogg', fail: 'assets/sfx/fail.ogg',
+  energy: 'assets/sfx/energy.ogg', zap: 'assets/sfx/zap.ogg',
+  beep: 'assets/sfx/beep.ogg', clunk: 'assets/sfx/clunk.ogg', boom: 'assets/sfx/boom.ogg',
+  ui_click: 'assets/sfx/ui_click.wav', ui_confirm: 'assets/sfx/ui_confirm.wav',
 };
 // какой ствол каким сэмплом звучит (нож — остаётся синтезом)
 const SHOT_SAMPLE = {
@@ -251,7 +259,7 @@ export class Sfx {
         this.noise({ dur: 0.12, vol: 0.2 * vol, fc: 1800, fc2: 240 });
     }
   }
-  dry() { this.crack({ vol: 0.1, fc: 4000, dur: 0.02, drive: 2 }); this.tone({ f: 1100, dur: 0.02, vol: 0.08, type: 'square' }); }
+  dry() { if (this.playBuf('ui_click', { vol: 0.3, rate: 0.75 })) return; this.crack({ vol: 0.1, fc: 4000, dur: 0.02, drive: 2 }); this.tone({ f: 1100, dur: 0.02, vol: 0.08, type: 'square' }); }
   reload() {
     if (this.playBuf(Math.random() < 0.5 ? 'reload1' : 'reload2', { vol: 0.85 })) return;
     // фолбэк-синтез: защёлка магазина — три разных клика с разным тембром
@@ -270,21 +278,21 @@ export class Sfx {
   }
 
   // ===== фидбек =====
-  hitmarker() { this.tone({ f: 1400, f2: 900, dur: 0.05, vol: 0.2, type: 'square' }); }
-  headshot() { this.tone({ f: 1800, f2: 2400, dur: 0.09, vol: 0.3, type: 'square' }); }
-  hurt() { this.tone({ f: 220, f2: 110, dur: 0.12, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.08, vol: 0.2, fc: 800 }); }
-  kill() { this.tone({ f: 600, dur: 0.08, vol: 0.25 }); this.tone({ f: 900, dur: 0.1, vol: 0.25, delay: 0.08 }); }
-  buy() { this.tone({ f: 800, f2: 1200, dur: 0.08, vol: 0.2, type: 'triangle' }); }
-  error() { this.tone({ f: 200, dur: 0.12, vol: 0.2, type: 'square' }); }
-  click() { this.tone({ f: 600, dur: 0.03, vol: 0.1 }); }
+  hitmarker() { if (this.playBuf('hit', { vol: 0.5, rate: 0.95 + Math.random() * 0.1 })) return; this.tone({ f: 1400, f2: 900, dur: 0.05, vol: 0.2, type: 'square' }); }
+  headshot() { if (this.playBuf('ting', { vol: 0.6 })) return; this.tone({ f: 1800, f2: 2400, dur: 0.09, vol: 0.3, type: 'square' }); }
+  hurt() { if (this.playBuf('hurt', { vol: 0.7 })) return; this.tone({ f: 220, f2: 110, dur: 0.12, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.08, vol: 0.2, fc: 800 }); }
+  kill() { if (this.playBuf('confirm', { vol: 0.5 })) return; this.tone({ f: 600, dur: 0.08, vol: 0.25 }); this.tone({ f: 900, dur: 0.1, vol: 0.25, delay: 0.08 }); }
+  buy() { if (this.playBuf('ui_confirm', { vol: 0.6 })) return; this.tone({ f: 800, f2: 1200, dur: 0.08, vol: 0.2, type: 'triangle' }); }
+  error() { if (this.playBuf('clunk', { vol: 0.5, rate: 0.8 })) return; this.tone({ f: 200, dur: 0.12, vol: 0.2, type: 'square' }); }
+  click() { if (this.playBuf('ui_click', { vol: 0.4 })) return; this.tone({ f: 600, dur: 0.03, vol: 0.1 }); }
 
   // ===== способности =====
-  flashThrow() { this.noise({ dur: 0.15, vol: 0.2, fc: 2000, fc2: 3500, type: 'bandpass' }); }
-  flashPop(vol = 1) { this.tone({ f: 2500, f2: 4500, dur: 0.4, vol: 0.4 * vol, type: 'sine' }); this.noise({ dur: 0.15, vol: 0.3 * vol, fc: 4000, type: 'highpass' }); }
+  flashThrow() { if (this.playBuf('whoosh', { vol: 0.4, rate: 1.2 })) return; this.noise({ dur: 0.15, vol: 0.2, fc: 2000, fc2: 3500, type: 'bandpass' }); }
+  flashPop(vol = 1) { if (this.playBuf('energy', { vol: 0.5 * vol })) return; this.tone({ f: 2500, f2: 4500, dur: 0.4, vol: 0.4 * vol, type: 'sine' }); this.noise({ dur: 0.15, vol: 0.3 * vol, fc: 4000, type: 'highpass' }); }
   fireIgnite(vol = 1) { this.noise({ dur: 0.5, vol: 0.35 * vol, fc: 900, fc2: 300 }); this.tone({ f: 90, f2: 50, dur: 0.4, vol: 0.2 * vol, type: 'sawtooth' }); }
   fireCrackle(vol = 1) { this.noise({ dur: 0.08, vol: 0.06 * vol, fc: 1200 + Math.random() * 1500, q: 3, type: 'bandpass' }); }
-  hookThrow() { this.noise({ dur: 0.25, vol: 0.3, fc: 1500, fc2: 400, type: 'bandpass' }); this.tone({ f: 300, f2: 150, dur: 0.2, vol: 0.15, type: 'triangle' }); }
-  hookHit() { this.tone({ f: 150, f2: 60, dur: 0.25, vol: 0.5, type: 'sawtooth' }); this.noise({ dur: 0.15, vol: 0.4, fc: 600 }); }
+  hookThrow() { if (this.playBuf('whoosh', { vol: 0.55 })) return; this.noise({ dur: 0.25, vol: 0.3, fc: 1500, fc2: 400, type: 'bandpass' }); this.tone({ f: 300, f2: 150, dur: 0.2, vol: 0.15, type: 'triangle' }); }
+  hookHit() { if (this.playBuf('slam', { vol: 0.75 })) return; this.tone({ f: 150, f2: 60, dur: 0.25, vol: 0.5, type: 'sawtooth' }); this.noise({ dur: 0.15, vol: 0.4, fc: 600 }); }
   rotStart() {
     if (!this.ctx || this.rotNode) return;
     const len = this.ctx.sampleRate;
@@ -318,25 +326,31 @@ export class Sfx {
     this.tone({ f: 100, f2: 45, dur: 0.6, vol: 0.4, type: 'sawtooth' });
     for (let i = 0; i < 6; i++) this.noise({ dur: 0.1, vol: 0.3, fc: 500 + Math.random() * 400, delay: i * 0.4 });
   }
-  phoenixUlt() { this.tone({ f: 300, f2: 900, dur: 0.5, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.5, vol: 0.25, fc: 600, fc2: 2000 }); }
+  phoenixUlt() { if (this.playBuf('energy', { vol: 0.6 })) return; this.tone({ f: 300, f2: 900, dur: 0.5, vol: 0.3, type: 'sawtooth' }); this.noise({ dur: 0.5, vol: 0.25, fc: 600, fc2: 2000 }); }
 
   // ===== новые способности v2 =====
   smokePop(stink = false) {
+    if (this.playBuf('pop', { vol: stink ? 0.5 : 0.4, rate: stink ? 0.8 : 1.05 })) return;
     this.noise({ dur: 0.6, vol: 0.3, fc: stink ? 500 : 900, fc2: 150 });
     if (stink) this.tone({ f: 90, f2: 60, dur: 0.5, vol: 0.15, type: 'sawtooth' });
   }
   orbitalWarn() {
+    if (this.buffers && this.buffers.beep) {
+      [0, 0.35, 0.7].forEach((d) => this.playBuf('beep', { vol: 0.45, rate: 1.25, delay: d }));
+      this.playBuf('boom', { vol: 0.7, delay: 1.35 });
+      return;
+    }
     [0, 0.18, 0.36].forEach((d) => this.tone({ f: 880, dur: 0.12, vol: 0.3, type: 'square', delay: d }));
     this.noise({ dur: 2.5, vol: 0.35, fc: 300, fc2: 2000, delay: 1.2 });
     this.tone({ f: 60, f2: 45, dur: 2.5, vol: 0.3, type: 'sawtooth', delay: 1.4 });
   }
-  dash(vol = 1) { this.noise({ dur: 0.22, vol: 0.3 * vol, fc: 1800, fc2: 400, type: 'bandpass' }); }
-  knivesUlt() { [600, 900, 1300].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.25, type: 'triangle', delay: i * 0.09 })); }
-  knifeThrow() { this.noise({ dur: 0.12, vol: 0.25, fc: 3500, fc2: 1500, type: 'bandpass' }); }
-  trapPing() { this.tone({ f: 1500, f2: 2200, dur: 0.2, vol: 0.3, type: 'sine' }); }
-  turretPlace() { this.tone({ f: 400, f2: 700, dur: 0.15, vol: 0.25, type: 'square' }); this.noise({ dur: 0.1, vol: 0.2, fc: 2000, delay: 0.12 }); }
+  dash(vol = 1) { if (this.playBuf('whoosh2', { vol: 0.5 * vol })) return; this.noise({ dur: 0.22, vol: 0.3 * vol, fc: 1800, fc2: 400, type: 'bandpass' }); }
+  knivesUlt() { if (this.playBuf('energy', { vol: 0.5, rate: 1.1 })) return; [600, 900, 1300].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.25, type: 'triangle', delay: i * 0.09 })); }
+  knifeThrow() { if (this.playBuf('whoosh', { vol: 0.35, rate: 1.4 })) return; this.noise({ dur: 0.12, vol: 0.25, fc: 3500, fc2: 1500, type: 'bandpass' }); }
+  trapPing() { if (this.playBuf('ting', { vol: 0.35 })) return; this.tone({ f: 1500, f2: 2200, dur: 0.2, vol: 0.3, type: 'sine' }); }
+  turretPlace() { if (this.playBuf('clunk', { vol: 0.55 })) return; this.tone({ f: 400, f2: 700, dur: 0.15, vol: 0.25, type: 'square' }); this.noise({ dur: 0.1, vol: 0.2, fc: 2000, delay: 0.12 }); }
   turretShot(vol = 1) { this.noise({ dur: 0.05, vol: 0.3 * vol, fc: 2600, fc2: 800 }); }
-  xray() { this.tone({ f: 300, f2: 1600, dur: 0.6, vol: 0.3, type: 'sine' }); this.tone({ f: 450, f2: 2400, dur: 0.6, vol: 0.2, type: 'sine', delay: 0.1 }); }
+  xray() { if (this.playBuf('energy', { vol: 0.55, rate: 0.85 })) return; this.tone({ f: 300, f2: 1600, dur: 0.6, vol: 0.3, type: 'sine' }); this.tone({ f: 450, f2: 2400, dur: 0.6, vol: 0.2, type: 'sine', delay: 0.1 }); }
   puddleSplat(vol = 1) { this.noise({ dur: 0.25, vol: 0.35 * vol, fc: 600, fc2: 150 }); }
 
   // ===== Ира (KFC) =====
@@ -370,10 +384,11 @@ export class Sfx {
   }
 
   // ===== Фафик (бати) =====
-  dadClones() { [440, 440, 440, 550].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.22, type: 'square', delay: i * 0.11 })); this.noise({ dur: 0.3, vol: 0.15, fc: 1000, fc2: 3000, delay: 0.3 }); }
-  dadDeClone() { this.noise({ dur: 0.3, vol: 0.2, fc: 3000, fc2: 400 }); this.tone({ f: 600, f2: 200, dur: 0.2, vol: 0.2, type: 'triangle' }); }
+  dadClones() { if (this.playBuf('energy', { vol: 0.5, rate: 0.9 })) return; [440, 440, 440, 550].forEach((f, i) => this.tone({ f, dur: 0.12, vol: 0.22, type: 'square', delay: i * 0.11 })); this.noise({ dur: 0.3, vol: 0.15, fc: 1000, fc2: 3000, delay: 0.3 }); }
+  dadDeClone() { if (this.playBuf('whoosh', { vol: 0.5, rate: 0.9 })) return; this.noise({ dur: 0.3, vol: 0.2, fc: 3000, fc2: 400 }); this.tone({ f: 600, f2: 200, dur: 0.2, vol: 0.2, type: 'triangle' }); }
   // клон лопнул + станящий шоквейв
   clonePop(vol = 1) {
+    if (this.buffers && this.buffers.slam) { this.playBuf('slam', { vol: 0.55 * vol }); this.playBuf('zap', { vol: 0.4 * vol, delay: 0.02 }); return; }
     this.crack({ vol: 0.4 * vol, fc: 2200, dur: 0.05, drive: 8 });
     this.noise({ dur: 0.35, vol: 0.35 * vol, fc: 2600, fc2: 300, type: 'bandpass' }); // выброс
     this.body({ f: 150, f2: 45, dur: 0.3, vol: 0.35 * vol, type: 'sine' });           // гулкий бас-удар
@@ -381,8 +396,8 @@ export class Sfx {
   }
 
   // ===== Ира (KFC-поддержка) =====
-  throwLight() { this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 800, type: 'bandpass' }); }
-  chickenSpawn() { this.tone({ f: 500, f2: 900, dur: 0.12, vol: 0.2, type: 'square' }); this.chickenCluck(0.6); }
+  throwLight() { if (this.playBuf('whoosh', { vol: 0.4, rate: 1.3 })) return; this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 800, type: 'bandpass' }); }
+  chickenSpawn() { if (this.buffers && this.buffers.pop) { this.playBuf('pop', { vol: 0.3, rate: 1.2 }); this.chickenCluck(0.6); return; } this.tone({ f: 500, f2: 900, dur: 0.12, vol: 0.2, type: 'square' }); this.chickenCluck(0.6); }
   // «кудах-тах-тах» — восходяще-нисходящие писки
   chickenCluck(vol = 1) {
     const seq = [900, 1300, 1100, 1500, 800];
@@ -395,11 +410,13 @@ export class Sfx {
     this.tone({ f: 300, f2: 200, dur: 0.2, vol: 0.15 * vol, type: 'triangle' });
   }
   buffetPop(vol = 1) {
+    if (this.playBuf('buff', { vol: 0.6 * vol })) return;
     this.tone({ f: 400, f2: 800, dur: 0.25, vol: 0.3 * vol, type: 'sine' });
     this.noise({ dur: 0.4, vol: 0.25 * vol, fc: 1200, fc2: 3000, type: 'bandpass' }); // шипение пара
     [660, 880, 1046].forEach((f, i) => this.tone({ f, dur: 0.15, vol: 0.15 * vol, type: 'triangle', delay: 0.1 + i * 0.08 }));
   }
   banquetSummon() {
+    if (this.buffers && this.buffers.buff) { this.playBuf('buff', { vol: 0.75 }); this.playBuf('confirm', { vol: 0.4, delay: 0.22 }); this.chickenCluck(1); return; }
     // фанфары + гулкий бас-«шлепок» гигантского ведра
     [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.22, vol: 0.28, type: 'triangle', delay: i * 0.12 }));
     this.tone({ f: 90, f2: 50, dur: 0.6, vol: 0.4, type: 'sine', delay: 0.5 });
@@ -408,14 +425,18 @@ export class Sfx {
 
   // ===== шип =====
   spikeBeep(fast = false) {
+    if (this.playBuf('beep', { vol: 0.3, rate: fast ? 1.35 : 1.0 })) return;
     this.tone({ f: fast ? 2300 : 1850, dur: 0.05, vol: 0.24, type: 'square' });
     this.tone({ f: fast ? 3200 : 2600, dur: 0.03, vol: 0.1, type: 'sine', delay: 0.01 });
   }
-  plantTick() { this.crack({ vol: 0.1, fc: 3500, dur: 0.02, drive: 2 }); this.tone({ f: 900, dur: 0.03, vol: 0.12, type: 'square' }); }
+  plantTick() { if (this.playBuf('ui_click', { vol: 0.3, rate: 1.2 })) return; this.crack({ vol: 0.1, fc: 3500, dur: 0.02, drive: 2 }); this.tone({ f: 900, dur: 0.03, vol: 0.12, type: 'square' }); }
   // ЕДИНЫЙ тик разминирования — звучит одинаково всегда (для фейков нет «прогресса» на слух)
-  defuseTick() { this.tone({ f: 1400, dur: 0.05, vol: 0.16, type: 'sine' }); this.crack({ vol: 0.06, fc: 5000, dur: 0.015 }); }
-  planted() { this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); this.body({ f: 90, f2: 60, dur: 0.4, vol: 0.25, delay: 0.05, type: 'sine' }); }
-  defused() { this.tone({ f: 700, f2: 1200, dur: 0.18, vol: 0.28, type: 'sine' }); this.tone({ f: 1000, f2: 1500, dur: 0.25, vol: 0.24, type: 'triangle', delay: 0.14 }); }
+  defuseTick() { if (this.playBuf('ui_click', { vol: 0.28, rate: 1.5 })) return; this.tone({ f: 1400, dur: 0.05, vol: 0.16, type: 'sine' }); this.crack({ vol: 0.06, fc: 5000, dur: 0.015 }); }
+  planted() {
+    if (this.buffers && this.buffers.slam) { this.playBuf('slam', { vol: 0.6 }); this.playBuf('beep', { vol: 0.4, rate: 0.8, delay: 0.28 }); return; }
+    this.tone({ f: 700, dur: 0.15, vol: 0.3 }); this.tone({ f: 500, dur: 0.25, vol: 0.3, delay: 0.15 }); this.body({ f: 90, f2: 60, dur: 0.4, vol: 0.25, delay: 0.05, type: 'sine' });
+  }
+  defused() { if (this.playBuf('confirm', { vol: 0.75 })) return; this.tone({ f: 700, f2: 1200, dur: 0.18, vol: 0.28, type: 'sine' }); this.tone({ f: 1000, f2: 1500, dur: 0.25, vol: 0.24, type: 'triangle', delay: 0.14 }); }
   explosion() {
     if (this.playBuf('explosion', { vol: 1.0, rate: 0.92 + Math.random() * 0.12 })) return;
     // фолбэк-синтез
@@ -424,9 +445,9 @@ export class Sfx {
   }
 
   // ===== раунды =====
-  roundStart() { this.tone({ f: 440, dur: 0.1, vol: 0.2 }); this.tone({ f: 660, dur: 0.15, vol: 0.2, delay: 0.12 }); }
-  roundWin() { [523, 659, 784].forEach((f, i) => this.tone({ f, dur: 0.18, vol: 0.25, type: 'triangle', delay: i * 0.13 })); }
-  roundLose() { [392, 330, 262].forEach((f, i) => this.tone({ f, dur: 0.2, vol: 0.25, type: 'triangle', delay: i * 0.15 })); }
-  matchWin() { [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.16 })); }
-  matchLose() { [330, 294, 262, 196].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.18 })); }
+  roundStart() { if (this.playBuf('whoosh', { vol: 0.5 })) return; this.tone({ f: 440, dur: 0.1, vol: 0.2 }); this.tone({ f: 660, dur: 0.15, vol: 0.2, delay: 0.12 }); }
+  roundWin() { if (this.playBuf('confirm', { vol: 0.7 })) return; [523, 659, 784].forEach((f, i) => this.tone({ f, dur: 0.18, vol: 0.25, type: 'triangle', delay: i * 0.13 })); }
+  roundLose() { if (this.playBuf('fail', { vol: 0.6 })) return; [392, 330, 262].forEach((f, i) => this.tone({ f, dur: 0.2, vol: 0.25, type: 'triangle', delay: i * 0.15 })); }
+  matchWin() { if (this.buffers && this.buffers.confirm) { this.playBuf('confirm', { vol: 0.8 }); this.playBuf('buff', { vol: 0.5, delay: 0.25 }); return; } [523, 659, 784, 1046].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.16 })); }
+  matchLose() { if (this.playBuf('fail', { vol: 0.7, rate: 0.9 })) return; [330, 294, 262, 196].forEach((f, i) => this.tone({ f, dur: 0.3, vol: 0.3, type: 'triangle', delay: i * 0.18 })); }
 }

@@ -39,6 +39,18 @@ const SFX = [
   ['04-footstep.ogg', 'step4.ogg'], ['05-footstep.ogg', 'step5.ogg'], ['06-footstep.ogg', 'step6.ogg'],
   ['explosion1_0.ogg', 'explosion.ogg'],
 ];
+// звуки скиллов/шипа/фидбека из CC0-паков rubberduck «100 CC0 SFX» (zip). Нужен unzip в PATH.
+const SFX_ZIPS = [
+  { url: `${OGA}/100-CC0-SFX_0.zip`, pick: {
+    'hit_01.ogg': 'hit.ogg', 'metal_02.ogg': 'ting.ogg', 'slam_02.ogg': 'slam.ogg', 'plop_01.ogg': 'pop.ogg',
+    'bell_02.ogg': 'buff.ogg', 'bell_01.ogg': 'confirm.ogg', 'gong_01.ogg': 'fail.ogg',
+    'weird_01.ogg': 'energy.ogg', 'weird_03.ogg': 'zap.ogg', 'bell_03.ogg': 'beep.ogg', 'metal_05.ogg': 'clunk.ogg' } },
+  { url: `${OGA}/sfx_100_v2.zip`, pick: {
+    'sfx100v2_air_01.ogg': 'whoosh.ogg', 'sfx100v2_air_02.ogg': 'whoosh2.ogg',
+    'sfx100v2_hit_02.ogg': 'hurt.ogg', 'sfx100v2_thunder_01.ogg': 'boom.ogg' } },
+];
+// UI-клики Kenney (CC0)
+const KENNEY_UI = 'https://raw.githubusercontent.com/Calinou/kenney-ui-audio/master/addons/kenney_ui_audio';
 
 function mkdir(p) { fs.mkdirSync(p, { recursive: true }); }
 
@@ -115,7 +127,28 @@ async function main() {
     console.log('▶ звук', dst);
     await download(`${OGA}/${src}`, path.join(sfxDir, dst));
   }
-  manifest.sfxLicense = 'CC0 — OpenGameArt (public domain)';
+  // доп. звуки скиллов/шипа/UI из zip-паков (best-effort, нужен unzip; файлы и так лежат в репо)
+  for (const z of SFX_ZIPS) {
+    try {
+      const tmp = path.join(ASSETS, '_tmp_sfx');
+      const zip = path.join(tmp, 'p.zip');
+      await download(z.url, zip);
+      execFileSync('unzip', ['-o', '-q', zip, '-d', tmp], { stdio: 'ignore' });
+      const all = [];
+      (function walk(d) { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else all.push(p); } })(tmp);
+      for (const [src, dst] of Object.entries(z.pick)) {
+        const hit = all.find(p => path.basename(p) === src);
+        if (hit) fs.copyFileSync(hit, path.join(sfxDir, dst));
+      }
+      fs.rmSync(tmp, { recursive: true, force: true });
+      console.log('▶ звуки из', path.basename(z.url), '✓');
+    } catch (e) { console.log('  ⚠ пропущен', path.basename(z.url), '(нужен unzip):', e.message); }
+  }
+  try {
+    await download(`${KENNEY_UI}/click1.wav`, path.join(sfxDir, 'ui_click.wav'));
+    await download(`${KENNEY_UI}/click2.wav`, path.join(sfxDir, 'ui_confirm.wav'));
+  } catch (e) { console.log('  ⚠ Kenney UI пропущен:', e.message); }
+  manifest.sfxLicense = 'CC0 — OpenGameArt (rubberduck, Brian MacIntosh) + Kenney UI (public domain)';
 
   fs.writeFileSync(path.join(ASSETS, 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log('\n✅ Ассеты скачаны. manifest.json записан. Всё CC0, лежит локально.');
