@@ -756,6 +756,11 @@ function onDeath(msg) {
         G.knives.until = now() + ABILITY.KNIVES_TIME;
         G.weapons.updateHud();
       }
+      // Твист Макса: рывок (C) обновляется за убийство
+      if (G.abilities && G.me.char === 'max') {
+        const maxC = CHARACTERS.max.abilities.C.charges || 2;
+        G.abilities.charges.C = Math.min(maxC, (G.abilities.charges.C || 0) + 1);
+      }
     }
   }
 }

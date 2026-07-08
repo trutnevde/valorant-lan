@@ -1020,7 +1020,8 @@ export class Abilities {
         const enemyZone = z.owner !== G.myId && (!G.players.get(z.owner) || G.players.get(z.owner).team !== G.myTeam);
         if (z.type === 'fire' || z.type === 'wall') {
           if (enemyZone) this.addAccum('fire', ABILITY.FIRE_DPS * dt, z.owner);
-          if (z.owner === G.myId && this.char === 'artemiy' && G.me.hp < G.me.maxHp) this.accum.heal += ABILITY.FIRE_HEAL * dt;
+          // Твист Артемия: чем ниже HP, тем сильнее лечит его огонь (камбэк-дуэлянт) — до ~2.3× на грани смерти
+          if (z.owner === G.myId && this.char === 'artemiy' && G.me.hp < G.me.maxHp) this.accum.heal += ABILITY.FIRE_HEAL * dt * (1 + (1 - G.me.hp / G.me.maxHp) * 1.3);
           else if (!enemyZone && z.owner !== G.myId) inMyFire = true;
           if (Math.random() < dt * 8) G.sfx.fireCrackle(1);
         } else if (z.type === 'mangal' && enemyZone) {

@@ -154,13 +154,20 @@ export class LocalPlayer {
     this.vel.x += (targetV.x - this.vel.x) * Math.min(1, accel * dt);
     this.vel.z += (targetV.z - this.vel.z) * Math.min(1, accel * dt);
 
-    if (control && this.keys['Space'] && this.grounded) {
+    const jumpDown = control && this.keys['Space'];
+    const jumpEdge = jumpDown && !this._jumpWas;   // фронт нажатия (для воздушного прыжка)
+    this._jumpWas = jumpDown;
+    if (jumpDown && this.grounded) {
       this.vel.y = MOVE.JUMP_VEL;
       this.grounded = false;
+    } else if (jumpEdge && !this.grounded && G.me && G.me.char === 'max' && this._airJumps > 0) {
+      this.vel.y = MOVE.JUMP_VEL;   // Твист Макса: двойной прыжок
+      this._airJumps--;
     }
     this.vel.y -= MOVE.GRAVITY * dt;
 
     this.moveCollide(dt);
+    if (this.grounded) this._airJumps = 1;   // приземлился — воздушный прыжок снова доступен (Макс)
 
     // Пассивка Конилия «Разгон»: 2с бега прямо без стрельбы/резкого поворота → +12% скорости; сброс поворотом/выстрелом
     if (G.me && G.me.char === 'koniliy') {
