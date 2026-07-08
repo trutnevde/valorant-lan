@@ -10,6 +10,7 @@ import { WebSocketServer } from 'ws';
 import {
   PORT, PHASES, RULES, WEAPONS, ARMOR, CHARACTERS, ABILITY,
   MAPS, DEFAULT_MAP, mapAabbs, segmentHitsAabb, segmentHitsSphere,
+  BOT_PRESETS, DEFAULT_DIFFICULTY,
 } from './public/js/shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -40,7 +41,8 @@ let nextHumanId = 1;
 let nextBotId = 100;
 const BOT_NAMES = ['Коня', 'Никита Грицина', 'Игорь Емцов', 'Вафлист', 'Стульчак', 'Ростислав Зиныч', 'Бот Витёк', 'Бот Толян'];
 
-const lobby = { map: DEFAULT_MAP, hostId: 0 };
+const lobby = { map: DEFAULT_MAP, hostId: 0, difficulty: DEFAULT_DIFFICULTY };
+const botCfg = () => BOT_PRESETS[lobby.difficulty] || BOT_PRESETS[DEFAULT_DIFFICULTY];
 
 const match = {
   running: false,
@@ -115,6 +117,7 @@ function lobbyInfo() {
     t: 'lobby',
     players: [...players.values()].map(p => ({ id: p.id, name: p.name, char: p.char, team: p.team, bot: p.bot })),
     map: lobby.map,
+    difficulty: lobby.difficulty,
     hostId: hostId() === Infinity ? 0 : hostId(),
     inMatch: match.running,
   };
@@ -428,6 +431,12 @@ function onMessage(p, msg) {
     case 'setMap': {
       if (p.id !== hostId() || match.running) return;
       if (MAPS[msg.map]) lobby.map = msg.map;
+      broadcast(lobbyInfo());
+      break;
+    }
+    case 'setDifficulty': {
+      if (p.id !== hostId() || match.running) return;
+      if (BOT_PRESETS[msg.difficulty]) lobby.difficulty = msg.difficulty;
       broadcast(lobbyInfo());
       break;
     }
@@ -888,10 +897,11 @@ function blindBots(flashPos) {
 // бот слышит ближайший вражеский шум (громкий — дальше)
 function botHearEnemy(bot) {
   const t = now();
+  const hearMul = botCfg().hearMul;   // радиус слуха — от сложности
   let best = null, bd = Infinity;
   for (const n of match.noises) {
     if (t > n.until || n.team === bot.team) continue;
-    const range = n.loud ? 28 : 14;
+    const range = (n.loud ? 28 : 14) * hearMul;
     const d = Math.hypot(n.pos[0] - bot.lastPos[0], n.pos[1] - bot.lastPos[2]);
     if (d < range && d < bd) { bd = d; best = n; }
   }
@@ -955,17 +965,18 @@ function botShoot(bot, e, dist) {
   const t = now();
   const ai = bot.ai;
   const w = botWeapon(bot);
+  const cfg = botCfg();                  // пресет сложности (реакция/меткость/доворот/разброс)
   // ПЛАВНЫЙ доворот на цель (не мгновенный снап на 180)
   const tgtYaw = Math.atan2(-(e.lastPos[0] - bot.lastPos[0]), -(e.lastPos[2] - bot.lastPos[2]));
   let dy = tgtYaw - bot.yaw;
   while (dy > Math.PI) dy -= Math.PI * 2;
   while (dy < -Math.PI) dy += Math.PI * 2;
-  bot.yaw += dy * 0.32;                 // догоняет цель пошустрее
+  bot.yaw += dy * cfg.turn;              // скорость доворота — от сложности
   if (t < ai.reactAt) return;           // время реакции после засечки — есть окно на фланг
   if (Math.abs(dy) > 0.5) return;       // ещё не довёл прицел — не стреляет «спиной»
   if (t < ai.nextShot) return;
   ai.nextShot = t + Math.max(0.12, 60 / w.rpm) + Math.random() * 0.12;
-  const spr = 1.0 + Math.min(1.7, dist * 0.04); // прицел заметно точнее
+  const spr = (1.0 + Math.min(1.7, dist * 0.04)) * cfg.sprMul; // разброс — от сложности
   const dir = [
     e.lastPos[0] - bot.lastPos[0] + (Math.random() - 0.5) * spr,
     (e.lastPos[1] + 1.2) - (bot.lastPos[1] + 1.6),
@@ -976,12 +987,12 @@ function botShoot(bot, e, dist) {
   broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bw });
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
   if (TICK_TELEMETRY) _botShots++;
-  // адекватный вызов: попадают заметно чаще, иногда вешают голову
-  let pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
+  // меткость — от сложности: вилка [pHitMin, pHitMax], падает с дистанцией
+  let pHit = Math.max(cfg.pHitMin, Math.min(cfg.pHitMax, cfg.pHitMax + 0.04 - dist * 0.009));
   if (now() < bot.levitUntil) pHit *= 0.35; // всплыл в «Невесомости» — мажет
   if (Math.random() < pHit) {
     if (TICK_TELEMETRY) _botHits++;
-    const head = Math.random() < 0.13;  // 13% голов
+    const head = Math.random() < cfg.head;  // доля хедшотов — от сложности
     applyDamage(e, head ? w.head : w.dmg, bot.id, bw, head ? 'head' : 'body');
   }
 }
@@ -1028,7 +1039,7 @@ function botUseAbility(bot, seen, combat) {
   if (t < ai.nextAbility || !liveish()) return;
   const cost = CHARACTERS[bot.char].ultCost;
   const e = ai.target;
-  const cd = (s) => { ai.nextAbility = t + s; };
+  const cd = (s) => { ai.nextAbility = t + s * botCfg().abilityMul; };  // частота скиллов — от сложности
 
   switch (bot.char) {
     case 'artemiy':
@@ -1156,8 +1167,8 @@ function tickBot(bot, dt) {
   const blinded = t < ai.blindUntil;      // ослеплён вспышкой — не видит и не стреляет
   const seen = blinded ? null : botVisibleEnemy(bot);
   if (seen) {
-    // засёк новую цель (или после потери) — задержка реакции: у тебя есть окно
-    if (ai.target !== seen.enemy || t >= ai.engaging) ai.reactAt = t + 0.14 + Math.random() * 0.18;
+    // засёк новую цель (или после потери) — задержка реакции: у тебя есть окно (от сложности)
+    if (ai.target !== seen.enemy || t >= ai.engaging) { const c = botCfg(); ai.reactAt = t + c.react + Math.random() * c.reactJit; }
     ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist;
   }
   const combat = !blinded && t < ai.engaging && ai.target && ai.target.alive;

@@ -10,7 +10,9 @@ import { RemotePlayer } from './remote.js';
 import { Abilities } from './abilities.js';
 import { HUD } from './hud.js';
 import { makeComposer } from './postfx.js';
-import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY } from './shared.js';
+import { WEAPONS, CHARACTERS, MAPS, PHASES, ABILITY, BOT_PRESETS } from './shared.js';
+
+const DIFF_NAMES = { easy: 'ЛЁГКИЕ', medium: 'СРЕДНИЕ', hard: 'ЖЁСТКИЕ' };
 
 // IBL-окружение: эквирект-небо с солнцем → PMREM. Даёт металлу оружия реалистичные отражения.
 function makeEnvMap(renderer) {
@@ -246,6 +248,7 @@ const lobbyHooks = {
   addBot: (team) => G.net.send({ t: 'addBot', team }),
   delBot: (team) => G.net.send({ t: 'removeBot', team }),
   setMap: (map) => G.net.send({ t: 'setMap', map }),
+  setDifficulty: (difficulty) => G.net.send({ t: 'setDifficulty', difficulty }),
   switchTeam: () => G.net.send({ t: 'switchTeam' }),
   start: () => G.net.send({ t: 'startMatch' }),
   movePlayer: (id, curTeam) => G.net.send({ t: 'movePlayer', target: id, team: curTeam === 'A' ? 'B' : 'A' }),
@@ -569,6 +572,15 @@ function HUDLobbyBindOnce() {
     b.addEventListener('click', () => lobbyHooks.setMap(id));
     mb.appendChild(b);
   }
+  const db = $('diffButtons');
+  db.innerHTML = '';
+  for (const id of Object.keys(BOT_PRESETS)) {
+    const b = document.createElement('button');
+    b.textContent = DIFF_NAMES[id] || id.toUpperCase();
+    b.dataset.diff = id;
+    b.addEventListener('click', () => lobbyHooks.setDifficulty(id));
+    db.appendChild(b);
+  }
   // #10/#12 клики по строкам ростера (делегирование)
   const onRosterClick = (e) => {
     const btn = e.target.closest('button[data-act]');
@@ -615,6 +627,10 @@ function HUDLobbyRender(data) {
   $('mapRowGuest').classList.toggle('hidden', isHost);
   $('mapNameGuest').textContent = (MAPS[data.map] || {}).name || data.map;
   for (const b of $('mapButtons').children) b.classList.toggle('sel', b.dataset.map === data.map);
+  const diff = data.difficulty || 'medium';
+  $('diffRowGuest').classList.toggle('hidden', isHost);
+  $('diffNameGuest').textContent = DIFF_NAMES[diff] || diff;
+  for (const b of $('diffButtons').children) b.classList.toggle('sel', b.dataset.diff === diff);
   const render = (team, el) => {
     el.innerHTML = '';
     for (const p of data.players.filter(x => x.team === team)) {

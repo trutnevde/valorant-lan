@@ -10,6 +10,7 @@ import { MAPS, mapAabbs } from '../public/js/shared.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const CFG = JSON.parse(readFileSync(path.join(__dirname, 'gate.config.json'), 'utf8')).botmatch;
+const DIFF = process.env.BOT_DIFF || '';   // прогон метрик по пресету: easy|medium|hard (пусто = дефолт лобби)
 const PORT = 27019;
 const BOT_R = 0.34;
 
@@ -79,7 +80,7 @@ async function main() {
   ws.on('message', (raw) => {
     const m = JSON.parse(raw);
     if (m.t === 'welcome') myId = m.id;
-    else if (m.t === 'lobby') { const me = (m.players || []).find(p => p.id === myId); if (me) myTeam = me.team; }
+    else if (m.t === 'lobby') { const me = (m.players || []).find(p => p.id === myId); if (me) myTeam = me.team; if (m.difficulty) globalThis.__diff = m.difficulty; }
     else if (m.t === 'state') onState(m.id, m.p);
     else if (m.t === 'roundStart') rounds++;
   });
@@ -87,6 +88,7 @@ async function main() {
   send({ t: 'join', name: 'Наблюдатель', char: 'artemiy' });
   await sleep(400);
   send({ t: 'setMap', map: CFG.map });
+  if (DIFF) send({ t: 'setDifficulty', difficulty: DIFF });   // прогон метрик по пресету сложности
   await sleep(200);
   const other = myTeam === 'A' ? 'B' : 'A';
   for (let i = 0; i < CFG.botsPerTeam - 1; i++) send({ t: 'addBot', team: myTeam });
@@ -102,7 +104,7 @@ async function main() {
 
   const shots = botShots, acc = shots > 0 ? botHits / shots : 0;
   const tickMed = median(tickWins), tickMax = tickWins.length ? Math.max(...tickWins) : 0;
-  console.log(`\n— БОТ-МАТЧ (${CFG.map}, раундов ${rounds}) —`);
+  console.log(`\n— БОТ-МАТЧ (${CFG.map}, сложность ${globalThis.__diff || '?'}, раундов ${rounds}) —`);
   console.log(`  сквозь стены: ${wallclip} (порог ${CFG.maxWallclip})`);
   console.log(`  застреваний у стен: ${wallstuck} (порог ${CFG.maxWallstuck})`);
   console.log(`  выстрелов ботов: ${shots}, попаданий: ${botHits}, точность: ${(acc * 100).toFixed(1)}% (коридор ${CFG.accuracyMin * 100}–${CFG.accuracyMax * 100}%)`);
@@ -113,7 +115,7 @@ async function main() {
   if (wallstuck > CFG.maxWallstuck) fails.push('боты застревают у стен');
   if (rounds < 1) fails.push('матч не пошёл (0 раундов)');
   if (shots < 20) fails.push('боты почти не стреляли (мало данных)');
-  else if (acc < CFG.accuracyMin || acc > CFG.accuracyMax) fails.push(`точность вне коридора: ${(acc * 100).toFixed(1)}%`);
+  else if (!DIFF && (acc < CFG.accuracyMin || acc > CFG.accuracyMax)) fails.push(`точность вне коридора: ${(acc * 100).toFixed(1)}%`); // коридор — только для дефолтной (medium) сложности
   if (tickMed > CFG.tickP95MaxMs) fails.push(`медиана p95 тика ${tickMed.toFixed(2)} > ${CFG.tickP95MaxMs} мс`);
 
   if (fails.length) { console.log('\n✖ БОТ-МАТЧ: ' + fails.join('; ')); process.exit(1); }

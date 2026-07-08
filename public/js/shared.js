@@ -293,6 +293,17 @@ export const ABILITY = {
   GERA_ULT_R: 6, GERA_ULT_TIME: 4, GERA_ULT_SLOW: 0.35, // купол невесомости: радиус / сек / множитель скорости всплывших
 };
 
+// Пресеты сложности ботов (Эпоха 15, Фаза 4). Переключаются в лобби.
+// react — базовая задержка реакции (с) + reactJit джиттер; pHitMin/Max — вилка меткости по дистанции;
+// head — доля хедшотов; turn — скорость доворота; hearMul — радиус слуха; abilityMul — множитель кулдауна
+// скиллов (меньше = чаще); sprMul — множитель разброса (больше = мажут).
+export const BOT_PRESETS = {
+  easy:   { react: 0.35, reactJit: 0.30, pHitMin: 0.07, pHitMax: 0.26, head: 0.05, turn: 0.20, hearMul: 0.7, abilityMul: 1.5, sprMul: 1.4 },
+  medium: { react: 0.14, reactJit: 0.18, pHitMin: 0.13, pHitMax: 0.42, head: 0.13, turn: 0.32, hearMul: 1.0, abilityMul: 1.0, sprMul: 1.0 },
+  hard:   { react: 0.06, reactJit: 0.10, pHitMin: 0.18, pHitMax: 0.55, head: 0.22, turn: 0.45, hearMul: 1.3, abilityMul: 0.7, sprMul: 0.7 },
+};
+export const DEFAULT_DIFFICULTY = 'medium';
+
 export const MOVE = {
   RUN_SPEED: 6.2, WALK_SPEED: 3.1, CROUCH_SPEED: 2.6,
   ACCEL: 14, AIR_ACCEL: 3, GRAVITY: 21, JUMP_VEL: 6.5,
