@@ -25,15 +25,8 @@ const HDRIS = [
 // из набора берём: albedo(Diffuse), normal(nor_gl), arm(AO+Rough+Metal упаковка)
 const MAPS = { diffuse: 'Diffuse', normal: 'nor_gl', arm: 'arm' };
 
-// CC0-модели персонажей: KayKit Character Pack Adventurers (Kay Lousberg), риггнутые + анимированные.
-const KAYKIT_BASE = 'https://raw.githubusercontent.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0/main/addons/kaykit_character_pack_adventures/Characters/gltf';
-const CHAR_FILES = ['Knight', 'Barbarian', 'Mage', 'Rogue', 'Rogue_Hooded'];
-// какой агент какой моделью рисуется (тематически); 8 агентов делят 5 моделей
-const CHAR_MAP = {
-  artemiy: 'Knight.glb', max: 'Rogue.glb', vova: 'Mage.glb', sanek: 'Rogue_Hooded.glb',
-  denis: 'Barbarian.glb', ira: 'Mage.glb', fafik: 'Rogue_Hooded.glb', koniliy: 'Knight.glb',
-};
-// демо-модель для window.USE_DEMO_MODELS (three.js examples, CC0)
+// Персонажи по умолчанию — процедурные (см. buildHumanoid в remote.js), characterModels пуст.
+// Демо-модель только для window.USE_DEMO_MODELS (three.js examples, CC0).
 const DEMO_URL = 'https://raw.githubusercontent.com/mrdoob/three.js/r160/examples/models/gltf/RobotExpressive/RobotExpressive.glb';
 
 function mkdir(p) { fs.mkdirSync(p, { recursive: true }); }
@@ -99,16 +92,11 @@ async function main() {
     manifest.hdri[name] = 'assets/hdri/' + name + '.hdr';
   }
 
-  // ── модели персонажей (CC0, KayKit Adventurers) + демо-модель ──
+  // ── демо-модель (window.USE_DEMO_MODELS). Персонажи по умолчанию — процедурные (characterModels пуст) ──
   const charDir = path.join(ASSETS, 'models', 'characters');
-  for (const c of CHAR_FILES) {
-    console.log('▶ персонаж', c);
-    await download(`${KAYKIT_BASE}/${c}.glb`, path.join(charDir, c + '.glb'));
-  }
   try { console.log('▶ демо-модель RobotExpressive'); await download(DEMO_URL, path.join(charDir, '_demo.glb')); }
   catch (e) { console.log('  ⚠ демо не скачалась:', e.message); }
-  manifest.charactersLicense = 'CC0 — KayKit Character Pack: Adventurers by Kay Lousberg';
-  manifest.characterModels = CHAR_MAP;
+  manifest.characterModels = {};
 
   fs.writeFileSync(path.join(ASSETS, 'manifest.json'), JSON.stringify(manifest, null, 2));
   console.log('\n✅ Ассеты скачаны. manifest.json записан. Всё CC0, лежит локально.');

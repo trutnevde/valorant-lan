@@ -29,15 +29,5 @@
   "hdri": {
     "sky": "assets/hdri/sky.hdr"
   },
-  "charactersLicense": "CC0 — KayKit Character Pack: Adventurers by Kay Lousberg",
-  "characterModels": {
-    "artemiy": "Knight.glb",
-    "max": "Rogue.glb",
-    "vova": "Mage.glb",
-    "sanek": "Rogue_Hooded.glb",
-    "denis": "Barbarian.glb",
-    "ira": "Mage.glb",
-    "fafik": "Rogue_Hooded.glb",
-    "koniliy": "Knight.glb"
-  }
+  "characterModels": {}
 }

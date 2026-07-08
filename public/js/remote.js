@@ -63,70 +63,102 @@ export function buildHumanoid(char, forLocalHands = false) {
     return m;
   };
 
-  // --- торс ---
-  const torso = mk(new THREE.CapsuleGeometry(fat ? 0.34 : 0.26, fat ? 0.32 : 0.42, 8, 20), suit, 0, 0.28, 0, 'body');
-  hips.add(torso);
-  const chest = mk(new THREE.CylinderGeometry(fat ? 0.34 : 0.27, fat ? 0.3 : 0.24, 0.34, 16), suit, 0, 0.42, 0, 'body'); chest.scale.set(1, 1, 0.72);
-  hips.add(chest);
+  // материалы деталей (перчатки, наколенники, ремень, металл)
+  const glove = std('#24272e', { roughness: 0.72 });
+  const pad = std('#2b2f37', { roughness: 0.8, metalness: 0.12 });
+  const beltMat = std('#33373f', { roughness: 0.55, metalness: 0.28 });
+  const metal = std('#c9ccd2', { roughness: 0.3, metalness: 0.6 });
+
+  // --- торс: таз → живот → грудь с плечевым поясом ---
+  const pelvis = mk(new THREE.CapsuleGeometry(fat ? 0.3 : 0.22, fat ? 0.1 : 0.12, 6, 16), dark, 0, 0.08, 0, 'body');
+  pelvis.scale.set(1, 1, 0.8); hips.add(pelvis);
+  const torso = mk(new THREE.CapsuleGeometry(fat ? 0.34 : 0.25, fat ? 0.32 : 0.4, 8, 18), suit, 0, 0.3, 0, 'body');
+  torso.scale.set(1, 1, 0.82); hips.add(torso);
+  // грудь: шире в плечах, у́же к талии
+  const chest = mk(new THREE.CylinderGeometry(fat ? 0.36 : 0.31, fat ? 0.3 : 0.235, 0.36, 20), suit, 0, 0.44, 0, 'body');
+  chest.scale.set(1, 1, 0.68); hips.add(chest);
+  // трапеции/ключицы — сглаживают переход к шее и расширяют плечи
+  const yoke = mk(new THREE.SphereGeometry(fat ? 0.3 : 0.26, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.55), suit, 0, 0.5, 0, 'body');
+  yoke.scale.set(1.2, 0.72, 0.82); hips.add(yoke);
+  // ремень + пряжка (у худых; у Дениса живот мешает)
+  if (!fat) {
+    const belt = mk(new THREE.CylinderGeometry(0.275, 0.275, 0.07, 20), beltMat, 0, 0.16, 0, null);
+    belt.scale.set(1, 1, 0.82); hips.add(belt);
+    hips.add(mk(new THREE.BoxGeometry(0.08, 0.055, 0.03), metal, 0, 0.16, 0.23, null));
+  }
   // живот Дениса
   let belly = null;
   if (fat) {
-    belly = mk(new THREE.SphereGeometry(0.4, 14, 12), suit, 0, 0.2, 0.14, 'body');
-    hips.add(belly);
+    belly = mk(new THREE.SphereGeometry(0.4, 18, 14), suit, 0, 0.2, 0.14, 'body');
+    belly.scale.set(1, 0.95, 1); hips.add(belly);
   }
 
-  // --- голова ---
-  const neck = mk(new THREE.CylinderGeometry(0.08, 0.1, 0.12, 8), skin, 0, 0.62, 0, 'head');
+  // --- шея и голова (овальнее и человечнее: челюсть, уши) ---
+  const neck = mk(new THREE.CapsuleGeometry(0.075, 0.08, 6, 12), skin, 0, 0.6, 0, 'head');
   hips.add(neck);
   const headPivot = new THREE.Group();
   headPivot.position.y = 0.7;
   hips.add(headPivot);
-  const head = mk(new THREE.SphereGeometry(0.215, 24, 20), skin, 0, 0.12, 0, 'head');
-  headPivot.add(head);
-  // затылок/причёска — тёмная шапочка
-  const hair = mk(new THREE.SphereGeometry(0.215, 14, 12, 0, Math.PI * 2, 0, Math.PI * 0.6), dark, 0, 0.13, 0.02, 'head');
+  const head = mk(new THREE.SphereGeometry(0.2, 24, 20), skin, 0, 0.13, 0, 'head');
+  head.scale.set(0.96, 1.06, 1); headPivot.add(head);
+  const jaw = mk(new THREE.SphereGeometry(0.15, 16, 12), skin, 0, 0.06, 0.028, 'head');
+  jaw.scale.set(0.95, 0.72, 0.98); headPivot.add(jaw);
+  // причёска — облегающая шапочка
+  const hair = mk(new THREE.SphereGeometry(0.207, 18, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), dark, 0, 0.145, 0.008, 'head');
   headPivot.add(hair);
+  for (const s of [-1, 1]) {
+    const ear = mk(new THREE.SphereGeometry(0.04, 8, 8), skin, s * 0.185, 0.11, 0, 'head');
+    ear.scale.set(0.55, 1, 0.9); headPivot.add(ear);
+  }
 
-  // --- руки ---
+  // --- руки: дельта → бицепс → локоть-сустав → предплечье → кисть-перчатка ---
   const makeArm = (side) => {
     const shoulder = new THREE.Group();
-    shoulder.position.set(side * (fat ? 0.42 : 0.32), 0.5, 0);
+    shoulder.position.set(side * (fat ? 0.44 : 0.335), 0.5, 0);
     hips.add(shoulder);
-    const upper = mk(new THREE.CapsuleGeometry(0.078, 0.26, 6, 14), suit, 0, -0.14, 0, 'body');
+    shoulder.add(mk(new THREE.SphereGeometry(0.108, 14, 12), suit, 0, 0.02, 0, 'body')); // дельтовидная
+    const upper = mk(new THREE.CapsuleGeometry(0.076, 0.24, 8, 14), suit, 0, -0.15, 0, 'body');
     shoulder.add(upper);
     const elbow = new THREE.Group();
     elbow.position.y = -0.3;
     shoulder.add(elbow);
-    const lower = mk(new THREE.CapsuleGeometry(0.07, 0.24, 6, 14), skin, 0, -0.13, 0, 'body');
+    elbow.add(mk(new THREE.SphereGeometry(0.07, 12, 10), skin, 0, 0, 0, 'body')); // локтевой сустав
+    const lower = mk(new THREE.CapsuleGeometry(0.065, 0.22, 8, 14), skin, 0, -0.13, 0, 'body');
     elbow.add(lower);
-    const hand = mk(new THREE.SphereGeometry(0.08, 12, 10), skin, 0, -0.27, 0.02, 'body');
+    const hand = mk(new THREE.SphereGeometry(0.075, 12, 10), glove, 0, -0.28, 0.02, 'body');
+    hand.scale.set(1, 1.15, 1.25); // кулак-перчатка, вытянут к пальцам
     elbow.add(hand);
     return { shoulder, elbow, hand };
   };
   const armL = makeArm(-1);
   const armR = makeArm(1);
 
-  // --- ноги ---
+  // --- ноги: сустав бедра → бедро → колено+наколенник → голень → ботинок с носком ---
   const makeLeg = (side) => {
     const hip = new THREE.Group();
-    hip.position.set(side * 0.14, 0, 0);
+    hip.position.set(side * 0.135, 0, 0);
     hips.add(hip);
-    const upper = mk(new THREE.CapsuleGeometry(0.11, 0.34, 6, 14), dark, 0, -0.26, 0, 'body');
-    hip.add(upper);
+    const thighJoint = mk(new THREE.SphereGeometry(0.12, 12, 10), dark, 0, -0.06, 0, 'body'); hip.add(thighJoint);
+    const upper = mk(new THREE.CapsuleGeometry(0.11, 0.32, 8, 14), dark, 0, -0.26, 0, 'body'); hip.add(upper);
     const knee = new THREE.Group();
     knee.position.y = -0.46;
     hip.add(knee);
-    const lower = mk(new THREE.CapsuleGeometry(0.095, 0.3, 6, 14), dark, 0, -0.2, 0, 'body');
-    knee.add(lower);
-    const foot = mk(new THREE.BoxGeometry(0.16, 0.1, 0.3), boot, 0, -0.4, 0.06, 'body');
-    knee.add(foot);
+    knee.add(mk(new THREE.SphereGeometry(0.1, 12, 10), dark, 0, 0, 0, 'body')); // коленный сустав
+    const kneePad = mk(new THREE.SphereGeometry(0.088, 12, 10), pad, 0, -0.02, 0.055, null);
+    kneePad.scale.set(1, 1.1, 0.7); knee.add(kneePad);
+    const lower = mk(new THREE.CapsuleGeometry(0.09, 0.3, 8, 14), dark, 0, -0.22, 0, 'body'); knee.add(lower);
+    // ботинок: голенище + подошва + носок
+    knee.add(mk(new THREE.BoxGeometry(0.145, 0.13, 0.19), boot, 0, -0.42, 0.02, 'body'));
+    const toe = mk(new THREE.SphereGeometry(0.082, 10, 8), boot, 0, -0.45, 0.15, null);
+    toe.scale.set(0.92, 0.7, 1.05); knee.add(toe);
     return { hip, knee };
   };
   const legL = makeLeg(-1);
   const legR = makeLeg(1);
 
-  // «оружие» в правой руке (у чужих моделей — обозначение)
-  const gun = mk(new THREE.BoxGeometry(0.08, 0.1, 0.55), std('#1b1e24'), 0, -0.24, -0.28, null);
+  // «оружие» в правой руке (у чужих моделей — обозначение): корпус + ствол
+  const gun = mk(new THREE.BoxGeometry(0.08, 0.11, 0.4), std('#1b1e24', { roughness: 0.5, metalness: 0.4 }), 0, -0.24, -0.24, null);
+  gun.add(mk(new THREE.CylinderGeometry(0.02, 0.02, 0.32, 8), std('#15171c', { metalness: 0.5, roughness: 0.4 }), 0, 0, -0.32, null).rotateX(Math.PI / 2));
   armR.elbow.add(gun);
 
   // ===== костюмы =====
