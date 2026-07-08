@@ -1092,16 +1092,22 @@ function tickBot(bot, dt) {
   if (!holdForDuel && ai.pathIdx < ai.path.length) {
     const node = match.mapDef.nav.nodes[ai.path[ai.pathIdx]];
     const target = [node[0], node[2] || 0, node[1]];
-    if (moveToward(bot, target, dt, combat) < 0.9) ai.pathIdx++;
+    if (moveToward(bot, target, dt, combat) < 1.1) { ai.pathIdx++; ai._stuckT = 0; }
+    else if (ai._blocked) {                       // упёрся — копим и обходим/перестраиваемся
+      ai._stuckT = (ai._stuckT || 0) + dt;
+      if (ai._stuckT > 0.5) { ai._stuckT = 0; ai.pathIdx++; }              // пропускаем ноду
+      if (ai.pathIdx >= ai.path.length) { ai.goal = null; ai.nextThink = 0; } // путь кончился — переосмыслить
+    } else ai._stuckT = 0;
   }
 }
 
 // коллизия бота со стенами: круг (радиус) vs AABB, со скольжением вдоль оси.
 // учитывает уровень по Y (платформы/мосты на другой высоте не мешают).
-const BOT_R = 0.42;
+const BOT_R = 0.34;
 function botHitsWall(x, z, y) {
   const yBot = y + 0.25, yTop = y + 1.55;
   for (const b of match.aabbs) {
+    if ((b.maxY - b.minY) < 2.9) continue;   // только НАСТОЯЩИЕ стены; мелкие укрытия/платформы/насесты бот обходит (не застревает)
     if (b.maxY <= yBot || b.minY >= yTop) continue;
     if (x + BOT_R > b.minX && x - BOT_R < b.maxX && z + BOT_R > b.minZ && z - BOT_R < b.maxZ) return true;
   }
@@ -1122,10 +1128,13 @@ function moveToward(bot, target, dt, combat = false) {
   if (now() < bot.tagUntil) speed *= 0.62; // словил пулю — вязнет
   if (d > 0.01) {
     const step = Math.min(d, speed * dt);
-    const [nx, nz] = collideXZ(bot.lastPos[0], bot.lastPos[2], bot.lastPos[0] + dx / d * step, bot.lastPos[2] + dz / d * step, bot.lastPos[1]);
+    const bx = bot.lastPos[0], bz = bot.lastPos[2];
+    const [nx, nz] = collideXZ(bx, bz, bx + dx / d * step, bz + dz / d * step, bot.lastPos[1]);
     bot.lastPos[0] = nx;
     bot.lastPos[2] = nz;
-    bot.ai._noiseAcc = (bot.ai._noiseAcc || 0) + step;
+    const moved = Math.hypot(nx - bx, nz - bz);
+    bot.ai._blocked = moved < step * 0.35;   // почти не сдвинулся = упёрся в стену/ящик
+    bot.ai._noiseAcc = (bot.ai._noiseAcc || 0) + moved;
     if (bot.ai._noiseAcc > 2.7) { bot.ai._noiseAcc = 0; addNoise(bot, false); }
     // высота — плавно к высоте цели (лестницы)
     bot.lastPos[1] += (target[1] - bot.lastPos[1]) * Math.min(1, dt * 6);
@@ -1329,7 +1338,10 @@ setInterval(() => {
         if (e.team === sc.team || !e.alive) continue;
         const d = Math.hypot(e.lastPos[0] - sc.pos[0], e.lastPos[2] - sc.pos[1]);
         const range = e.hp < ABILITY.SCENT_WOUND_HP ? ABILITY.SCENT_R * ABILITY.SCENT_BLOOD_MUL : ABILITY.SCENT_R;
-        if (d < range && t > (sc.pinged.get(e.id) || 0)) {
+        if (d >= range) continue;
+        // не палит сквозь стены — нужна прямая видимость от приманки к врагу
+        if (!losClear([sc.pos[0], 1.2, sc.pos[1]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
+        if (t > (sc.pinged.get(e.id) || 0)) {
           sc.pinged.set(e.id, t + ABILITY.SCENT_REVEAL * 0.8);
           broadcast({ t: 'ability', id: sc.owner, kind: 'scentPing', data: { target: e.id } });
         }
