@@ -680,6 +680,34 @@ export class Effects {
     return handle;
   }
 
+  // летящая стрела Совы: летит from→to за travel сек, при долёте зовёт onLand()
+  sovaArrow(from, to, travel, color, onLand) {
+    const g = new THREE.Group();
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.55, 6),
+      new THREE.MeshStandardMaterial({ color: 0xcfe6f0, emissive: color, emissiveIntensity: 0.5, roughness: 0.4 }));
+    shaft.rotation.x = Math.PI / 2;
+    g.add(shaft);
+    const head = new THREE.Mesh(new THREE.ConeGeometry(0.045, 0.13, 6),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.0 }));
+    head.position.z = 0.33; head.rotation.x = Math.PI / 2;
+    g.add(head);
+    g.position.copy(from);
+    g.lookAt(to);
+    this.scene.add(g);
+    let t = 0, landed = false;
+    this.add({
+      update: (dt) => {
+        t += dt;
+        const k = Math.min(1, t / travel);
+        g.position.lerpVectors(from, to, k);
+        if (k >= 1 && !landed) { landed = true; if (onLand) onLand(); }
+        return t < travel + 0.06;
+      },
+      dispose: () => this.scene.remove(g),
+      kill: () => { landed = true; },
+    });
+  }
+
   // всплеск лечения (зелёные искры + крестик)
   healBurst(pos) {
     this.burst(pos, { n: 18, color: 0x66ff99, speed: 3, life: 0.6, size: 0.14, gravity: -3, tex: this.steamTex });

@@ -683,32 +683,32 @@ function onAbility(p, msg) {
       match.smokes.push({ pos, r: ABILITY.SMOKE_R, until: now() + ABILITY.SMOKE_TIME });
     }
   } else if (kind === 'sovaShock') {
-    // Сова C — шок-стрела: урон по области на попадании
+    // Сова C — шок-стрела: летит и на ПОПАДАНИИ (после долёта) бьёт по области
     if (p.char !== 'sova') return;
-    const c = msg.data.pos || [0, 0, 0];
-    for (const e of players.values()) {
-      if (e.team === p.team || !e.alive) continue;
-      if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) < ABILITY.SOVA_SHOCK_R) applyDamage(e, ABILITY.SOVA_SHOCK_DMG, p.id, 'sovaShock', 'body');
-    }
-  } else if (kind === 'sovaMark') {
-    // Сова Q — метка-стрела: подсветить врагов у точки попадания (по прямой видимости) команде
+    const c = msg.data.to || [0, 0, 0], f = msg.data.from || [c[0], 1, c[2]];
+    const travel = Math.min(0.8, Math.max(0.12, Math.hypot(c[0] - f[0], c[2] - f[2]) * 0.018));
+    setTimeout(() => {
+      if (!match.running) return;
+      for (const e of players.values()) {
+        if (e.team === p.team || !e.alive) continue;
+        if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) < ABILITY.SOVA_SHOCK_R) applyDamage(e, ABILITY.SOVA_SHOCK_DMG, p.id, 'sovaShock', 'body');
+      }
+    }, travel * 1000);
+  } else if (kind === 'sovaMark' || kind === 'sovaDrone') {
+    // Сова Q/E — стрела/дрон: после долёта палит команде врагов у точки попадания (по прямой видимости)
     if (p.char !== 'sova') return;
-    const c = msg.data.pos || [0, 0, 0];
-    for (const e of players.values()) {
-      if (e.team === p.team || !e.alive) continue;
-      if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) >= ABILITY.SOVA_MARK_R) continue;
-      if (!losClear([c[0], 1.2, c[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
-      broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
-    }
-  } else if (kind === 'sovaDrone') {
-    // Сова E — дрон-филин: скан вокруг игрока (по видимости) — палит команде
-    if (p.char !== 'sova') return;
-    for (const e of players.values()) {
-      if (e.team === p.team || !e.alive) continue;
-      if (Math.hypot(e.lastPos[0] - p.lastPos[0], e.lastPos[2] - p.lastPos[2]) >= ABILITY.SOVA_DRONE_R) continue;
-      if (!losClear([p.lastPos[0], p.lastPos[1] + 1.4, p.lastPos[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
-      broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
-    }
+    const c = msg.data.to || [0, 0, 0], f = msg.data.from || [c[0], 1, c[2]];
+    const R = kind === 'sovaDrone' ? ABILITY.SOVA_DRONE_R : ABILITY.SOVA_MARK_R;
+    const travel = Math.min(0.8, Math.max(0.12, Math.hypot(c[0] - f[0], c[2] - f[2]) * 0.018));
+    setTimeout(() => {
+      if (!match.running) return;
+      for (const e of players.values()) {
+        if (e.team === p.team || !e.alive) continue;
+        if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) >= R) continue;
+        if (!losClear([c[0], 1.3, c[2]], [e.lastPos[0], e.lastPos[1] + 1.2, e.lastPos[2]])) continue;
+        broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
+      }
+    }, travel * 1000);
   } else if (kind === 'sovaFury') {
     // Сова X (ульта) — ярость охотника: 3 залпа энергии по направлению, пробивают стены, бьют линией
     if (p.char !== 'sova' || p.ult < cost) return;
@@ -877,12 +877,12 @@ function botShoot(bot, e, dist) {
   let dy = tgtYaw - bot.yaw;
   while (dy > Math.PI) dy -= Math.PI * 2;
   while (dy < -Math.PI) dy += Math.PI * 2;
-  bot.yaw += dy * 0.22;                 // догоняет цель за несколько тиков
+  bot.yaw += dy * 0.32;                 // догоняет цель пошустрее
   if (t < ai.reactAt) return;           // время реакции после засечки — есть окно на фланг
   if (Math.abs(dy) > 0.5) return;       // ещё не довёл прицел — не стреляет «спиной»
   if (t < ai.nextShot) return;
-  ai.nextShot = t + Math.max(0.13, 60 / w.rpm) + Math.random() * 0.16;
-  const spr = 1.6 + Math.min(2.2, dist * 0.05); // на дистанции целятся хуже
+  ai.nextShot = t + Math.max(0.12, 60 / w.rpm) + Math.random() * 0.12;
+  const spr = 1.0 + Math.min(1.7, dist * 0.04); // прицел заметно точнее
   const dir = [
     e.lastPos[0] - bot.lastPos[0] + (Math.random() - 0.5) * spr,
     (e.lastPos[1] + 1.2) - (bot.lastPos[1] + 1.6),
@@ -892,10 +892,10 @@ function botShoot(bot, e, dist) {
   const bw = bot.loadout.primary || bot.loadout.sidearm || 'classic';
   broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bw });
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
-  // ЗАМЕТНО мягче: реже попадают, головы почти не вешают
-  const pHit = Math.max(0.04, Math.min(0.20, 0.22 - dist * 0.0075));
+  // адекватный вызов: попадают заметно чаще, иногда вешают голову
+  const pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
   if (Math.random() < pHit) {
-    const head = Math.random() < 0.06;  // 6% голов вместо 13%
+    const head = Math.random() < 0.13;  // 13% голов
     applyDamage(e, head ? w.head : w.dmg, bot.id, bw, head ? 'head' : 'body');
   }
 }
@@ -1052,7 +1052,7 @@ function tickBot(bot, dt) {
   const seen = blinded ? null : botVisibleEnemy(bot);
   if (seen) {
     // засёк новую цель (или после потери) — задержка реакции: у тебя есть окно
-    if (ai.target !== seen.enemy || t >= ai.engaging) ai.reactAt = t + 0.2 + Math.random() * 0.25;
+    if (ai.target !== seen.enemy || t >= ai.engaging) ai.reactAt = t + 0.14 + Math.random() * 0.18;
     ai.engaging = t + 1.4; ai.target = seen.enemy; ai.targetDist = seen.dist;
   }
   const combat = !blinded && t < ai.engaging && ai.target && ai.target.alive;

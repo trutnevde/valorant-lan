@@ -260,11 +260,13 @@ export class Abilities {
       }
 
       case 'sova': {
-        if (key === 'C' && this.charges.C > 0) { const p = this.groundPoint(); send('sovaShock', { pos: [p.x, 0, p.z] }); }
-        else if (key === 'Q' && this.charges.Q > 0) { const p = this.groundPoint(); send('sovaMark', { pos: [p.x, 0, p.z] }); }
-        else if (key === 'E' && this.charges.E > 0) send('sovaDrone', {});
+        const eyeA = eye.toArray();
+        // groundPoint рейкастит по стенам → стрела втыкается В СТЕНУ, а не сквозь неё
+        if (key === 'C' && this.charges.C > 0) { const p = this.groundPoint(30); send('sovaShock', { from: eyeA, to: [p.x, p.y, p.z] }); }
+        else if (key === 'Q' && this.charges.Q > 0) { const p = this.groundPoint(35); send('sovaMark', { from: eyeA, to: [p.x, p.y, p.z] }); }
+        else if (key === 'E' && this.charges.E > 0) { const p = this.groundPoint(30); send('sovaDrone', { from: eyeA, to: [p.x, p.y, p.z] }); }
         else if (key === 'X') {
-          if (this.ultReady()) send('sovaFury', { from: eye.toArray(), dir: dir.toArray() });
+          if (this.ultReady()) send('sovaFury', { from: eyeA, dir: dir.toArray() });
           else G.sfx.error();
         }
         break;
@@ -534,22 +536,27 @@ export class Abilities {
         }
         break;
       }
-      case 'sovaShock': {  // взрыв шок-стрелы
-        const c = data.pos || [0, 0, 0];
-        G.fx.burst(new THREE.Vector3(c[0], 0.4, c[2]), { n: 22, color: 0x9fe8ff, speed: 6.5, life: 0.5, size: 0.13, gravity: -3 });
-        G.fx.ring(new THREE.Vector3(c[0], 0.05, c[2]), 0x3fa9c9, ABILITY.SOVA_SHOCK_R);
-        G.sfx.spatial([c[0], 0.4, c[2]], () => G.sfx.playBuf('zap', { vol: 0.6 }));
-        break;
-      }
-      case 'sovaMark': {   // метка-стрела воткнулась
-        const c = data.pos || [0, 0, 0];
-        G.fx.ring(new THREE.Vector3(c[0], 0.05, c[2]), 0x3fa9c9, 2.5);
-        G.sfx.spatial([c[0], 0.4, c[2]], () => G.sfx.playBuf('ting', { vol: 0.5 }));
-        break;
-      }
-      case 'sovaDrone': {  // скан-филин
-        if (mine) G.hud.announce('', 'ФИЛИН: СКАН', 1.0);
-        G.sfx.playBuf('ting', { vol: 0.4, rate: 1.3 });
+      case 'sovaShock': case 'sovaMark': case 'sovaDrone': {
+        // ЛЕТЯЩАЯ СТРЕЛА: from → to, эффект срабатывает в точке попадания при долёте
+        const from = new THREE.Vector3(...(data.from || [0, 1, 0]));
+        const to = new THREE.Vector3(...(data.to || [0, 0, 0]));
+        const travel = Math.min(0.8, Math.max(0.12, from.distanceTo(to) * 0.018));
+        const col = kind === 'sovaShock' ? 0x9fe8ff : 0x3fa9c9;
+        G.sfx.spatial(data.from, () => G.sfx.playBuf('whoosh', { vol: 0.42, rate: 1.5 })); // выстрел из лука
+        G.fx.sovaArrow(from, to, travel, col, () => {
+          const p = to;
+          if (kind === 'sovaShock') {
+            G.fx.burst(new THREE.Vector3(p.x, p.y + 0.3, p.z), { n: 22, color: 0x9fe8ff, speed: 6.5, life: 0.5, size: 0.13, gravity: -3 });
+            G.fx.ring(new THREE.Vector3(p.x, p.y + 0.05, p.z), 0x3fa9c9, ABILITY.SOVA_SHOCK_R);
+            G.sfx.spatial([p.x, p.y + 0.3, p.z], () => G.sfx.playBuf('zap', { vol: 0.65 }));
+          } else {
+            const rr = kind === 'sovaDrone' ? 6 : ABILITY.SOVA_MARK_R * 0.6;
+            G.fx.burst(new THREE.Vector3(p.x, p.y + 0.3, p.z), { n: 10, color: 0x9fe8ff, speed: 3, life: 0.5, size: 0.1, gravity: 0 });
+            G.fx.ring(new THREE.Vector3(p.x, p.y + 0.05, p.z), 0x3fa9c9, rr);
+            G.sfx.spatial([p.x, p.y + 0.3, p.z], () => G.sfx.playBuf('ting', { vol: 0.55 }));
+            if (mine && kind === 'sovaDrone') G.hud.announce('', 'ФИЛИН: СКАН', 1.0);
+          }
+        });
         break;
       }
       case 'sovaFury': {   // 3 энергозалпа по линии (пробивают стены)
