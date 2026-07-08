@@ -479,20 +479,21 @@ export class Effects {
 
     // 1) плотное ядро — сфера с обеих сторон (снаружи и изнутри непрозрачна)
     const coreMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0, side: THREE.DoubleSide, depthWrite: false });
-    const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.96, 20, 16), coreMat);
+    const core = new THREE.Mesh(new THREE.SphereGeometry(r * 0.96, 14, 10), coreMat);
     core.position.y = r * 0.55;
     group.add(core);
     // внутренняя сфера поменьше — гарантирует глухоту в центре
     const innerMat = new THREE.MeshLambertMaterial({ color, transparent: true, opacity: 0, side: THREE.BackSide, depthWrite: false });
-    const inner = new THREE.Mesh(new THREE.SphereGeometry(r * 0.6, 16, 12), innerMat);
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(r * 0.6, 10, 8), innerMat);
     inner.position.y = r * 0.55;
     group.add(inner);
 
-    // 2) облако клубов-спрайтов, набитое по всему объёму (перекрывает любые щели)
+    // 2) облако клубов-спрайтов (меньше штук + общий материал = меньше овердро/дро-коллов)
     const puffs = [];
     const tex = stink ? this.rotTex : this.smokeTex || this.steamTex;
-    for (let i = 0; i < 26; i++) {
-      const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity: 0, depthWrite: false }));
+    const puffMat = new THREE.SpriteMaterial({ map: tex, color, transparent: true, opacity: 0, depthWrite: false });
+    for (let i = 0; i < 12; i++) {
+      const spr = new THREE.Sprite(puffMat);
       // равномерно по объёму сферы
       const u = Math.random(), v = Math.random(), w2 = Math.random();
       const rr = r * 0.9 * Math.cbrt(Math.random());
@@ -511,15 +512,13 @@ export class Effects {
         const env = t < 0.35 ? t / 0.35 : (t > dur - 0.7 ? Math.max(0, (dur - t) / 0.7) : 1);
         coreMat.opacity = env;               // ПОЛНОСТЬЮ плотный (1.0)
         innerMat.opacity = env;
-        for (const s of puffs) {
-          s.material.opacity = env * (0.85 + 0.15 * Math.sin(t * 2 + s.userData.ph));
-          s.position.y = s.userData.baseY + Math.sin(t * 0.8 + s.userData.ph) * 0.15;
-          s.material.rotation += dt * 0.15 * (s.userData.ph % 2 ? 1 : -1);
-        }
+        puffMat.opacity = env * 0.92;        // общий материал — задаём один раз (не ×12)
+        puffMat.rotation += dt * 0.1;
+        for (const s of puffs) s.position.y = s.userData.baseY + Math.sin(t * 0.8 + s.userData.ph) * 0.15;
         core.rotation.y += dt * 0.15;
         return alive && t < dur;
       },
-      dispose: () => { this.scene.remove(group); coreMat.dispose(); innerMat.dispose(); },
+      dispose: () => { this.scene.remove(group); coreMat.dispose(); innerMat.dispose(); puffMat.dispose(); },
       kill: () => { alive = false; },
     };
     this.add(handle);
@@ -652,7 +651,7 @@ export class Effects {
   steam(getPos, r, dur, color = 0xd8ffe0) {
     const group = new THREE.Group();
     const sprites = [];
-    for (let i = 0; i < 14; i++) {
+    for (let i = 0; i < 10; i++) {
       const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.steamTex, color, transparent: true, opacity: 0, depthWrite: false, blending: THREE.AdditiveBlending }));
       spr.userData = { ang: Math.random() * Math.PI * 2, rad: Math.random() * r * 0.8, y: Math.random() * 1.5, sp: 0.4 + Math.random() * 0.5, ph: Math.random() * 6 };
       spr.scale.setScalar(0.6 + Math.random() * 0.6);
@@ -814,16 +813,10 @@ export class Effects {
   banquetBucket(pos, r) {
     const g = new THREE.Group();
     const bucketMat = new THREE.MeshStandardMaterial({ color: 0xe8302c, roughness: 0.6, transparent: true, opacity: 0.32, side: THREE.DoubleSide, emissive: 0x551008, emissiveIntensity: 0.3 });
-    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.82, 4.2, 28, 1, true), bucketMat);
+    const bucket = new THREE.Mesh(new THREE.CylinderGeometry(r, r * 0.82, 4.2, 14, 1, true), bucketMat);
     bucket.position.y = 2.1;
     g.add(bucket);
-    // белые полосы
-    for (let i = 0; i < 10; i++) {
-      const stripe = new THREE.Mesh(new THREE.CylinderGeometry(r * 0.99, r * 0.82 * 0.99, 4.2, 3, 1, true, (i / 10) * Math.PI * 2, Math.PI / 10),
-        new THREE.MeshStandardMaterial({ color: 0xf4f0e6, side: THREE.DoubleSide, transparent: true, opacity: 0.3 }));
-      stripe.position.y = 2.1;
-      g.add(stripe);
-    }
+    // (белые полосы убраны — 10 полупрозрачных цилиндров зря жгли fillrate)
     // ободок и логотип
     const rim = new THREE.Mesh(new THREE.TorusGeometry(r, 0.12, 8, 28), std('#f4f0e6', { transparent: true, opacity: 0.6 }));
     rim.position.y = 4.2; rim.rotation.x = Math.PI / 2;

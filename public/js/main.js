@@ -60,6 +60,26 @@ async function loadHdriEnv(renderer, scene) {
 const $ = (id) => document.getElementById(id);
 const now = () => performance.now() / 1000;
 
+// маркер брошенного оружия на земле (силуэт ствола + подсветка-кольцо)
+function makePickupMarker(pos) {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.09, 0.13),
+    new THREE.MeshStandardMaterial({ color: 0x1b1e24, roughness: 0.5, metalness: 0.4 }));
+  body.position.y = 0.14; body.rotation.y = 0.5;
+  g.add(body);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(0.35, 0.5, 20),
+    new THREE.MeshBasicMaterial({ color: 0x14d3c0, transparent: true, opacity: 0.5, side: THREE.DoubleSide, depthWrite: false }));
+  ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04;
+  g.add(ring);
+  g.position.set(pos[0], pos[1] || 0, pos[2]);
+  return g;
+}
+function clearPickupMarkers() {
+  if (!G.pickupMarkers) return;
+  for (const m of G.pickupMarkers.values()) G.scene.remove(m);
+  G.pickupMarkers.clear();
+}
+
 const ABILITY_WEAPON_NAMES = {
   hook: 'Мясной крюк', fire: 'Огонь', puddle: 'Тухлятина', acid: 'Кислота',
   orbital: 'Орбитальный удар', turret: 'Турель', knives: 'Стальные перья', zone: 'Зона',
@@ -335,6 +355,31 @@ function onMessage(msg) {
       // клон лопнул у всех + шоквейв (стан приходит отдельным 'stun', если задело)
       if (G.abilities) G.abilities.popClone(msg.cloneId, msg.pos);
       break;
+    case 'weaponDrop': {
+      if (!G.pickupMarkers) G.pickupMarkers = new Map();
+      const m = makePickupMarker(msg.pos);
+      G.scene.add(m);
+      G.pickupMarkers.set(msg.id, m);
+      break;
+    }
+    case 'weaponPickup':
+    case 'weaponGone':
+      if (G.pickupMarkers && G.pickupMarkers.has(msg.id)) {
+        G.scene.remove(G.pickupMarkers.get(msg.id));
+        G.pickupMarkers.delete(msg.id);
+      }
+      break;
+    case 'setWeapon': {
+      const cur = (G.weapons && G.weapons.loadout) || { sidearm: 'classic' };
+      G.weapons.setLoadout({ primary: msg.weapon, sidearm: cur.sidearm }, true);
+      G.hud.announce('', 'ПОДОБРАНО: ' + ((WEAPONS[msg.weapon] || {}).name || msg.weapon), 1.6);
+      try { G.sfx.buy(); } catch {}
+      break;
+    }
+    case 'abilityFail':
+      try { G.sfx.error(); } catch {}
+      G.hud.announce('', msg.reason || 'НЕЛЬЗЯ', 1.4);
+      break;
     case 'buyOk':
       G.me.credits = msg.credits;
       G.me.armor = msg.armor;
@@ -584,6 +629,7 @@ function roleHint() {
 }
 
 function onRoundStart(msg) {
+  clearPickupMarkers();       // убрать маркеры брошенного оружия прошлого раунда
   G.phase = PHASES.BUY;
   G.freeze = true;
   G.round = msg.round;

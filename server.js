@@ -172,6 +172,7 @@ function startRound() {
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
   match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = []; match._poppedClones = new Set();
+  match.corpses = []; match.pickups = []; match._pickupSeq = 1; // трупы (для кровопира) и брошенное оружие
   // шип получает ОДИН случайный атакер (людям — приоритет)
   const attackers = teamOf(match.attackTeam);
   const humanAtt = attackers.filter(a => !a.bot);
@@ -299,6 +300,14 @@ function onDeath(victim, killerId, weapon, part) {
     match.spikeCarrier = null;
     match.spikeDropped = { pos: [...victim.lastPos] };
     broadcast({ t: 'spikeDrop', pos: match.spikeDropped.pos });
+  }
+  // труп (для Кровопира Дениса) + брошенное оружие (можно подобрать)
+  match.corpses.push({ team: victim.team, pos: [...victim.lastPos], until: now() + ABILITY.CORPSE_LIFE });
+  const dropW = victim.loadout && victim.loadout.primary;
+  if (dropW && WEAPONS[dropW] && dropW !== 'knife') {
+    const pk = { id: match._pickupSeq++, weapon: dropW, pos: [victim.lastPos[0], victim.lastPos[1] || 0, victim.lastPos[2]], until: now() + ABILITY.PICKUP_LIFE };
+    match.pickups.push(pk);
+    broadcast({ t: 'weaponDrop', id: pk.id, weapon: dropW, pos: pk.pos });
   }
   broadcast({ t: 'death', id: victim.id, by: killerId, weapon, part });
   // исход раунда
@@ -655,11 +664,16 @@ function onAbility(p, msg) {
     p.cloneMode = false;
   } else if (kind === 'bloodfeast') {
     if (p.char !== 'denis') return;
+    // только у ТЕЛА недавно убитого врага (а не по рофлу в любой момент)
+    const ci = (match.corpses || []).findIndex(c => c.team !== p.team && now() < c.until &&
+      Math.hypot(p.lastPos[0] - c.pos[0], p.lastPos[2] - c.pos[2]) < ABILITY.BLOODFEAST_R);
+    if (ci < 0) { send(p, { t: 'abilityFail', kind: 'bloodfeast', reason: 'НУЖНО ТЕЛО ВРАГА РЯДОМ' }); return; }
     const fed = now() - p.lastKillT < ABILITY.BLOODFEAST_FED_WINDOW;
     heal(p, fed ? ABILITY.BLOODFEAST_FED : ABILITY.BLOODFEAST_INSTANT);
     p._hotUntil = now() + ABILITY.BLOODFEAST_HOT_TIME;
     p._hotRate = fed ? ABILITY.BLOODFEAST_HOT_FED : ABILITY.BLOODFEAST_HOT;
-    p.lastKillT = -99; // «съел» бонус кормёжки
+    p.lastKillT = -99;              // «съел» бонус кормёжки
+    match.corpses[ci].until = 0;    // тело обглодано
   } else if (kind === 'scent') {
     if (p.char !== 'denis') return;
     match.scents.push({ owner: p.id, team: p.team, pos: [msg.data.pos[0], msg.data.pos[2]], until: now() + ABILITY.SCENT_LIFE, pinged: new Map() });
@@ -970,7 +984,7 @@ function botUseAbility(bot, seen, combat) {
     case 'max':
       if (combat && e && seen && seen.dist > 6) {
         let dx = e.lastPos[0] - bot.lastPos[0], dz = e.lastPos[2] - bot.lastPos[2]; const dl = Math.hypot(dx, dz) || 1;
-        bot.lastPos[0] += dx / dl * ABILITY.DASH_DIST; bot.lastPos[2] += dz / dl * ABILITY.DASH_DIST;
+        { const [dnx, dnz] = collideXZ(bot.lastPos[0], bot.lastPos[2], bot.lastPos[0] + dx / dl * ABILITY.DASH_DIST, bot.lastPos[2] + dz / dl * ABILITY.DASH_DIST, bot.lastPos[1]); bot.lastPos[0] = dnx; bot.lastPos[2] = dnz; }
         botBroadcastAbility(bot, 'dash', {});
         cd(7);
       }
@@ -1082,6 +1096,25 @@ function tickBot(bot, dt) {
   }
 }
 
+// коллизия бота со стенами: круг (радиус) vs AABB, со скольжением вдоль оси.
+// учитывает уровень по Y (платформы/мосты на другой высоте не мешают).
+const BOT_R = 0.42;
+function botHitsWall(x, z, y) {
+  const yBot = y + 0.25, yTop = y + 1.55;
+  for (const b of match.aabbs) {
+    if (b.maxY <= yBot || b.minY >= yTop) continue;
+    if (x + BOT_R > b.minX && x - BOT_R < b.maxX && z + BOT_R > b.minZ && z - BOT_R < b.maxZ) return true;
+  }
+  return false;
+}
+function collideXZ(px, pz, nx, nz, y) {
+  let rx = nx, rz = nz;
+  if (botHitsWall(rx, pz, y)) rx = px;              // упёрлись по X — скользим вдоль Z
+  if (botHitsWall(rx, rz, y)) rz = pz;              // упёрлись по Z
+  if (botHitsWall(rx, rz, y)) { rx = px; rz = pz; } // угол — стоим
+  return [rx, rz];
+}
+
 function moveToward(bot, target, dt, combat = false) {
   const dx = target[0] - bot.lastPos[0], dz = target[2] - bot.lastPos[2];
   const d = Math.hypot(dx, dz);
@@ -1089,8 +1122,9 @@ function moveToward(bot, target, dt, combat = false) {
   if (now() < bot.tagUntil) speed *= 0.62; // словил пулю — вязнет
   if (d > 0.01) {
     const step = Math.min(d, speed * dt);
-    bot.lastPos[0] += dx / d * step;
-    bot.lastPos[2] += dz / d * step;
+    const [nx, nz] = collideXZ(bot.lastPos[0], bot.lastPos[2], bot.lastPos[0] + dx / d * step, bot.lastPos[2] + dz / d * step, bot.lastPos[1]);
+    bot.lastPos[0] = nx;
+    bot.lastPos[2] = nz;
     bot.ai._noiseAcc = (bot.ai._noiseAcc || 0) + step;
     if (bot.ai._noiseAcc > 2.7) { bot.ai._noiseAcc = 0; addNoise(bot, false); }
     // высота — плавно к высоте цели (лестницы)
@@ -1145,6 +1179,24 @@ setInterval(() => {
             break;
           }
         }
+      }
+      // подбор брошенного оружия с трупов (только апгрейд — ствол дороже текущего)
+      if (match.pickups && match.pickups.length) {
+        for (const pk of match.pickups) {
+          if (pk.taken) continue;
+          if (t >= pk.until) { pk.taken = true; broadcast({ t: 'weaponGone', id: pk.id }); continue; }
+          for (const q of players.values()) {
+            if (!q.alive) continue;
+            if (Math.hypot(q.lastPos[0] - pk.pos[0], q.lastPos[2] - pk.pos[2]) > ABILITY.PICKUP_R) continue;
+            const cur = WEAPONS[q.loadout.primary], nw = WEAPONS[pk.weapon];
+            if (!nw || (cur && cur.price >= nw.price)) continue; // не апгрейд — не берём
+            q.loadout.primary = pk.weapon; pk.taken = true;
+            broadcast({ t: 'weaponPickup', id: pk.id, by: q.id, weapon: pk.weapon });
+            if (!q.bot) send(q, { t: 'setWeapon', weapon: pk.weapon });
+            break;
+          }
+        }
+        match.pickups = match.pickups.filter(pk => !pk.taken);
       }
       if (match.state === PHASES.LIVE && t >= match.deadline) endRound(enemyTeam(match.attackTeam), 'time');
       break;
