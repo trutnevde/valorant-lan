@@ -235,6 +235,7 @@ export const ABILITY = {
   // Санёк
   TURRET_R: 20, TURRET_DMG: 5, TURRET_TICK: 0.5, TURRET_HP: 60,
   TRAP_R: 3, TRAP_REVEAL: 3,
+  TRAP_SLOW: 0.55, TRAP_SLOW_TIME: 3,   // твист Санька: сработавшая растяжка замедляет засечённого
   XRAY_TIME: 6,
   // Денис
   PUDDLE_R: 3.5, PUDDLE_TIME: 7, PUDDLE_DPS: 10, PUDDLE_SLOW: 0.65,

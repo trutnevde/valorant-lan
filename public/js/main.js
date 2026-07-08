@@ -107,7 +107,7 @@ const G = {
   spikePos: null, spikeFx: null,
   spikeCarrier: 0, spikeDroppedPos: null, spikeDropFx: null,
   pulled: null, stunnedUntil: 0, slowMul: 1, blindUntil: 0, blindStink: false, shake: 0,
-  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, levitUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
+  boostUntil: 0, banquetUntil: 0, gallopUntil: 0, tagUntil: 0, levitUntil: 0, trapSlowUntil: 0, xrayUntil: 0, cocoonedId: null, knives: null,
   banquets: [], cloneMode: false, clonedIds: new Set(),
   scoped: false, aimT: 0, buyOpen: false, chatOpen: false, holdAction: null,
   spectateTarget: 0,
@@ -659,6 +659,7 @@ function onRoundStart(msg) {
   G.side = msg.sides[G.myTeam];
   G.holdAction = null; G.pulled = null; G.stunnedUntil = 0; G.blindUntil = 0;
   G.slowMul = 1; G.cocoonedId = null; G.xrayUntil = 0; G.banquetUntil = 0; G.boostUntil = 0;
+  G.levitUntil = 0; G.trapSlowUntil = 0; G.gallopUntil = 0;
   G.spottedUntil.clear(); G.revealed.clear();
   G.spikePos = null;
   if (G.spikeFx) { G.spikeFx.kill(); G.spikeFx = null; }
@@ -776,7 +777,8 @@ function onRevive(msg) {
     G.player.teleport(msg.pos, msg.yaw);
     G.weapons.vmRoot.visible = true;
     G.hud.setHp(G.me.hp, G.me.maxHp);
-    G.hud.announce('ВТОРОЕ ДЫХАНИЕ', 'ТЫ ВЕРНУЛСЯ', 2);
+    if (msg.src === 'banquet') G.hud.announce('ВОСКРЕШЕНИЕ', 'ИРА ПОДНЯЛА ТЕБЯ', 2);
+    else G.hud.announce('ВТОРОЕ ДЫХАНИЕ', 'ТЫ ВЕРНУЛСЯ', 2);
   } else {
     const r = G.remotes.get(msg.id);
     if (r) { r.revive(msg.pos); }

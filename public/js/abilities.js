@@ -34,6 +34,7 @@ export class Abilities {
     this.decoys = [];       // {owner, h, pos, dir?, kind:'stand'|'run', until, phase, traveled}
     this.swapDecoy = null;  // активный клон для рокировки (только у владельца)
     this.cloneById = new Map(); // cloneId -> {h, owner} — клоны для отстрела/стана
+    this.sovaArrows = new Map(); // arrowId -> fx летящей разведстрелы (сбиваемой)
     this._cloneSeq = 0;         // общий счётчик (синхронен у всех: одинаковый порядок ability-сообщений)
     // Денис
     this.scents = [];       // {owner, pos, mesh, until} — приманки «нюх мясника»
@@ -85,6 +86,7 @@ export class Abilities {
     for (const d of this.decoys) G.scene.remove(d.h.group);
     this.decoys = []; this.swapDecoy = null;
     if (this.cloneById) this.cloneById.clear();
+    if (this.sovaArrows) this.sovaArrows.clear();
     for (const sc of this.scents) G.scene.remove(sc.mesh);
     this.scents = [];
     G.cloneMode = false;
@@ -262,7 +264,24 @@ export class Abilities {
       case 'sova': {
         const eyeA = eye.toArray();
         // groundPoint рейкастит по стенам → стрела втыкается В СТЕНУ, а не сквозь неё
-        if (key === 'C' && this.charges.C > 0) { const p = this.groundPoint(30); send('sovaShock', { from: eyeA, to: [p.x, p.y, p.z] }); }
+        if (key === 'C' && this.charges.C > 0) {
+          // Твист Совы: шок-стрела РИКОШЕТИТ от стены — отражаем и летим дальше, взрыв в точке после отскока
+          this.ray.set(eye, dir); this.ray.far = 30;
+          const h = this.ray.intersectObjects(G.map.solids, false)[0];
+          if (h && h.face) {
+            const hp = h.point.clone();
+            const n = h.face.normal.clone().transformDirection(h.object.matrixWorld).normalize();
+            const refl = dir.clone().reflect(n).normalize();
+            const remain = Math.max(2, 30 - h.distance);
+            this.ray.set(hp.clone().addScaledVector(refl, 0.06), refl); this.ray.far = remain;
+            const h2 = this.ray.intersectObjects(G.map.solids, false)[0];
+            const to = h2 ? h2.point.clone() : hp.clone().addScaledVector(refl, remain);
+            to.y = Math.max(0, to.y);
+            send('sovaShock', { from: eyeA, via: [hp.x, hp.y, hp.z], to: [to.x, to.y, to.z] });
+          } else {
+            const p = this.groundPoint(30); send('sovaShock', { from: eyeA, to: [p.x, p.y, p.z] });
+          }
+        }
         else if (key === 'Q' && this.charges.Q > 0) { const p = this.groundPoint(35); send('sovaMark', { from: eyeA, to: [p.x, p.y, p.z] }); }
         else if (key === 'E' && this.charges.E > 0) { const p = this.groundPoint(30); send('sovaDrone', { from: eyeA, to: [p.x, p.y, p.z] }); }
         else if (key === 'X') {
@@ -442,7 +461,10 @@ export class Abilities {
           if (r) r.revealedUntil = now() + ABILITY.TRAP_REVEAL;
           G.revealed.set(data.target, now() + ABILITY.TRAP_REVEAL);
         }
-        if (victimIsMe) G.hud.announce('', 'ВАС ЗАСЕКЛА СИГНАЛКА!', 1.5);
+        if (victimIsMe) {
+          G.hud.announce('', 'ВАС ЗАСЕКЛА СИГНАЛКА — ЗАМЕДЛЕНИЕ!', 1.5);
+          G.trapSlowUntil = now() + ABILITY.TRAP_SLOW_TIME;   // твист Санька: растяжка замедляет
+        }
         G.sfx.trapPing();
         break;
       }
@@ -571,13 +593,12 @@ export class Abilities {
         break;
       }
       case 'sovaShock': case 'sovaMark': case 'sovaDrone': {
-        // ЛЕТЯЩАЯ СТРЕЛА: from → to, эффект срабатывает в точке попадания при долёте
+        // ЛЕТЯЩАЯ СТРЕЛА: from → to, эффект в точке попадания при долёте. Шок-стрела может рикошетить (data.via).
         const from = new THREE.Vector3(...(data.from || [0, 1, 0]));
         const to = new THREE.Vector3(...(data.to || [0, 0, 0]));
-        const travel = Math.min(0.8, Math.max(0.12, from.distanceTo(to) * 0.018));
         const col = kind === 'sovaShock' ? 0x9fe8ff : 0x3fa9c9;
         G.sfx.spatial(data.from, () => G.sfx.playBuf('whoosh', { vol: 0.42, rate: 1.5 })); // выстрел из лука
-        G.fx.sovaArrow(from, to, travel, col, () => {
+        const explode = () => {
           const p = to;
           if (kind === 'sovaShock') {
             G.fx.burst(new THREE.Vector3(p.x, p.y + 0.3, p.z), { n: 22, color: 0x9fe8ff, speed: 6.5, life: 0.5, size: 0.13, gravity: -3 });
@@ -590,7 +611,33 @@ export class Abilities {
             G.sfx.spatial([p.x, p.y + 0.3, p.z], () => G.sfx.playBuf('ting', { vol: 0.55 }));
             if (mine && kind === 'sovaDrone') G.hud.announce('', 'ФИЛИН: СКАН', 1.0);
           }
-        });
+        };
+        if (data.via) {   // рикошет: from → via (стена) → to
+          const via = new THREE.Vector3(...data.via);
+          const t1 = Math.min(0.5, Math.max(0.08, from.distanceTo(via) * 0.018));
+          const t2 = Math.min(0.5, Math.max(0.06, via.distanceTo(to) * 0.018));
+          G.fx.sovaArrow(from, via, t1, col, () => {
+            G.fx.burst(via.clone(), { n: 5, color: col, speed: 3, life: 0.2, size: 0.08, gravity: 0 }); // искры отскока
+            G.fx.sovaArrow(via, to, t2, col, explode);
+          });
+        } else {
+          const travel = Math.min(0.8, Math.max(0.12, from.distanceTo(to) * 0.018));
+          const arrowId = (kind === 'sovaMark') ? data.arrowId : 0;   // сбиваемая разведстрела
+          const fx = G.fx.sovaArrow(from, to, travel, col, () => { if (arrowId) this.removeSovaArrow(arrowId); explode(); });
+          if (arrowId && fx && fx.group) {
+            fx.group.traverse(o => { if (o.isMesh) { o.userData.shootId = 'sovaArrow:' + arrowId; G.shootables.push({ mesh: o, shootId: 'sovaArrow:' + arrowId }); } });
+            this.sovaArrows.set(arrowId, fx);
+          }
+        }
+        break;
+      }
+      case 'sovaArrowShot': {   // разведстрелу сбили в полёте — гасим её у всех
+        const fx = this.sovaArrows.get(data.arrowId);
+        if (fx) {
+          if (fx.group) G.fx.burst(fx.group.position.clone(), { n: 8, color: 0x9fe8ff, speed: 4, life: 0.3, size: 0.1, gravity: 1 });
+          if (fx.kill) fx.kill();
+          this.removeSovaArrow(data.arrowId);
+        }
         break;
       }
       case 'sovaFury': {   // 3 энергозалпа по линии (пробивают стены)
@@ -826,7 +873,15 @@ export class Abilities {
       // #1 отстрел клона Фафика — просим сервер лопнуть его и оглушить врагов вокруг
       const c = this.cloneById.get(shootId);
       if (c) this.G.net.send({ t: 'clonePop', cloneId: shootId, pos: [c.h.group.position.x, c.h.group.position.z], owner: c.owner });
+    } else if (shootId.startsWith('sovaArrow:')) {
+      // твист Совы: сбили разведстрелу в полёте — просим сервер отменить её реванал
+      G.net.send({ t: 'ability', kind: 'sovaArrowShot', data: { arrowId: Number(shootId.split(':')[1]) } });
     }
+  }
+  // снять сбиваемую разведстрелу Совы с учёта (после долёта или отстрела)
+  removeSovaArrow(arrowId) {
+    this.G.shootables = this.G.shootables.filter(s => s.shootId !== 'sovaArrow:' + arrowId);
+    if (this.sovaArrows) this.sovaArrows.delete(arrowId);
   }
 
   // регистрирует гуманоида-клона как отстреливаемую цель (cloneId одинаков у всех клиентов)
@@ -1214,6 +1269,12 @@ export class Abilities {
       }
     }
 
+    // Твист Фафика: двойники зеркалят движение игрока (дельта позиции игрока за кадр)
+    const fpx = G.player ? G.player.pos : null;
+    const fdx = (fpx && this._fafikLastPos) ? fpx.x - this._fafikLastPos.x : 0;
+    const fdz = (fpx && this._fafikLastPos) ? fpx.z - this._fafikLastPos.z : 0;
+    if (fpx) this._fafikLastPos = { x: fpx.x, z: fpx.z };
+
     // Фафик: двойники (стоячий) и клон рокировки (бегущий)
     for (let i = this.decoys.length - 1; i >= 0; i--) {
       const dc = this.decoys[i];
@@ -1232,6 +1293,13 @@ export class Abilities {
         dc.h.group.position.set(dc.pos.x, 0, dc.pos.z);
       } else {
         dc.phase += dt;
+        if (dc.owner === G.myId && (fdx || fdz)) {   // зеркалит движение игрока — не стоит столбом
+          dc.pos.x += fdx; dc.pos.z += fdz;
+          dc.h.group.position.set(dc.pos.x, 0, dc.pos.z);
+          dc.phase += dt * 9;
+          const s = Math.sin(dc.phase);
+          dc.h.rig.legL.hip.rotation.x = s * 0.6; dc.h.rig.legR.hip.rotation.x = -s * 0.6;
+        }
         dc.h.rig.body.position.y = Math.sin(dc.phase * 2) * 0.012; // дышит на месте
       }
       if (now() >= dc.until) {

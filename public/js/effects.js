@@ -694,9 +694,10 @@ export class Effects {
     g.position.copy(from);
     g.lookAt(to);
     this.scene.add(g);
-    let t = 0, landed = false;
-    this.add({
+    let t = 0, landed = false, dead = false;
+    const handle = {
       update: (dt) => {
+        if (dead) return false;
         t += dt;
         const k = Math.min(1, t / travel);
         g.position.lerpVectors(from, to, k);
@@ -704,8 +705,10 @@ export class Effects {
         return t < travel + 0.06;
       },
       dispose: () => this.scene.remove(g),
-      kill: () => { landed = true; },
-    });
+      kill: () => { dead = true; landed = true; this.scene.remove(g); },  // сбита в полёте: убрать сразу, onLand не вызывать
+    };
+    this.add(handle);
+    return { group: g, kill: handle.kill };
   }
 
   // всплеск лечения (зелёные искры + крестик)

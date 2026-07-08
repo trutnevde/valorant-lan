@@ -81,7 +81,7 @@ function newPlayer(id, ws, bot = false) {
     loadout: { primary: null, sidearm: 'classic' },
     kills: 0, deaths: 0, ult: 0,
     lastPos: [0, 0, 0], yaw: 0,
-    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0, levitUntil: 0, lastDmgT: -99, _regFrac: 0,
+    ultMark: null, cloneMode: false, _healFrac: 0, tagUntil: 0, lastKillT: -99, _hotUntil: 0, _hotRate: 0, levitUntil: 0, lastDmgT: -99, _regFrac: 0, trapSlowUntil: 0,
     ai: bot ? { path: [], pathIdx: 0, goal: null, site: null, nextThink: 0, nextShot: 0, engaging: 0, scanYaw: 0, nextAbility: 0, charges: {}, blindUntil: 0, stunUntil: 0, heardUntil: 0, heardPos: null, _noiseAcc: 0, reactAt: 0, holdSpot: null } : null,
   };
 }
@@ -186,6 +186,7 @@ function startRound() {
   match.planting = null; match.defusing = null; match.defuseAccum = 0;
   match.spike = null; match.smokes = []; match.zones = []; match.healZones = []; match.cocoon = null;
   match.noSmokeZones = []; match.vortexPulls = []; match.levit = null; // Гера: развеивание/воронка/невесомость
+  match._sovaSeq = 0; match.sovaCancel = new Set(); // сбиваемые разведстрелы Совы
   match.spikeDropped = null; match.defuseHalfDone = false; match.noises = []; match.scents = []; match._poppedClones = new Set();
   match.corpses = []; match.pickups = []; match._pickupSeq = 1; // трупы (для кровопира) и брошенное оружие
   // шип получает ОДИН случайный атакер (людям — приоритет)
@@ -649,6 +650,20 @@ function onAbility(p, msg) {
     if (p.char !== 'ira' || p.ult < cost) return;
     p.ult -= cost;
     send(p, { t: 'ultPts', pts: p.ult });
+    // Твист Иры: ульта поднимает ОДНОГО павшего союзника в радиусе купола (мини-рес, ≤1 за применение)
+    const c = (msg.data && msg.data.pos) || p.lastPos;
+    let best = null, bd = ABILITY.BANQUET_R;
+    for (const q of players.values()) {
+      if (q.alive || q.team !== p.team) continue;
+      const d = Math.hypot(q.lastPos[0] - c[0], q.lastPos[2] - c[2]);
+      if (d < bd) { bd = d; best = q; }
+    }
+    if (best) {
+      best.alive = true;
+      best.hp = Math.round(best.maxHp * 0.5);   // поднимается на половине HP
+      best.ultMark = null; best.levitUntil = 0; best._hotUntil = 0;
+      broadcast({ t: 'revive', id: best.id, pos: [...best.lastPos], yaw: best.yaw || 0, hp: best.hp, src: 'banquet' });
+    }
   } else if (kind === 'cocoonHit') {
     // Денис попал крюком: сервер ведёт кокон
     const victim = players.get(msg.data.target);
@@ -721,8 +736,11 @@ function onAbility(p, msg) {
     const c = msg.data.to || [0, 0, 0], f = msg.data.from || [c[0], 1, c[2]];
     const R = kind === 'sovaDrone' ? ABILITY.SOVA_DRONE_R : ABILITY.SOVA_MARK_R;
     const travel = Math.min(0.8, Math.max(0.12, Math.hypot(c[0] - f[0], c[2] - f[2]) * 0.018));
+    let arrowId = 0;
+    if (kind === 'sovaMark') { arrowId = ++match._sovaSeq; msg.data.arrowId = arrowId; }  // твист Совы: разведстрелу можно сбить в полёте
     setTimeout(() => {
       if (!match.running) return;
+      if (arrowId && match.sovaCancel.has(arrowId)) { match.sovaCancel.delete(arrowId); return; }  // сбита — реванала нет
       for (const e of players.values()) {
         if (e.team === p.team || !e.alive) continue;
         if (Math.hypot(e.lastPos[0] - c[0], e.lastPos[2] - c[2]) >= R) continue;
@@ -730,6 +748,9 @@ function onAbility(p, msg) {
         broadcast({ t: 'ability', id: p.id, kind: 'sovaPing', data: { target: e.id } });
       }
     }, travel * 1000);
+  } else if (kind === 'sovaArrowShot') {
+    // враг сбил разведстрелу Совы — отменяем её реванал
+    if (msg.data && msg.data.arrowId) match.sovaCancel.add(msg.data.arrowId);
   } else if (kind === 'sovaFury') {
     // Сова X (ульта) — ярость охотника: 3 залпа энергии по направлению, пробивают стены, бьют линией
     if (p.char !== 'sova' || p.ult < cost) return;
@@ -787,6 +808,10 @@ function onAbility(p, msg) {
     send(p, { t: 'ultPts', pts: p.ult });
     const c = msg.data.pos || p.lastPos;
     match.levit = { by: p.id, team: p.team, pos: [c[0], c[1] || 0, c[2]], r: ABILITY.GERA_ULT_R, until: now() + ABILITY.GERA_ULT_TIME, _pingT: 0 };
+  } else if (kind === 'trapTrig') {
+    // Твист Санька: сработавшая сигналка ЗАМЕДЛЯЕТ засечённого (бота — серверно; человек — его клиент по эху)
+    const tgt = players.get(msg.data && msg.data.target);
+    if (tgt && tgt.bot) tgt.trapSlowUntil = now() + ABILITY.TRAP_SLOW_TIME;
   }
   broadcast({ t: 'ability', id: p.id, kind, data: msg.data || {} });
 }
@@ -1254,6 +1279,7 @@ function moveToward(bot, target, dt, combat = false) {
   let speed = combat ? 3.6 : 5.5; // в бою идут медленнее (осторожнее)
   if (now() < bot.tagUntil) speed *= 0.62; // словил пулю — вязнет
   if (now() < bot.levitUntil) speed *= ABILITY.GERA_ULT_SLOW; // «Невесомость» Геры — всплыл, барахтается
+  if (now() < bot.trapSlowUntil) speed *= ABILITY.TRAP_SLOW;  // сработала сигналка Санька
   if (d > 0.01) {
     const step = Math.min(d, speed * dt);
     const bx = bot.lastPos[0], bz = bot.lastPos[2];

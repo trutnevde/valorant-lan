@@ -59,6 +59,7 @@ export class LocalPlayer {
     if (this._konRampActive) f *= 1.12;      // пассивка Конилия «Разгон»: разогнался бегом прямо
     if (t < G.banquetUntil) f *= 1.15;       // Финальный банкет Иры
     if (t < G.levitUntil) f *= ABILITY.GERA_ULT_SLOW; // «Невесомость» Геры — всплыл, барахтается
+    if (t < G.trapSlowUntil) f *= ABILITY.TRAP_SLOW;  // засекла сигналка Санька
     if (t < G.tagUntil) f *= 0.62;           // словил пулю — «tagging», как в CS
     if (G.weapons) f *= weaponFeel(G.weapons.currentId).speed; // с ножом бегаешь быстрее
     return f;
