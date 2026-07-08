@@ -30,9 +30,11 @@ const SHOT_SAMPLE = {
   bucky: 'gun_heavy', judge: 'gun_heavy', shorty: 'gun_heavy', operator: 'gun_heavy', outlaw: 'gun_heavy',
   ares: 'gun_rifle', odin: 'gun_rifle', bulldog: 'gun_rifle', phantom: 'gun_rifle', vandal: 'gun_rifle',
 };
-const SHOT_VOL = { gun_pistol: 0.5, gun_magnum: 0.62, gun_heavy: 0.72, gun_rifle: 0.55 };
+const SHOT_VOL = { gun_pistol: 0.62, gun_magnum: 0.72, gun_heavy: 0.85, gun_rifle: 0.66 };
 // длина проигрываемого окна выстрела (сек): у записей длинный хвост/очередь — режем, чтобы автоогонь был чётким
-const SHOT_DUR = { gun_pistol: 0.42, gun_magnum: 0.6, gun_heavy: 0.9, gun_rifle: 0.3 };
+const SHOT_DUR = { gun_pistol: 0.42, gun_magnum: 0.6, gun_heavy: 0.9, gun_rifle: 0.32 };
+// «панч» — сколько синтезированного веса (саб-удар + транзиент) подмешать под запись
+const SHOT_PUNCH = { gun_pistol: 0.8, gun_magnum: 1.15, gun_heavy: 1.5, gun_rifle: 1.0 };
 
 export class Sfx {
   constructor() {
@@ -188,13 +190,18 @@ export class Sfx {
   }
   // ===== оружие: транзиент + тело + хвост, всё с джиттером =====
   shot(w, vol = 1) {
-    // сначала — настоящая запись выстрела (нож остаётся синтезом)
+    const j = 0.9 + Math.random() * 0.2;   // джиттер на каждый выстрел
+    // настоящая запись выстрела + подмешанный синтез-панч (вес и щелчок) — «сочный» игровой ствол
     if (w !== 'knife') {
       const name = SHOT_SAMPLE[w] || 'gun_rifle';
-      if (this.playBuf(name, { vol: (SHOT_VOL[name] || 0.55) * vol, rate: 0.92 + Math.random() * 0.16, maxDur: SHOT_DUR[name] || 0.35 })) return;
+      if (this.playBuf(name, { vol: (SHOT_VOL[name] || 0.6) * vol, rate: 0.95 + Math.random() * 0.1, maxDur: SHOT_DUR[name] || 0.35 })) {
+        const punch = (SHOT_PUNCH[name] || 1) * vol;
+        this.crack({ vol: 0.2 * punch, fc: 2600 * j, dur: 0.016, drive: 7 });      // резкий транзиент поверх
+        this.body({ f: 165 * j, f2: 46, dur: 0.085, vol: 0.3 * punch, type: 'sine' }); // саб-удар (вес)
+        return;
+      }
     }
-    const j = 0.9 + Math.random() * 0.2;   // джиттер тона на каждый выстрел (фолбэк-синтез)
-    switch (w) {
+    switch (w) {   // фолбэк-синтез, если сэмпл не загрузился
       case 'knife':
         this.crack({ vol: 0.16 * vol, fc: 3500 * j, dur: 0.05, drive: 3 });
         this.tone({ f: 700 * j, f2: 300, dur: 0.05, vol: 0.08 * vol, type: 'triangle' });
