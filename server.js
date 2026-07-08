@@ -892,9 +892,11 @@ function botShoot(bot, e, dist) {
   const bw = bot.loadout.primary || bot.loadout.sidearm || 'classic';
   broadcast({ t: 'shoot', id: bot.id, o: botEye(bot), d: dir.map(v => v / len), w: bw });
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
+  if (TICK_TELEMETRY) _botShots++;
   // адекватный вызов: попадают заметно чаще, иногда вешают голову
   const pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
   if (Math.random() < pHit) {
+    if (TICK_TELEMETRY) _botHits++;
     const head = Math.random() < 0.13;  // 13% голов
     applyDamage(e, head ? w.head : w.dmg, bot.id, bw, head ? 'head' : 'body');
   }
@@ -1191,7 +1193,11 @@ function moveToward(bot, target, dt, combat = false) {
 }
 
 // ===== Главный тик (20 Гц) =====
+const TICK_TELEMETRY = !!process.env.TICK_TELEMETRY;  // гейт-замер p95 тика + точность ботов (в проде выключен)
+const _tickTimes = [];
+let _botShots = 0, _botHits = 0;                       // ТОЛЬКО пули ботов (для точности в гейте)
 setInterval(() => {
+  const _t0 = TICK_TELEMETRY ? process.hrtime.bigint() : 0n;
   const t = now();
   if (!match.running) return;
 
@@ -1408,6 +1414,16 @@ setInterval(() => {
   for (const b of players.values()) {
     if (b.bot && b.alive && match.state !== PHASES.WAIT) {
       broadcast({ t: 'state', id: b.id, p: b.lastPos.map(v => +v.toFixed(2)), yaw: +b.yaw.toFixed(2), pitch: 0, crouch: false });
+    }
+  }
+  if (TICK_TELEMETRY) {
+    const ms = Number(process.hrtime.bigint() - _t0) / 1e6;
+    _tickTimes.push(ms);
+    if (_tickTimes.length >= 40) {
+      const s = [..._tickTimes].sort((a, b) => a - b);
+      console.log('TICKP95 ' + s[Math.floor(s.length * 0.95)].toFixed(2));
+      console.log('BOTACC ' + _botHits + ' ' + _botShots);
+      _tickTimes.length = 0;
     }
   }
 }, 50);

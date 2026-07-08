@@ -1,0 +1,15 @@
+{
+  "botmatch": {
+    "map": "duel",
+    "botsPerTeam": 5,
+    "rounds": 3,
+    "maxDurationMs": 70000,
+    "maxWallclip": 0,
+    "maxWallstuck": 0,
+    "accuracyMin": 0.15,
+    "accuracyMax": 0.45,
+    "tickP95MaxMs": 8,
+    "stuckSeconds": 4.0,
+    "stuckMoveEps": 0.35
+  }
+}
