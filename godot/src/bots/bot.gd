@@ -20,6 +20,13 @@ var preset := "medium"
 var weapon_id := "vandal"
 var hp := 100
 var rng := RandomNumberGenerator.new()
+# матч-поля (экономика/статы — считает Match)
+var credits := 0
+var kills := 0
+var deaths := 0
+var ult := 0
+var char_id := "sanek"
+var _bought := false
 
 var target: Node3D = null
 var engaging_until := -99.0
@@ -94,6 +101,15 @@ func _physics_process(dt: float) -> void:
 
 func _think() -> void:
 	var t := _now()
+	var mt := Match.find(get_tree())
+	if mt and mt.phase == Match.Phase.BUY:
+		# закупка: стоим; раз за раунд покупаем лучшее по карману (web-упрощение)
+		if not _bought:
+			_bought = true
+			for cand in ["vandal", "spectre", "stinger"]:
+				if mt.try_buy(self, cand):
+					break
+		return
 	var seen := _visible_enemy()
 	if seen != null:
 		if target != seen or t >= engaging_until:
@@ -165,7 +181,7 @@ func _aim_and_shoot(t: float) -> void:
 		var dmg := int(wd["head"] if head else wd["dmg"])
 		if target.has_method("take_hit"):
 			var pre := int(target.get("hp"))
-			target.call("take_hit", dmg, "head" if head else "body")
+			target.call("take_hit", dmg, "head" if head else "body", self, weapon_id)
 			if pre > 0 and int(target.get("hp")) <= 0:
 				stat_kills += 1  # килл = живой → мёртвый именно от НАШЕГО попадания
 
@@ -249,7 +265,7 @@ func part_at(shape_idx: int) -> String:
 	return "body"
 
 
-func take_hit(dmg: int, _part: String) -> void:
+func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> void:
 	if hp <= 0:
 		return
 	hp -= dmg
@@ -257,10 +273,28 @@ func take_hit(dmg: int, _part: String) -> void:
 		stat_deaths += 1
 		visible = false
 		set_collision_layer_value(1, false)
-		var tw := create_tween()
-		tw.tween_interval(2.0)
-		tw.tween_callback(func() -> void:
-			global_position = _spawn_pos
-			hp = int(Balance.RULES["BASE_HP"])
-			visible = true
-			set_collision_layer_value(1, true))
+		var mt := Match.find(get_tree())
+		if mt and mt.phase != Match.Phase.WAIT:
+			mt.on_death(self, attacker, weapon, part == "head")  # в матче лежим до конца раунда
+		else:
+			var tw := create_tween()
+			tw.tween_interval(2.0)
+			tw.tween_callback(func() -> void:
+				global_position = _spawn_pos
+				hp = int(Balance.RULES["BASE_HP"])
+				visible = true
+				set_collision_layer_value(1, true))
+
+
+func round_reset() -> void:
+	hp = int(Balance.RULES["BASE_HP"])
+	visible = true
+	set_collision_layer_value(1, true)
+	_bought = false
+	weapon_id = "classic"  # новый раунд — с пистолетом, пока не купит
+	target = null
+	engaging_until = -99.0
+
+
+func give_weapon(id: String) -> void:
+	weapon_id = id

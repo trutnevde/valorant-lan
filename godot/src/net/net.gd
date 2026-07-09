@@ -121,7 +121,7 @@ func start_game() -> void:
 
 # ===== урон: клиент репортит попадание, ХОСТ применяет (авторитет-паритет вебу) =====
 @rpc("any_peer", "reliable", "call_local")
-func report_hit(target_path: NodePath, dmg: int, part: String) -> void:
+func report_hit(target_path: NodePath, dmg: int, part: String, attacker_path := NodePath(), weapon := "") -> void:
 	if not is_host():
 		return
 	var target := get_node_or_null(target_path)
@@ -129,9 +129,47 @@ func report_hit(target_path: NodePath, dmg: int, part: String) -> void:
 		return
 	if int(target.get("hp")) <= 0:
 		return
-	target.call("take_hit", dmg, part)
+	var attacker := get_node_or_null(attacker_path) if attacker_path != NodePath() else null
+	target.call("take_hit", dmg, part, attacker, weapon)
 	# HP разослать всем (у кого есть hp — синхронизирует состояние)
 	_sync_hp.rpc(target_path, int(target.get("hp")))
+
+
+# закупка: клиент просит — хост валидирует деньги/фазу, клиент получает подтверждение
+@rpc("any_peer", "reliable")
+func buy(weapon_id: String) -> void:
+	if not is_host():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % id)
+	var mt := Match.find(get_tree())
+	if p == null or mt == null:
+		return
+	if mt.try_buy(p, weapon_id):
+		_buy_ok.rpc_id(id, weapon_id, int(p.get("credits")))
+
+
+@rpc("authority", "reliable")
+func _buy_ok(weapon_id: String, credits: int) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p:
+		p.set("credits", credits)
+		p.call("give_weapon", weapon_id)
+
+
+# клиент держит 4/F — хост применяет плант/дефуз со своим dt (авторитет-паритет)
+@rpc("any_peer", "unreliable_ordered")
+func spike_input(plant_hold: bool, at_site: bool, defuse_hold: bool) -> void:
+	if not is_host():
+		return
+	var id := multiplayer.get_remote_sender_id()
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % id)
+	var mt := Match.find(get_tree())
+	if p == null or mt == null:
+		return
+	var dt := 1.0 / float(Engine.physics_ticks_per_second)
+	mt.try_plant(p, at_site, plant_hold, dt)
+	mt.try_defuse(p, defuse_hold, dt)
 
 
 @rpc("authority", "reliable", "call_local")

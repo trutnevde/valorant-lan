@@ -14,6 +14,7 @@ const HEAD_Y := 1.5            # верх капсулы мишени — мет
 
 var rng := RandomNumberGenerator.new()
 var current_id := "classic"
+var loadout := { "primary": "", "sidearm": "classic" }  # слоты (web-паритет)
 var ammo := {}                # id -> {mag, reserve}
 var last_shot := -99.0
 var spray_idx := 0
@@ -46,6 +47,22 @@ func _ready() -> void:
 
 func w() -> Dictionary:
 	return Balance.WEAPONS[current_id]
+
+
+# покупка/выдача: кладёт в слот по типу и берёт в руки (свежий боезапас)
+func give_weapon(id: String) -> void:
+	var wd: Dictionary = Balance.WEAPONS.get(id, {})
+	if wd.is_empty():
+		return
+	loadout["primary" if String(wd["slot"]) == "primary" else "sidearm"] = id
+	ammo[id] = { "mag": int(wd["mag"]), "reserve": int(wd["reserve"]) }
+	equip(id)
+
+
+func reset_loadout() -> void:
+	loadout = { "primary": "", "sidearm": "classic" }
+	ammo.clear()
+	equip("classic")
 
 
 func equip(id: String) -> void:
@@ -88,6 +105,13 @@ func _physics_process(dt: float) -> void:
 		try_shoot(Input.is_action_just_pressed("fire"))
 	if Input.is_action_just_pressed("reload"):
 		reload()
+	# слоты: 1 — основное, 2 — пистолет, 3 — нож (web-паритет)
+	if Input.is_action_just_pressed("slot1") and loadout["primary"] != "":
+		equip(String(loadout["primary"]))
+	elif Input.is_action_just_pressed("slot2"):
+		equip(String(loadout["sidearm"]))
+	elif Input.is_action_just_pressed("slot3"):
+		equip("knife")
 
 
 func _ads_fov() -> float:
@@ -207,9 +231,9 @@ func _fire_ray() -> void:
 		var dmg := roundi(base * falloff_mult(dist))
 		if NetHub.online():
 			# паритет вебу: попадание считает клиент, ПРИМЕНЯЕТ хост
-			NetHub.report_hit(collider as Node, dmg, part)
+			NetHub.report_hit(collider as Node, dmg, part, player, current_id)
 		else:
-			collider.call("take_hit", dmg, part)
+			collider.call("take_hit", dmg, part, player, current_id)
 		hit_sfx.stream = load("res://assets/audio/%s.ogg" % ("ting" if part == "head" else "hit"))
 		hit_sfx.play()
 		hit_target.emit(part, dmg)

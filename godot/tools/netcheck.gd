@@ -80,7 +80,7 @@ func _run_client() -> void:
 			quit(1)
 			return
 	print("NETCHECK CLI: registered, reporting hit")
-	_net().rpc_id(1, "report_hit", dummy.get_path(), 30, "body")
+	_net().rpc_id(1, "report_hit", dummy.get_path(), 30, "body", NodePath(), "")  # RPC не подставляет дефолты — все 5 аргументов
 	# ждём, пока хост применит и синканёт hp обратно
 	while int(dummy.get("hp")) != 70:
 		await process_frame

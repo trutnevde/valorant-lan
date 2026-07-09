@@ -33,6 +33,12 @@ var mouse_sens := 0.0022
 var hp := 100
 var team := "A"
 var _spawn_pos := Vector3.ZERO
+# матч-поля (экономика/статы — считает Match)
+var credits := 0
+var kills := 0
+var deaths := 0
+var ult := 0
+var dead := false
 
 signal made_noise  # шаг на бегу — для событийного слуха ботов
 signal hp_changed(hp: int)
@@ -65,21 +71,42 @@ func _ready() -> void:
 
 
 # урон применяет хост (Net.report_hit) или напрямую в офлайне — паритет веб-модели
-func take_hit(dmg: int, _part: String) -> void:
+func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> void:
 	if hp <= 0:
 		return
 	hp -= dmg
 	hp_changed.emit(hp)
 	if hp <= 0:
 		died.emit()
-		# минимальный респавн для полигона/среза (раундовая смерть — фаза G5)
-		var tw := create_tween()
-		tw.tween_interval(2.0)
-		tw.tween_callback(func() -> void:
-			global_position = _spawn_pos
-			velocity = Vector3.ZERO
-			hp = int(Balance.RULES["BASE_HP"])
-			hp_changed.emit(hp))
+		var mt := Match.find(get_tree())
+		if mt and mt.phase != Match.Phase.WAIT:
+			# в матче смерть до конца раунда
+			mt.on_death(self, attacker, weapon, part == "head")
+			dead = true
+			visible = false
+			set_collision_layer_value(1, false)
+		else:
+			# тренировка/полигон: авто-респавн
+			var tw := create_tween()
+			tw.tween_interval(2.0)
+			tw.tween_callback(func() -> void:
+				global_position = _spawn_pos
+				velocity = Vector3.ZERO
+				hp = int(Balance.RULES["BASE_HP"])
+				hp_changed.emit(hp))
+
+
+func round_reset() -> void:
+	hp = int(Balance.RULES["BASE_HP"])
+	dead = false
+	visible = true
+	set_collision_layer_value(1, true)
+	velocity = Vector3.ZERO
+	hp_changed.emit(hp)
+
+
+func give_weapon(id: String) -> void:
+	($WeaponRig as WeaponRig).give_weapon(id)
 
 
 var _shape_part := {}
@@ -122,9 +149,20 @@ func max_speed() -> float:
 
 
 func _physics_process(dt: float) -> void:
+	if dead:
+		return
+	var mt := Match.find(get_tree())
+	var frozen := mt != null and mt.phase == Match.Phase.BUY  # закупка: смотреть можно, ходить нельзя (web G.freeze)
 	var m: Dictionary = Balance.MOVE
 	crouch = Input.is_action_pressed("crouch")
 	walk = Input.is_action_pressed("walk")
+	if mt:
+		_spike_input(mt, dt)
+	if frozen:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		_apply_camera(dt)
+		return
 
 	# плавная высота капсулы (присед)
 	var target_h := float(m["CROUCH_HEIGHT"]) if crouch else float(m["HEIGHT"])
@@ -241,6 +279,28 @@ func _apply_camera(dt: float) -> void:
 	rotation.y = yaw + punch_yaw
 	head.rotation.x = pitch + punch_pitch
 	head.rotation.z = _roll_z
+
+
+# ===== шип: плант (4, в сайте) и дефуз (F, у шипа) =====
+func in_site() -> bool:
+	for s in get_tree().get_nodes_in_group("site"):
+		if (s as Area3D).overlaps_body(self):
+			return true
+	return false
+
+
+func _spike_input(mt: Match, dt: float) -> void:
+	var plant_hold := Input.is_action_pressed("plant")
+	var defuse_hold := Input.is_action_pressed("defuse")
+	if NetHub.online() and not multiplayer.is_server():
+		# клиент шлёт намерение хосту (авторитет-паритет); шлём только когда есть смысл
+		if plant_hold or defuse_hold:
+			var n := NetHub.node()
+			if n:
+				n.rpc_id(1, "spike_input", plant_hold, in_site(), defuse_hold)
+		return
+	mt.try_plant(self, in_site(), plant_hold, dt)
+	mt.try_defuse(self, defuse_hold, dt)
 
 
 # направление выстрела с учётом панча — пули летят туда, куда реально смотрит камера

@@ -21,7 +21,8 @@ static func is_host() -> bool:
 	return n == null or bool(n.call("is_host"))
 
 
-static func report_hit(target: Node, dmg: int, part: String) -> void:
+static func report_hit(target: Node, dmg: int, part: String, attacker: Node = null, weapon := "") -> void:
 	var n := node()
 	if n:
-		n.rpc_id(1, "report_hit", target.get_path(), dmg, part)
+		n.rpc_id(1, "report_hit", target.get_path(), dmg, part,
+			attacker.get_path() if attacker else NodePath(), weapon)

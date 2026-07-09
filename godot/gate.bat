@@ -10,10 +10,13 @@ echo === [1/4] import-check ===
 echo === [2/4] GUT (вкл. hitreg-санити и связность карт) ===
 "%GODOT%" --headless --path . -s addons/gut/gut_cmdln.gd -gdir=res://tests -gexit || goto :fail
 
-echo === [3/4] botmatch (застревания 0, сквозь-стен 0, точность в коридоре) ===
+echo === [3/5] botmatch (застревания 0, сквозь-стен 0, точность в коридоре) ===
 "%GODOT%" --headless --path . -s res://tools/botmatch.gd -- --preset=medium --seconds=45 || goto :fail
 
-echo === [4/4] web gate (invariant #1) ===
+echo === [4/5] matchcheck (3 раунда, экономика по таблице) ===
+"%GODOT%" --headless --path . -s res://tools/matchcheck.gd || goto :fail
+
+echo === [5/5] web gate (invariant #1) ===
 pushd ..
 call npm run gate || (popd & goto :fail)
 popd
