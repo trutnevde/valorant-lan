@@ -16,6 +16,27 @@ git show v0.1.0-pervaya-krov
 
 ---
 
+## 🤖 [GODOT] ПОРТ НА GODOT 4 — ветка `godot-port`
+
+Порт по `MIGRATION-GODOT.md`: паритет геймплея, превосходство визуала/звука. Веб-версия в корне
+неприкосновенна, живёт и правится независимо. Теги `godot-v0.X.Y-имя`.
+
+### [GODOT] `godot-v0.0.1-bridgehead` — Фаза G0 (плацдарм)
+- **Срез баланса:** `public/js/shared.js` @ коммит **`144e737`** (v0.15.7 + AGENTS.md). Все числа
+  порта — только из этого среза через автоген `godot/src/core/balance.gd` (`tools/port_balance.mjs`).
+- **Что:** ветка `godot-port` от `saga`; **Godot 4.7 stable** установлен через winget (путь в
+  `godot/CLAUDE.md`); скелет `godot/` (project.godot: Forward+, 1600×900, полный input map);
+  `godot/CLAUDE.md` дословно из задания; `.gitignore` (+`godot/.godot/`, `godot/build/`); раздел
+  о порте в корневом README; **GUT v9.5.0** вендорен в `addons/`; `tools/agent_eyes.gd|tscn`
+  (скриншот-глаза); заглушка `scenes/maps/range.tscn`; `godot/gate.bat` (импорт → GUT → веб-гейт).
+- **Гейт:** импорт ок; check-only ок; **GUT 7 тестов / 31 assert зелёные** (сверка среза: RULES,
+  оружие, MOVE, 10 агентов, ABILITY, пресеты ботов); **веб-гейт зелёный** (инвариант №1 цел).
+- **Честно:** MCP godot пропущен (таймбокс; headless-цикл работает — не залипаю). Экспорт-шаблоны
+  (~1 ГБ) не входят в G0-гейт — нужны только к сборке exe в G3, качаются фоном.
+- **Дальше:** G1 — ядро ощущений (CharacterBody3D + оружейный hitscan 1:1 из weapons.js).
+
+---
+
 ## 🧭 ЭПОХА 15 «БОЛЬШАЯ ЧИСТКА» — исполняется фазами
 
 Ведётся по `MEGA-EPOCH-15.md`, канон — `DESIGN.md`, правила — `CLAUDE.md`. Решения игрока,

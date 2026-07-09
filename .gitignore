@@ -2,3 +2,7 @@ node_modules/
 *.log
 .DS_Store
 Thumbs.db
+
+# Godot-порт (ветка godot-port)
+godot/.godot/
+godot/build/
