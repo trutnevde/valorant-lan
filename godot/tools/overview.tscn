@@ -1,0 +1,12 @@
+[gd_scene load_steps=2 format=3 uid="uid://overview0000"]
+
+[ext_resource type="PackedScene" path="res://scenes/maps/range.tscn" id="1"]
+
+[node name="Overview" type="Node3D"]
+
+[node name="Range" parent="." instance=ExtResource("1")]
+
+[node name="Cam" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.64, 0.77, 0, -0.77, 0.64, 0, 22, 26)
+current = true
+fov = 60.0
