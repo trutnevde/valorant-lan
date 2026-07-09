@@ -15,7 +15,9 @@ var pitch := 0.0
 var punch_yaw := 0.0    # панч отдачи (weapon.gd пишет сюда)
 var punch_pitch := 0.0
 var aim_t := 0.0        # 0..1 прицеливание (weapon.gd)
-var speed_factor := 1.0 # множители скорости персонажа/эффектов (в G1 — 1.0)
+var char_id := "max"    # агент (срез G3 — Макс; выбор агента — фаза G4-лобби)
+var weapon_speed := 1.0 # множитель скорости от оружия (weapon_feel)
+var speed_factor := 1.0 # прочие эффекты (бусты/слоу) — пока 1.0
 
 var crouch := false
 var walk := false
@@ -85,7 +87,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func max_speed() -> float:
 	var m: Dictionary = Balance.MOVE
 	var s := float(m["CROUCH_SPEED"]) if crouch else (float(m["WALK_SPEED"]) if walk else float(m["RUN_SPEED"]))
-	s *= speed_factor
+	s *= float(Balance.CHARACTERS.get(char_id, {}).get("speedMul", 1.0))  # пассивка перса (Макс 1.05)
+	s *= weapon_speed * speed_factor
 	s *= (1.0 - aim_t * 0.42)  # прицеливание замедляет (web player.js:151)
 	return s
 
@@ -117,8 +120,8 @@ func _physics_process(dt: float) -> void:
 	var jump_edge := Input.is_action_just_pressed("jump")
 	if Input.is_action_pressed("jump") and is_on_floor():
 		velocity.y = float(m["JUMP_VEL"])
-	elif jump_edge and not is_on_floor() and _air_jumps > 0:
-		velocity.y = float(m["JUMP_VEL"])
+	elif jump_edge and not is_on_floor() and char_id == "max" and _air_jumps > 0:
+		velocity.y = float(m["JUMP_VEL"])  # твист Макса: двойной прыжок
 		_air_jumps -= 1
 
 	var was_air := not is_on_floor()
@@ -168,8 +171,10 @@ func _footsteps(dt: float) -> void:
 	_step_dist += h_speed * dt
 	if _step_dist > 2.7:
 		_step_dist = 0.0
-		_play_step(0.55)
-		made_noise.emit()
+		var silent := char_id == "max"  # пассивка Макса «Ветер»: бесшумный бег (тише + боты не слышат)
+		_play_step(0.22 if silent else 0.55)
+		if not silent:
+			made_noise.emit()
 
 
 func _play_step(vol: float) -> void:

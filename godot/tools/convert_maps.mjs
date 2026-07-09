@@ -113,12 +113,35 @@ const meta = {
   site_a: [m.sites.A.x, m.sites.A.z], site_b: [m.sites.B.x, m.sites.B.z],
 };
 
+// свет и окружение: солнце БЕЗ пересвета (правило веб-саги) + мягкий ambient от неба
+sub.push(`[sub_resource type="ProceduralSkyMaterial" id="skymat"]
+sky_top_color = Color(0.36, 0.46, 0.6, 1)
+sky_horizon_color = Color(0.62, 0.65, 0.67, 1)
+ground_bottom_color = Color(0.2, 0.19, 0.18, 1)
+ground_horizon_color = Color(0.62, 0.65, 0.67, 1)`);
+sub.push(`[sub_resource type="Sky" id="sky"]
+sky_material = SubResource("skymat")`);
+sub.push(`[sub_resource type="Environment" id="env"]
+background_mode = 2
+sky = SubResource("sky")
+ambient_light_source = 3
+ambient_light_energy = 0.9
+tonemap_mode = 3`);
+
 const out = `[gd_scene load_steps=${sub.length + 1} format=3]
 
 ${sub.join('\n\n')}
 
 [node name="Map_${m.id}" type="Node3D"]
 metadata/map_meta = ${JSON.stringify(JSON.stringify(meta))}
+
+[node name="Env" type="WorldEnvironment" parent="."]
+environment = SubResource("env")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 14, 0)
+light_energy = 1.0
+shadow_enabled = true
 
 [node name="Geometry" type="Node3D" parent="."]
 

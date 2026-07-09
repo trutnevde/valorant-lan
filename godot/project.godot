@@ -7,7 +7,7 @@ config_version=5
 [application]
 
 config/name="Valorant Lokalka (Godot)"
-run/main_scene="res://scenes/maps/range.tscn"
+run/main_scene="res://scenes/maps/slice.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [display]

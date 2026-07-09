@@ -54,7 +54,7 @@ func equip(id: String) -> void:
 		ammo[id] = { "mag": int(w()["mag"]), "reserve": int(w()["reserve"]) }
 	ready_at = _now() + float(Balance.weapon_feel(id)["equip"])
 	spray_idx = 0
-	player.speed_factor = float(Balance.weapon_feel(id)["speed"])
+	player.weapon_speed = float(Balance.weapon_feel(id)["speed"])
 
 
 func _now() -> float:
