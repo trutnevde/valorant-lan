@@ -28,15 +28,46 @@ var _roll_z := 0.0
 var _step_dist := 0.0
 var _steps: Array[AudioStream] = []
 var mouse_sens := 0.0022
+var hp := 100
+var team := "A"
+var _spawn_pos := Vector3.ZERO
 
-signal made_noise  # шаг на бегу — для событийного слуха ботов (G2)
+signal made_noise  # шаг на бегу — для событийного слуха ботов
+signal hp_changed(hp: int)
+signal died
 
 
 func _ready() -> void:
 	height = float(Balance.MOVE["HEIGHT"])
+	hp = int(Balance.RULES["BASE_HP"])
+	_spawn_pos = global_position
+	add_to_group("combatants")
+	add_to_group("noise_makers")
 	for i in range(1, 7):
 		_steps.append(load("res://assets/audio/step%d.ogg" % i))
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+# бот стреляет вероятностно (паритет веб-модели) — просто наносит урон
+func take_hit(dmg: int, _part: String) -> void:
+	if hp <= 0:
+		return
+	hp -= dmg
+	hp_changed.emit(hp)
+	if hp <= 0:
+		died.emit()
+		# минимальный респавн для полигона/среза (раундовая смерть — фаза G5)
+		var tw := create_tween()
+		tw.tween_interval(2.0)
+		tw.tween_callback(func() -> void:
+			global_position = _spawn_pos
+			velocity = Vector3.ZERO
+			hp = int(Balance.RULES["BASE_HP"])
+			hp_changed.emit(hp))
+
+
+func part_at(_shape_idx: int) -> String:
+	return "body"
 
 
 func _unhandled_input(event: InputEvent) -> void:

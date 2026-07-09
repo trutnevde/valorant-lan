@@ -200,12 +200,12 @@ func _fire_ray() -> void:
 	var dist := origin.distance_to(res["position"] as Vector3)
 	_spawn_tracer(origin, res["position"] as Vector3)
 	_spawn_decal(res["position"] as Vector3, res["normal"] as Vector3)
-	if collider is TargetDummy:
-		var part: String = (collider as TargetDummy).part_at(res["shape"] as int)
+	if collider.has_method("part_at") and collider.has_method("take_hit"):
+		var part: String = collider.call("part_at", res["shape"] as int)
 		var wd := w()
 		var base := float(wd["head"]) if part == "head" else (float(wd["leg"]) if part == "leg" else float(wd["dmg"]))
 		var dmg := roundi(base * falloff_mult(dist))
-		(collider as TargetDummy).take_hit(dmg, part)
+		collider.call("take_hit", dmg, part)
 		hit_sfx.stream = load("res://assets/audio/%s.ogg" % ("ting" if part == "head" else "hit"))
 		hit_sfx.play()
 		hit_target.emit(part, dmg)
