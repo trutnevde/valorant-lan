@@ -46,6 +46,8 @@ func _ready() -> void:
 	rng.randomize()
 	add_to_group("combatants")
 	add_to_group("noise_makers")
+	if NetHub.online() and not multiplayer.is_server():
+		set_physics_process(false)  # AI ботов гоняет только хост; клиенты видят синк
 	hp = int(Balance.RULES["BASE_HP"])
 	_spawn_pos = global_position
 	_last_pos = global_position

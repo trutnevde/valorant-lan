@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3 uid="uid://lan_game_000"]
+
+[ext_resource type="Script" path="res://src/core/lan_game.gd" id="1"]
+
+[node name="LanGame" type="Node3D"]
+script = ExtResource("1")

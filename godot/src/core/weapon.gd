@@ -205,7 +205,11 @@ func _fire_ray() -> void:
 		var wd := w()
 		var base := float(wd["head"]) if part == "head" else (float(wd["leg"]) if part == "leg" else float(wd["dmg"]))
 		var dmg := roundi(base * falloff_mult(dist))
-		collider.call("take_hit", dmg, part)
+		if NetHub.online():
+			# паритет вебу: попадание считает клиент, ПРИМЕНЯЕТ хост
+			NetHub.report_hit(collider as Node, dmg, part)
+		else:
+			collider.call("take_hit", dmg, part)
 		hit_sfx.stream = load("res://assets/audio/%s.ogg" % ("ting" if part == "head" else "hit"))
 		hit_sfx.play()
 		hit_target.emit(part, dmg)

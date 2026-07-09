@@ -1,7 +1,18 @@
-[gd_scene load_steps=9 format=3 uid="uid://bot_v1_00000"]
+[gd_scene load_steps=10 format=3 uid="uid://bot_v1_00000"]
 
 [ext_resource type="Script" path="res://src/bots/bot.gd" id="1"]
 [ext_resource type="AudioStream" path="res://assets/audio/gun_rifle.wav" id="2"]
+
+[sub_resource type="SceneReplicationConfig" id="botrepl"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath(".:visible")
+properties/2/spawn = true
+properties/2/replication_mode = 1
 
 [sub_resource type="CapsuleShape3D" id="movecap"]
 radius = 0.38
@@ -58,3 +69,6 @@ transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 stream = ExtResource("2")
 volume_db = -8.0
 max_distance = 70.0
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("botrepl")

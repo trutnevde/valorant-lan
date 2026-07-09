@@ -47,10 +47,24 @@ func _ready() -> void:
 	add_to_group("noise_makers")
 	for i in range(1, 7):
 		_steps.append(load("res://assets/audio/step%d.ogg" % i))
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	var remote := NetHub.online() and not is_multiplayer_authority()
+	var body := get_node_or_null("BodyVis") as Node3D
+	if remote:
+		# чужой игрок: без ввода/камеры/HUD, но с видимым телом
+		set_physics_process(false)
+		cam.current = false
+		($HUD as CanvasLayer).visible = false
+		($WeaponRig as Node).set_physics_process(false)
+		if body:
+			body.visible = true
+	else:
+		if body:
+			body.visible = false  # своё тело от первого лица не видно
+		cam.current = true
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 
-# бот стреляет вероятностно (паритет веб-модели) — просто наносит урон
+# урон применяет хост (Net.report_hit) или напрямую в офлайне — паритет веб-модели
 func take_hit(dmg: int, _part: String) -> void:
 	if hp <= 0:
 		return
@@ -68,7 +82,21 @@ func take_hit(dmg: int, _part: String) -> void:
 			hp_changed.emit(hp))
 
 
-func part_at(_shape_idx: int) -> String:
+var _shape_part := {}
+
+
+func part_at(shape_idx: int) -> String:
+	if _shape_part.is_empty():
+		var idx := 0
+		for c in get_children():
+			if c is CollisionShape3D:
+				_shape_part[idx] = String(c.name).to_lower()
+				idx += 1
+	var nm: String = _shape_part.get(shape_idx, "body")
+	if nm.contains("head"):
+		return "head"
+	if nm.contains("leg"):
+		return "leg"
 	return "body"
 
 
