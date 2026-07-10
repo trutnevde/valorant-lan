@@ -43,6 +43,19 @@ var dead := false
 var blind_until := 0.0    # вспышки (белый экран — HUD)
 var stun_until := 0.0     # стан (движение заморожено)
 var boost_until := 0.0    # Порыв Макса (+40%)
+var levit_until := 0.0    # «Невесомость» Геры (слоу ×0.35)
+var last_kill_t := -99.0  # «накормленность» Кровопира Дениса (окно 6с)
+var last_dmg_t := -99.0   # пассивка Дениса: реген только вне боя
+# принудительное движение (кокон Дениса / воронка Геры / грэпл Геры)
+var forced_to := Vector3.INF
+var forced_until := 0.0
+var forced_speed := 0.0
+
+
+func force_pull(to: Vector3, dur: float, speed: float) -> void:
+	forced_to = to
+	forced_until = Time.get_ticks_msec() / 1000.0 + dur
+	forced_speed = speed
 var ult_mark_until := 0.0 # Второе дыхание Артемия
 var ult_mark_pos := Vector3.INF
 
@@ -109,6 +122,7 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 	if hp <= 0:
 		return
 	hp -= dmg
+	last_dmg_t = Time.get_ticks_msec() / 1000.0
 	hp_changed.emit(hp)
 	if hp <= 0:
 		if try_second_wind():
@@ -180,8 +194,11 @@ func max_speed() -> float:
 	var s := float(m["CROUCH_SPEED"]) if crouch else (float(m["WALK_SPEED"]) if walk else float(m["RUN_SPEED"]))
 	s *= float(Balance.CHARACTERS.get(char_id, {}).get("speedMul", 1.0))  # пассивка перса (Макс 1.05)
 	s *= weapon_speed * speed_factor
-	if Time.get_ticks_msec() / 1000.0 < boost_until:
+	var tt := Time.get_ticks_msec() / 1000.0
+	if tt < boost_until:
 		s *= float(Balance.ABILITY["BOOST_MUL"])  # Порыв Макса
+	if tt < levit_until:
+		s *= float(Balance.ABILITY["GERA_ULT_SLOW"])  # «Невесомость» Геры — всплыл, вязнет
 	s *= (1.0 - aim_t * 0.42)  # прицеливание замедляет (web player.js:151)
 	return s
 
@@ -191,6 +208,17 @@ func _physics_process(dt: float) -> void:
 		return
 	var mt := Match.find(get_tree())
 	var now_s := Time.get_ticks_msec() / 1000.0
+	# принудительная тяга (кокон/воронка/грэпл): движение переопределено, полный 3D (грэпл — вверх на насесты)
+	if now_s < forced_until and forced_to != Vector3.INF:
+		var d := forced_to - global_position
+		if d.length() > 0.4:
+			velocity = d.normalized() * forced_speed
+		else:
+			velocity = Vector3.ZERO
+			forced_until = 0.0
+		move_and_slide()
+		_apply_camera(dt)
+		return
 	var frozen := (mt != null and mt.phase == Match.Phase.BUY) or now_s < stun_until  # закупка/стан: смотреть можно, ходить нельзя
 	var m: Dictionary = Balance.MOVE
 	crouch = Input.is_action_pressed("crouch")

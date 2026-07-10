@@ -135,6 +135,24 @@ func report_hit(target_path: NodePath, dmg: int, part: String, attacker_path := 
 	_sync_hp.rpc(target_path, int(target.get("hp")))
 
 
+# принудительная тяга своего игрока (кокон/воронка — хост командует, владелец исполняет)
+@rpc("authority", "reliable", "call_local")
+func force_pull_self(pos: Vector3, dur: float, speed: float) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p and p.has_method("force_pull"):
+		p.call("force_pull", pos, dur, speed)
+
+
+# «Невесомость»: слоу+подброс своего игрока
+@rpc("authority", "reliable", "call_local")
+func levitate_self(dur: float) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p:
+		p.set("levit_until", Time.get_ticks_msec() / 1000.0 + dur)
+		if p is CharacterBody3D and (p as CharacterBody3D).is_on_floor():
+			(p as CharacterBody3D).velocity.y = 2.2
+
+
 # телепорт своего игрока (движение клиент-авторитарно — двигает владелец)
 @rpc("authority", "reliable", "call_local")
 func teleport_self(pos: Vector3) -> void:

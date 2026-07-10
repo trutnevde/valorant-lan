@@ -8,16 +8,16 @@ func cast(kind: String, data: Dictionary) -> void:
 	if NetHub.online() and not multiplayer.is_server():
 		rpc_id(1, "_cast_srv", kind, data)
 	else:
-		_spawn_logic(kind, data)
-		_fx_broadcast(kind, data)
+		if _spawn_logic(kind, data):
+			_fx_broadcast(kind, data)
 
 
 @rpc("any_peer", "reliable")
 func _cast_srv(kind: String, data: Dictionary) -> void:
 	if not NetHub.is_host():
 		return
-	_spawn_logic(kind, data)
-	_fx_broadcast(kind, data)
+	if _spawn_logic(kind, data):
+		_fx_broadcast(kind, data)
 
 
 func _fx_broadcast(kind: String, data: Dictionary) -> void:
@@ -27,8 +27,8 @@ func _fx_broadcast(kind: String, data: Dictionary) -> void:
 		_fx(kind, data)
 
 
-# ===== логика (ТОЛЬКО хост/офлайн): урон, хил, слепота =====
-func _spawn_logic(kind: String, data: Dictionary) -> void:
+# ===== логика (ТОЛЬКО хост/офлайн): урон, хил, слепота. false = каст отклонён =====
+func _spawn_logic(kind: String, data: Dictionary) -> bool:
 	match kind:
 		"flash":
 			var orb: Node = (load("res://src/agents/effects/flash_orb.gd") as GDScript).new()
@@ -45,13 +45,41 @@ func _spawn_logic(kind: String, data: Dictionary) -> void:
 			if p:
 				p.set("ult_mark_pos", Vector3(data["x"], 0.1, data["z"]))
 				p.set("ult_mark_until", Time.get_ticks_msec() / 1000.0 + float(Balance.ABILITY["PHOENIX_ULT_TIME"]))
+		"smoke":
+			# дым валидирует хост («Развеятель» мог заблокировать зону)
+			var sw := get_node("/root/Smokes")
+			if not bool(sw.call("add_smoke", Vector3(data["x"], 0, data["z"]), String(data["team"]), bool(data.get("stink", false)))):
+				return false
+			data["id"] = sw.get("_seq")
+		"dispel":
+			var sw2 := get_node("/root/Smokes")
+			var removed: Array = sw2.call("dispel", Vector3(data["x"], 0, data["z"]), String(data["team"]))
+			data["removed"] = removed
+		"generic":
+			var g: Node = (load(String(data["logic"])) as GDScript).new()
+			g.set("data", data)
+			if data.has("cname"):
+				g.name = String(data["cname"]) + "_logic"
+			get_tree().current_scene.add_child(g)
+		"cocoon":
+			var cl: Node = (load("res://src/agents/effects/cocoon.gd") as GDScript).new()
+			cl.set("data", data)
+			cl.name = String(data["cname"]) + "_logic"
+			get_tree().current_scene.add_child(cl)
+		"levit":
+			var lv: Node = (load("res://src/agents/effects/levit.gd") as GDScript).new()
+			lv.set("data", data)
+			get_tree().current_scene.add_child(lv)
 		_:
 			pass
+	return true
 
 
 # ===== визуал (у всех) =====
 @rpc("authority", "reliable", "call_local")
 func _fx(kind: String, data: Dictionary) -> void:
+	if get_tree().current_scene == null:
+		return  # headless-тесты без сцены — визуал некуда вешать
 	match kind:
 		"clone_decoy":
 			# клон-обманка видим ВСЕМ: копия на каждом пире, одинаковое имя → одинаковый путь
@@ -71,8 +99,73 @@ func _fx(kind: String, data: Dictionary) -> void:
 			if cm:
 				cm.global_position = Vector3(data["x"], 0, data["z"])
 				cm.set("data", (cm.get("data") as Dictionary).merged({ "mode": "stand" }, true))
+		"smoke":
+			# клиенты ведут локальный список (Охотник Геры, HUD); хост уже добавил в логике
+			var sw := get_node("/root/Smokes")
+			if NetHub.online() and not multiplayer.is_server():
+				(sw.get("smokes") as Array).append({
+					"id": int(data["id"]), "pos": Vector3(data["x"], 0, data["z"]),
+					"r": float(Balance.ABILITY["SMOKE_R"]),
+					"until": Time.get_ticks_msec() / 1000.0 + float(Balance.ABILITY["SMOKE_TIME"]),
+					"team": String(data["team"]), "stink": bool(data.get("stink", false)),
+				})
+			_vis_smoke(int(data["id"]), Vector3(data["x"], 0, data["z"]), bool(data.get("stink", false)))
+		"dispel":
+			var sw3 := get_node("/root/Smokes")
+			var ids: Array = data.get("removed", [])
+			if NetHub.online() and not multiplayer.is_server():
+				var lst: Array = sw3.get("smokes")
+				sw3.set("smokes", lst.filter(func(s: Dictionary) -> bool: return not ids.has(int(s["id"]))))
+			for sid in ids:
+				var v := get_tree().current_scene.get_node_or_null("SmokeVis_%d" % int(sid))
+				if v:
+					v.queue_free()
+			_vis_ring(Vector3(data["x"], 0.1, data["z"]), float(Balance.ABILITY["GERA_DISPEL_R"]), Color(0.37, 0.88, 0.82), 1.2)
+		"reveal":
+			# подсветка врагов МОЕЙ команде (маркер сквозь стены)
+			var me := _my_player()
+			if me and String(data["team"]) == me.team:
+				for tp in (data["targets"] as Array):
+					var tgt := get_node_or_null(NodePath(String(tp))) as Node3D
+					if tgt:
+						_vis_reveal(tgt, float(data["dur"]))
+		"corpse":
+			_vis_corpse(Vector3(data["x"], 0, data["z"]))
+		"cocoon":
+			# щит-кокон у всех (стреляемый; урон решает хост)
+			var sh := CocoonShield.new()
+			sh.name = String(data["cname"])
+			sh.cname = String(data["cname"])
+			get_tree().current_scene.add_child(sh)
+			var v := get_node_or_null(NodePath(String(data["victim_path"]))) as Node3D
+			if v:
+				sh.global_position = v.global_position + Vector3(0, 1.1, 0)
 		"flash":
 			_vis_orb(data, Color(1.0, 0.95, 0.7))
+		"levit":
+			_vis_dome(Vector3(data["x"], 0, data["z"]))
+		"generic":
+			var lg := String(data.get("logic", ""))
+			if lg.contains("sova_arrow"):
+				_vis_arrow(data)
+				if bool(data.get("shootable", false)):
+					# сбиваемая разведстрела: стреляемое тело летит вместе с визуалом
+					var ab := ArrowBody.new()
+					ab.name = String(data["cname"])
+					ab.cname = String(data["cname"])
+					get_tree().current_scene.add_child(ab)
+					var afrom := Vector3(data["fx"], data["fy"], data["fz"])
+					var ato := Vector3(data["tx"], data["ty"], data["tz"])
+					ab.global_position = afrom
+					var atw := ab.create_tween()
+					atw.tween_property(ab, "global_position", ato, clampf(afrom.distance_to(ato) * 0.018, 0.12, 0.8))
+					atw.tween_callback(ab.queue_free)
+			elif lg.contains("scent"):
+				_vis_ring(Vector3(data["x"], 0.08, data["z"]), 1.0, Color(0.55, 0.75, 0.3), float(Balance.ABILITY["SCENT_LIFE"]))
+			elif lg.contains("vortex"):
+				_vis_ring(Vector3(float(data["fx"]) + float(data["dx"]) * 6.0, 0.1, float(data["fz"]) + float(data["dz"]) * 6.0), 2.0, Color(0.37, 0.88, 0.82), float(Balance.ABILITY["GERA_VORTEX_TIME"]))
+			elif lg.contains("fury"):
+				_vis_wall({ "ax": data["fx"], "az": data["fz"], "bx": float(data["fx"]) + float(data["dx"]) * float(Balance.ABILITY["SOVA_FURY_LEN"]), "bz": float(data["fz"]) + float(data["dz"]) * float(Balance.ABILITY["SOVA_FURY_LEN"]) }, Color(0.6, 0.9, 1.0), 1.2)
 		"fire_zone":
 			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["FIRE_ZONE_R"]), Color(1.0, 0.45, 0.15), float(Balance.ABILITY["FIRE_ZONE_TIME"]))
 		"fire_wall":
@@ -197,6 +290,107 @@ func _vis_ring(pos: Vector3, r: float, color: Color, dur: float) -> void:
 	m.material_override = mat
 	get_tree().current_scene.add_child(m)
 	m.global_position = pos
+	var tw := m.create_tween()
+	tw.tween_interval(dur)
+	tw.tween_callback(m.queue_free)
+
+
+func _vis_smoke(id: int, pos: Vector3, stink: bool) -> void:
+	var m := MeshInstance3D.new()
+	m.name = "SmokeVis_%d" % id
+	var sph := SphereMesh.new()
+	var r := float(Balance.ABILITY["SMOKE_R"])
+	sph.radius = r
+	sph.height = r * 2.0
+	m.mesh = sph
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.36, 0.48, 0.24, 0.96) if stink else Color(0.6, 0.65, 0.7, 0.96)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # непрозрачен и изнутри (глухой дым)
+	m.material_override = mat
+	get_tree().current_scene.add_child(m)
+	m.global_position = pos + Vector3(0, r * 0.55, 0)
+	var tw := m.create_tween()
+	tw.tween_interval(float(Balance.ABILITY["SMOKE_TIME"]))
+	tw.tween_callback(m.queue_free)
+
+
+func _vis_dome(pos: Vector3) -> void:
+	var m := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	var r := float(Balance.ABILITY["GERA_ULT_R"])
+	sph.radius = r
+	sph.height = r * 2.0
+	m.mesh = sph
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.37, 0.88, 0.82, 0.16)
+	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	m.material_override = mat
+	get_tree().current_scene.add_child(m)
+	m.global_position = pos + Vector3(0, r * 0.4, 0)
+	var tw := m.create_tween()
+	tw.tween_interval(float(Balance.ABILITY["GERA_ULT_TIME"]))
+	tw.tween_callback(m.queue_free)
+
+
+func _vis_arrow(data: Dictionary) -> void:
+	var from := Vector3(data["fx"], data["fy"], data["fz"])
+	var to := Vector3(data["tx"], data["ty"], data["tz"])
+	var m := MeshInstance3D.new()
+	var cyl := CylinderMesh.new()
+	cyl.top_radius = 0.015
+	cyl.bottom_radius = 0.015
+	cyl.height = 0.55
+	m.mesh = cyl
+	var mat := StandardMaterial3D.new()
+	mat.emission_enabled = true
+	mat.emission = Color(0.62, 0.91, 1.0)
+	mat.albedo_color = Color(0.62, 0.91, 1.0)
+	m.material_override = mat
+	get_tree().current_scene.add_child(m)
+	m.global_position = from
+	if from.distance_to(to) > 0.01:
+		m.look_at(to, Vector3.UP)
+		m.rotate_object_local(Vector3.RIGHT, PI / 2)
+	var travel := clampf(from.distance_to(to) * 0.018, 0.12, 0.8)
+	var tw := m.create_tween()
+	tw.tween_property(m, "global_position", to, travel)
+	tw.tween_interval(1.2)  # стрела торчит в точке попадания
+	tw.tween_callback(m.queue_free)
+
+
+func _vis_corpse(pos: Vector3) -> void:
+	var m := MeshInstance3D.new()
+	var cap := CapsuleMesh.new()
+	cap.radius = 0.28
+	cap.height = 1.4
+	m.mesh = cap
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.25, 0.1, 0.1)
+	m.material_override = mat
+	get_tree().current_scene.add_child(m)
+	m.global_position = pos + Vector3(0, 0.3, 0)
+	m.rotation.x = PI / 2
+	var tw := m.create_tween()
+	tw.tween_interval(float(Balance.ABILITY["CORPSE_LIFE"]))
+	tw.tween_callback(m.queue_free)
+
+
+func _vis_reveal(target: Node3D, dur: float) -> void:
+	var m := MeshInstance3D.new()
+	var sph := SphereMesh.new()
+	sph.radius = 0.16
+	sph.height = 0.32
+	m.mesh = sph
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(1.0, 0.28, 0.33)
+	mat.emission_enabled = true
+	mat.emission = Color(1.0, 0.28, 0.33)
+	mat.no_depth_test = true  # сквозь стены — это и есть подсветка
+	m.material_override = mat
+	target.add_child(m)
+	m.position = Vector3(0, 2.15, 0)
 	var tw := m.create_tween()
 	tw.tween_interval(dur)
 	tw.tween_callback(m.queue_free)

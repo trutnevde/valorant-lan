@@ -15,6 +15,18 @@ const KITS := {
 		"res://scenes/agents/fafik/tapok.gd", "res://scenes/agents/fafik/twin.gd",
 		"res://scenes/agents/fafik/swap.gd", "res://scenes/agents/fafik/clones.gd",
 	],
+	"denis": [
+		"res://scenes/agents/denis/bloodfeast.gd", "res://scenes/agents/denis/scent.gd",
+		"res://scenes/agents/denis/smrad.gd", "res://scenes/agents/denis/hook.gd",
+	],
+	"sova": [
+		"res://scenes/agents/sova/shock.gd", "res://scenes/agents/sova/mark.gd",
+		"res://scenes/agents/sova/drone.gd", "res://scenes/agents/sova/fury.gd",
+	],
+	"gera": [
+		"res://scenes/agents/gera/dispel.gd", "res://scenes/agents/gera/grapple.gd",
+		"res://scenes/agents/gera/vortex.gd", "res://scenes/agents/gera/levitation.gd",
+	],
 }
 
 

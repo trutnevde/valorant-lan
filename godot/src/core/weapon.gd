@@ -250,6 +250,9 @@ func _fire_ray() -> void:
 		var wd := w()
 		var base := float(wd["head"]) if part == "head" else (float(wd["leg"]) if part == "leg" else float(wd["dmg"]))
 		var dmg := roundi(base * falloff_mult(dist))
+		# пассивка Геры «Охотник за туманщиками»: +15% по врагу, стоящему в дыму
+		if player.char_id == "gera" and collider is Node3D and bool(get_node("/root/Smokes").call("point_in_smoke", (collider as Node3D).global_position)):
+			dmg = roundi(dmg * float(Balance.ABILITY["GERA_SMOKE_DMG_MUL"]))
 		if NetHub.online():
 			# паритет вебу: попадание считает клиент, ПРИМЕНЯЕТ хост
 			NetHub.report_hit(collider as Node, dmg, part, player, current_id)

@@ -72,6 +72,10 @@ func start_round() -> void:
 	spike_planted_at = Vector3.INF
 	plant_progress = 0.0
 	defuse_accum = 0.0
+	corpses.clear()
+	var sw := get_node("/root/Smokes")
+	(sw.get("smokes") as Array).clear()
+	(sw.get("no_smoke_zones") as Array).clear()
 	# оживить всех + шип случайному атакеру (людям приоритет — web)
 	var attackers: Array = []
 	for c in _combatants():
@@ -99,6 +103,7 @@ func advance(dt: float) -> void:
 				_broadcast_state()
 				phase_changed.emit(phase, deadline)
 		Phase.LIVE:
+			_denis_regen(dt)
 			_check_elimination()
 			if phase == Phase.LIVE and now() >= deadline:
 				end_round(_defenders(), "time")  # время вышло — защита удержала
@@ -118,6 +123,28 @@ func advance(dt: float) -> void:
 					start_round()
 		_:
 			pass
+
+
+var _regen_acc := {}
+
+
+# пассивка Дениса «Регенерация мясника»: 3.5 HP/с до 100 вне боя (не били 4с) — хост
+func _denis_regen(dt: float) -> void:
+	var t := now()
+	var fx := get_node("/root/Fx")
+	for c in _combatants():
+		if String(c.get("char_id")) != "denis" or int(c.get("hp")) <= 0:
+			continue
+		if int(c.get("hp")) >= int(Balance.ABILITY["DENIS_REGEN_CAP"]):
+			continue
+		if t - float(c.get("last_dmg_t")) < float(Balance.ABILITY["DENIS_REGEN_DELAY"]):
+			continue
+		var k: int = c.get_instance_id()
+		_regen_acc[k] = float(_regen_acc.get(k, 0.0)) + float(Balance.ABILITY["DENIS_REGEN"]) * dt
+		if _regen_acc[k] >= 1.0:
+			var whole := int(_regen_acc[k])
+			_regen_acc[k] = float(_regen_acc[k]) - whole
+			fx.call("apply_heal", c, whole)
 
 
 func _defenders() -> String:
@@ -150,6 +177,20 @@ func _check_elimination_planted() -> void:
 
 
 # ===== смерть/киллы (нода-жертва зовёт через сигнал died у матча нет; зовём напрямую) =====
+var corpses: Array[Dictionary] = []  # {pos, team, until} — Кровопир Дениса ест ТОЛЬКО у трупа
+
+
+func corpse_near(pos: Vector3, enemy_of_team: String, r: float) -> bool:
+	var t := now()
+	for c in corpses:
+		if t > float(c["until"]) or String(c["team"]) == enemy_of_team:
+			continue
+		var cp: Vector3 = c["pos"]
+		if Vector2(pos.x - cp.x, pos.z - cp.z).length() < r:
+			return true
+	return false
+
+
 func on_death(victim: Node, killer: Node, weapon: String, head: bool) -> void:
 	if killer != null and killer != victim and String(killer.get("team")) != String(victim.get("team")):
 		killer.set("kills", int(killer.get("kills")) + 1)
@@ -158,7 +199,14 @@ func on_death(victim: Node, killer: Node, weapon: String, head: bool) -> void:
 		var cap := int(Balance.CHARACTERS.get(ch, {}).get("ultCost", 7))
 		killer.set("ult", mini(cap, int(killer.get("ult")) + 1))
 		_give_credits(killer, int(Balance.RULES["KILL_REWARD"]))
+		killer.set("last_kill_t", now())  # «накормленность» Кровопира Дениса
 		killer_scored.emit(killer)
+	# труп для Кровопира (host) + визуал всем (стабы тестов — не Node3D, пропускаем)
+	var v3 := victim as Node3D
+	if v3 and v3.is_inside_tree():
+		var vp := v3.global_position
+		corpses.append({ "pos": vp, "team": String(victim.get("team")), "until": now() + float(Balance.ABILITY["CORPSE_LIFE"]) })
+		get_node("/root/Fx").call("_fx_broadcast", "corpse", { "x": vp.x, "z": vp.z })
 	victim.set("deaths", int(victim.get("deaths")) + 1)
 	killfeed.emit(String(killer.name) if killer else "?", String(victim.name), weapon, head)
 	if spike_carrier == victim:

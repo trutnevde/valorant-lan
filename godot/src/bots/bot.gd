@@ -29,6 +29,9 @@ var char_id := "sanek"
 var _bought := false
 var blind_until := 0.0  # ослеплён вспышкой — не видит
 var stun_until := 0.0   # оглушён — стоит
+var levit_until := 0.0  # «Невесомость» Геры: слоу + мажет
+var last_kill_t := -99.0
+var last_dmg_t := -99.0
 
 var target: Node3D = null
 var engaging_until := -99.0
@@ -167,6 +170,8 @@ func _los_clear(node: Node3D) -> bool:
 	var space := get_world_3d().direct_space_state
 	var from := global_position + Vector3(0, 1.6, 0)
 	var to := node.global_position + Vector3(0, 1.4, 0)
+	if bool(get_node("/root/Smokes").call("seg_blocked", from, to)):
+		return false  # дым глушит зрение ботов (паритет web losClear)
 	var q := PhysicsRayQueryParameters3D.create(from, to)
 	q.exclude = [get_rid()]
 	var res := space.intersect_ray(q)
@@ -191,6 +196,8 @@ func _aim_and_shoot(t: float) -> void:
 	# вероятностная модель попадания — ПАРИТЕТ web server.js botShoot
 	var dist := to.length()
 	var p_hit := clampf(float(cfg()["pHitMax"]) + 0.04 - dist * 0.009, float(cfg()["pHitMin"]), float(cfg()["pHitMax"]))
+	if t < levit_until:
+		p_hit *= 0.35  # всплыл в «Невесомости» — мажет (паритет)
 	if rng.randf() < p_hit:
 		stat_hits += 1
 		var head := rng.randf() < float(cfg()["head"])
@@ -215,6 +222,8 @@ func _move(dt: float) -> void:
 	var dir := (next - global_position)
 	dir.y = 0.0
 	var speed := SPEED_COMBAT if combat else SPEED_CALM
+	if t < levit_until:
+		speed *= float(Balance.ABILITY["GERA_ULT_SLOW"])  # всплыл — вязнет
 	agent.max_speed = speed
 	var desired := Vector3.ZERO
 	if dir.length() > 0.05:
@@ -285,6 +294,7 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 	if hp <= 0:
 		return
 	hp -= dmg
+	last_dmg_t = _now()
 	if hp <= 0:
 		stat_deaths += 1
 		visible = false
