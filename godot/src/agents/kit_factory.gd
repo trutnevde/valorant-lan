@@ -27,6 +27,22 @@ const KITS := {
 		"res://scenes/agents/gera/dispel.gd", "res://scenes/agents/gera/grapple.gd",
 		"res://scenes/agents/gera/vortex.gd", "res://scenes/agents/gera/levitation.gd",
 	],
+	"vova": [
+		"res://scenes/agents/vova/smoke_global.gd", "res://scenes/agents/vova/flash.gd",
+		"res://scenes/agents/vova/veil.gd", "res://scenes/agents/vova/orbital.gd",
+	],
+	"sanek": [
+		"res://scenes/agents/sanek/trap.gd", "res://scenes/agents/sanek/turret.gd",
+		"res://scenes/agents/sanek/acid.gd", "res://scenes/agents/sanek/xray.gd",
+	],
+	"ira": [
+		"res://scenes/agents/ira/scout.gd", "res://scenes/agents/ira/crispy.gd",
+		"res://scenes/agents/ira/buffet.gd", "res://scenes/agents/ira/banquet.gd",
+	],
+	"koniliy": [
+		"res://scenes/agents/koniliy/horseshoe.gd", "res://scenes/agents/koniliy/neigh.gd",
+		"res://scenes/agents/koniliy/gallop.gd", "res://scenes/agents/koniliy/stampede.gd",
+	],
 }
 
 

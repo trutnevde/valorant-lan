@@ -143,6 +143,29 @@ func force_pull_self(pos: Vector3, dur: float, speed: float) -> void:
 		p.call("force_pull", pos, dur, speed)
 
 
+# оживление своего игрока (мини-рес Иры)
+@rpc("authority", "reliable", "call_local")
+func revive_self(pos: Vector3, hp: int) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p:
+		p.set("hp", hp)
+		p.set("dead", false)
+		p.set("visible", true)
+		(p as Node3D).global_position = pos
+		if p is CollisionObject3D:
+			(p as CollisionObject3D).set_collision_layer_value(1, true)
+		if p.has_signal("hp_changed"):
+			p.emit_signal("hp_changed", hp)
+
+
+# слоу своего игрока (зоны/сигналка — хост командует)
+@rpc("authority", "reliable", "call_local")
+func slow_self(mul: float, dur: float) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p and p.has_method("apply_slow"):
+		p.call("apply_slow", mul, dur)
+
+
 # «Невесомость»: слоу+подброс своего игрока
 @rpc("authority", "reliable", "call_local")
 func levitate_self(dur: float) -> void:

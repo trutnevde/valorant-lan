@@ -206,7 +206,18 @@ func on_death(victim: Node, killer: Node, weapon: String, head: bool) -> void:
 	if v3 and v3.is_inside_tree():
 		var vp := v3.global_position
 		corpses.append({ "pos": vp, "team": String(victim.get("team")), "until": now() + float(Balance.ABILITY["CORPSE_LIFE"]) })
-		get_node("/root/Fx").call("_fx_broadcast", "corpse", { "x": vp.x, "z": vp.z })
+		var fxn := get_node("/root/Fx")
+		fxn.call("_fx_broadcast", "corpse", { "x": vp.x, "z": vp.z })
+		# пассивка Иры «Прощальный ужин»: её убийство создаёт хил-зону у трупа врага
+		if killer and String(killer.get("char_id")) == "ira" and killer != victim:
+			var z: Node = (load("res://src/agents/effects/util_zone.gd") as GDScript).new()
+			z.set("data", {
+				"shape": "circle", "x": vp.x, "z": vp.z, "r": float(Balance.ABILITY["IRA_CORPSE_R"]),
+				"dur": float(Balance.ABILITY["IRA_CORPSE_TIME"]), "heal_rate": float(Balance.ABILITY["IRA_CORPSE_RATE"]),
+				"team": String(killer.get("team")), "owner_path": String(killer.get_path()),
+			})
+			get_tree().current_scene.add_child(z)
+			fxn.call("_fx_broadcast", "ira_corpse_vis", { "x": vp.x, "z": vp.z })
 	victim.set("deaths", int(victim.get("deaths")) + 1)
 	killfeed.emit(String(killer.name) if killer else "?", String(victim.name), weapon, head)
 	if spike_carrier == victim:

@@ -30,8 +30,15 @@ var _bought := false
 var blind_until := 0.0  # ослеплён вспышкой — не видит
 var stun_until := 0.0   # оглушён — стоит
 var levit_until := 0.0  # «Невесомость» Геры: слоу + мажет
+var slow_until := 0.0   # зоны/сигналка
+var slow_mul := 1.0
 var last_kill_t := -99.0
 var last_dmg_t := -99.0
+
+
+func apply_slow(mul: float, dur: float) -> void:
+	slow_mul = mul
+	slow_until = _now() + dur
 
 var target: Node3D = null
 var engaging_until := -99.0
@@ -224,6 +231,8 @@ func _move(dt: float) -> void:
 	var speed := SPEED_COMBAT if combat else SPEED_CALM
 	if t < levit_until:
 		speed *= float(Balance.ABILITY["GERA_ULT_SLOW"])  # всплыл — вязнет
+	if t < slow_until:
+		speed *= slow_mul  # кислота/подкова/криспи/сигналка
 	agent.max_speed = speed
 	var desired := Vector3.ZERO
 	if dir.length() > 0.05:

@@ -131,6 +131,59 @@ func _fx(kind: String, data: Dictionary) -> void:
 						_vis_reveal(tgt, float(data["dur"]))
 		"corpse":
 			_vis_corpse(Vector3(data["x"], 0, data["z"]))
+		"turret_body":
+			var tb := TurretBody.new()
+			tb.name = String(data["cname"])
+			tb.cname = String(data["cname"])
+			get_tree().current_scene.add_child(tb)
+			tb.global_position = Vector3(data["x"], 0, data["z"])
+		"trap_vis":
+			# сигналку видит только СВОЯ команда (врагам — сюрприз)
+			var me2 := _my_player()
+			if me2 and String(data["team"]) == me2.team:
+				var tm := MeshInstance3D.new()
+				tm.name = String(data["cname"]) + "_vis"
+				var cyl2 := CylinderMesh.new()
+				cyl2.top_radius = 0.3
+				cyl2.bottom_radius = 0.3
+				cyl2.height = 0.06
+				tm.mesh = cyl2
+				var tmat := StandardMaterial3D.new()
+				tmat.albedo_color = Color(0.9, 0.8, 0.3)
+				tmat.emission_enabled = true
+				tmat.emission = Color(0.9, 0.8, 0.3)
+				tm.material_override = tmat
+				get_tree().current_scene.add_child(tm)
+				tm.global_position = Vector3(data["x"], 0.05, data["z"])
+		"chicken":
+			var ch := MeshInstance3D.new()
+			ch.name = String(data["cname"])
+			var bm2 := BoxMesh.new()
+			bm2.size = Vector3(0.3, 0.35, 0.4)
+			ch.mesh = bm2
+			var cmat := StandardMaterial3D.new()
+			cmat.albedo_color = Color(1.0, 0.85, 0.2)
+			ch.material_override = cmat
+			get_tree().current_scene.add_child(ch)
+			ch.global_position = Vector3(data["x"], 0.2, data["z"])
+		"chicken_move":
+			var chm := get_tree().current_scene.get_node_or_null(String(data["cname"])) as Node3D
+			if chm:
+				chm.global_position = Vector3(data["x"], 0.2, data["z"])
+		"banquet_dome":
+			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["BANQUET_R"]), Color(0.95, 0.25, 0.2), float(Balance.ABILITY["BANQUET_TIME"]))
+		"orbital_beam":
+			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["ORBITAL_R"]), Color(1.0, 0.3, 0.15), float(Balance.ABILITY["ORBITAL_DELAY"]) + float(Balance.ABILITY["ORBITAL_DUR"]))
+		"fire_zone_vis_acid":
+			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["ACID_R"]), Color(0.75, 0.85, 0.25), float(Balance.ABILITY["ACID_TIME"]))
+		"fire_zone_vis_horseshoe":
+			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["HORSESHOE_R"]), Color(0.72, 0.6, 0.45), float(Balance.ABILITY["HORSESHOE_TIME"]))
+		"ira_corpse_vis":
+			_vis_ring(Vector3(data["x"], 0.05, data["z"]), float(Balance.ABILITY["IRA_CORPSE_R"]), Color(0.53, 1.0, 0.63), float(Balance.ABILITY["IRA_CORPSE_TIME"]))
+		"crispy_vis":
+			_vis_wall({ "ax": data["ax"], "az": data["az"], "bx": data["bx"], "bz": data["bz"] }, Color(0.94, 0.75, 0.4), float(Balance.ABILITY["CRISPY_TIME"]))
+		"stampede_vis":
+			_vis_wall({ "ax": data["fx"], "az": data["fz"], "bx": float(data["fx"]) + float(data["dx"]) * float(Balance.ABILITY["STAMPEDE_LEN"]), "bz": float(data["fz"]) + float(data["dz"]) * float(Balance.ABILITY["STAMPEDE_LEN"]) }, Color(0.72, 0.55, 0.3), 1.0)
 		"cocoon":
 			# щит-кокон у всех (стреляемый; урон решает хост)
 			var sh := CocoonShield.new()

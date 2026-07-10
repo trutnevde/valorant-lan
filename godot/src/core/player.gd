@@ -44,6 +44,17 @@ var blind_until := 0.0    # вспышки (белый экран — HUD)
 var stun_until := 0.0     # стан (движение заморожено)
 var boost_until := 0.0    # Порыв Макса (+40%)
 var levit_until := 0.0    # «Невесомость» Геры (слоу ×0.35)
+var slow_until := 0.0     # зоны (кислота/подкова/криспи) и сигналка Санька
+var slow_mul := 1.0
+var banquet_until := 0.0  # «Финальный банкет» Иры (+15% скорость)
+var gallop_until := 0.0   # «Галоп» Конилия (+50%)
+var _kon_ramp := 0.0      # пассивка Конилия «Разгон»
+var _kon_yaw := INF
+
+
+func apply_slow(mul: float, dur: float) -> void:
+	slow_mul = mul
+	slow_until = Time.get_ticks_msec() / 1000.0 + dur
 var last_kill_t := -99.0  # «накормленность» Кровопира Дениса (окно 6с)
 var last_dmg_t := -99.0   # пассивка Дениса: реген только вне боя
 # принудительное движение (кокон Дениса / воронка Геры / грэпл Геры)
@@ -199,6 +210,14 @@ func max_speed() -> float:
 		s *= float(Balance.ABILITY["BOOST_MUL"])  # Порыв Макса
 	if tt < levit_until:
 		s *= float(Balance.ABILITY["GERA_ULT_SLOW"])  # «Невесомость» Геры — всплыл, вязнет
+	if tt < slow_until:
+		s *= slow_mul  # кислота/подкова/криспи/сигналка
+	if tt < banquet_until:
+		s *= float(Balance.ABILITY["BANQUET_SPEED"])  # Финальный банкет Иры
+	if tt < gallop_until:
+		s *= float(Balance.ABILITY["GALLOP_MUL"])  # Галоп Конилия
+	if _kon_ramp >= 2.0:
+		s *= 1.12  # пассивка Конилия «Разгон»: 2с бега прямо без стрельбы
 	s *= (1.0 - aim_t * 0.42)  # прицеливание замедляет (web player.js:151)
 	return s
 
@@ -269,6 +288,15 @@ func _physics_process(dt: float) -> void:
 			_land_bob = minf(0.3, 0.05 + fell * 0.022)
 			_cam_dip = maxf(_cam_dip, _land_bob)
 			_play_step(minf(1.0, 0.5 + fell * 0.05))
+
+	# пассивка Конилия «Разгон»: бег прямо ≥2с без стрельбы/поворота → +12% (сброс поворотом/выстрелом)
+	if char_id == "koniliy":
+		var h_sp := Vector2(velocity.x, velocity.z).length()
+		var dyaw := absf(wrapf(yaw - (_kon_yaw if _kon_yaw != INF else yaw), -PI, PI))
+		_kon_yaw = yaw
+		var rig := get_node_or_null("WeaponRig") as WeaponRig
+		var shot_recent := rig != null and (Time.get_ticks_msec() / 1000.0 - rig.last_shot) < 0.5
+		_kon_ramp = (_kon_ramp + dt) if (is_on_floor() and h_sp > 3.5 and dyaw < 0.06 and not shot_recent) else 0.0
 
 	_footsteps(dt)
 	_apply_camera(dt)
