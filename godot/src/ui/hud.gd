@@ -17,6 +17,16 @@ func _ready() -> void:
 	weapon_rig.hit_target.connect(_on_hit)
 	if player:
 		player.hp_changed.connect(_on_hp)
+		player.blinded.connect(_on_blind)
+
+
+func _on_blind(dur: float) -> void:
+	var bf := get_node_or_null("BlindFlash") as ColorRect
+	if bf:
+		bf.modulate.a = 1.0
+		var tw := bf.create_tween()
+		tw.tween_interval(dur * 0.55)
+		tw.tween_property(bf, "modulate:a", 0.0, dur * 0.45)
 
 
 func _process(_dt: float) -> void:

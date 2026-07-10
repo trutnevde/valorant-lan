@@ -24,9 +24,21 @@ var vkick_pos := 0.0          # толчок вьюмодели
 var vkick_rot := 0.0
 
 var _shot_streams := {}       # sample -> AudioStream
+# «Стальные перья» Макса: 5 ножей 70/150, 12с; килл обновляет
+var knives_count := 0
+var knives_until := 0.0
 
 signal fired
 signal hit_target(part: String, dmg: int)
+
+
+func start_knives() -> void:
+	knives_count = int(Balance.ABILITY["KNIVES_COUNT"])
+	knives_until = _now() + float(Balance.ABILITY["KNIVES_TIME"])
+
+
+func knives_active() -> bool:
+	return knives_count > 0 and _now() < knives_until
 
 const SHOT_SAMPLE := {
 	"classic": "gun_pistol", "ghost": "gun_pistol", "frenzy": "gun_pistol",
@@ -127,6 +139,15 @@ func _ads_fov() -> float:
 func try_shoot(is_click: bool) -> void:
 	var t := _now()
 	if reloading_until > _now() or t < ready_at:
+		return
+	# ножи Макса перекрывают обычное оружие (web weapons.js:147)
+	if knives_active():
+		if t - last_shot < 0.28:
+			return
+		last_shot = t
+		knives_count -= 1
+		_fire_knife()
+		fired.emit()
 		return
 	var wd := w()
 	if not bool(wd.get("auto", false)) and not is_click:
@@ -236,6 +257,27 @@ func _fire_ray() -> void:
 			collider.call("take_hit", dmg, part, player, current_id)
 		hit_sfx.stream = load("res://assets/audio/%s.ogg" % ("ting" if part == "head" else "hit"))
 		hit_sfx.play()
+		hit_target.emit(part, dmg)
+
+
+func _fire_knife() -> void:
+	var origin := player.eye_pos()
+	var dir := player.aim_dir()
+	var res := raycast(origin, dir, 60.0)
+	shot_sfx.stream = _shot_streams["gun_pistol"]
+	shot_sfx.pitch_scale = 1.4
+	shot_sfx.play()
+	if res.is_empty():
+		return
+	var collider: Object = res["collider"]
+	_spawn_tracer(origin, res["position"] as Vector3)
+	if collider.has_method("part_at") and collider.has_method("take_hit"):
+		var part: String = collider.call("part_at", res["shape"] as int)
+		var dmg := int(Balance.ABILITY["KNIFE_HEAD"] if part == "head" else Balance.ABILITY["KNIFE_DMG"])
+		if NetHub.online():
+			NetHub.report_hit(collider as Node, dmg, part, player, "knives")
+		else:
+			collider.call("take_hit", dmg, part, player, "knives")
 		hit_target.emit(part, dmg)
 
 

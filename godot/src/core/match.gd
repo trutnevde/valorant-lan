@@ -25,6 +25,7 @@ signal score_changed(a: int, b: int, attack_team: String)
 signal round_ended(winner: String, reason: String)
 signal match_ended(winner: String)
 signal killfeed(killer_name: String, victim_name: String, weapon: String, head: bool)
+signal killer_scored(killer: Node)  # твисты «на килл» (дэш/ножи Макса)
 signal spike_planted(pos: Vector3)
 signal spike_defused
 signal spike_boom
@@ -157,6 +158,7 @@ func on_death(victim: Node, killer: Node, weapon: String, head: bool) -> void:
 		var cap := int(Balance.CHARACTERS.get(ch, {}).get("ultCost", 7))
 		killer.set("ult", mini(cap, int(killer.get("ult")) + 1))
 		_give_credits(killer, int(Balance.RULES["KILL_REWARD"]))
+		killer_scored.emit(killer)
 	victim.set("deaths", int(victim.get("deaths")) + 1)
 	killfeed.emit(String(killer.name) if killer else "?", String(victim.name), weapon, head)
 	if spike_carrier == victim:

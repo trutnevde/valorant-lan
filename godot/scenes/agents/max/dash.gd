@@ -14,6 +14,14 @@ signal used(charges_left: int)
 
 func _ready() -> void:
 	charges = int(Balance.CHARACTERS["max"]["abilities"]["C"]["charges"])
+	# твист Эпохи 15: дэш обновляется за убийство
+	var mt := Match.find(get_tree())
+	if mt:
+		mt.killer_scored.connect(func(killer: Node) -> void:
+			if killer == player:
+				var mx := int(Balance.CHARACTERS["max"]["abilities"]["C"]["charges"])
+				charges = mini(mx, charges + 1)
+				used.emit(charges))
 
 
 func _now() -> float:

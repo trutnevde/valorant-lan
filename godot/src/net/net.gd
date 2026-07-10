@@ -135,6 +135,16 @@ func report_hit(target_path: NodePath, dmg: int, part: String, attacker_path := 
 	_sync_hp.rpc(target_path, int(target.get("hp")))
 
 
+# телепорт своего игрока (движение клиент-авторитарно — двигает владелец)
+@rpc("authority", "reliable", "call_local")
+func teleport_self(pos: Vector3) -> void:
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())
+	if p:
+		(p as Node3D).global_position = pos
+		if p is CharacterBody3D:
+			(p as CharacterBody3D).velocity = Vector3.ZERO
+
+
 # закупка: клиент просит — хост валидирует деньги/фазу, клиент получает подтверждение
 @rpc("any_peer", "reliable")
 func buy(weapon_id: String) -> void:

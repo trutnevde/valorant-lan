@@ -39,6 +39,40 @@ var kills := 0
 var deaths := 0
 var ult := 0
 var dead := false
+# статусы от способностей
+var blind_until := 0.0    # вспышки (белый экран — HUD)
+var stun_until := 0.0     # стан (движение заморожено)
+var boost_until := 0.0    # Порыв Макса (+40%)
+var ult_mark_until := 0.0 # Второе дыхание Артемия
+var ult_mark_pos := Vector3.INF
+
+signal blinded(dur: float)
+
+
+func apply_blind(dur: float) -> void:
+	blind_until = Time.get_ticks_msec() / 1000.0 + dur
+	blinded.emit(dur)
+
+
+func apply_stun(dur: float) -> void:
+	stun_until = Time.get_ticks_msec() / 1000.0 + dur
+
+
+# Второе дыхание: если метка активна — вместо смерти возврат на неё с полным HP
+func try_second_wind() -> bool:
+	if Time.get_ticks_msec() / 1000.0 >= ult_mark_until or ult_mark_pos == Vector3.INF:
+		return false
+	ult_mark_until = 0.0
+	hp = int(Balance.RULES["BASE_HP"])
+	hp_changed.emit(hp)
+	if NetHub.online() and multiplayer.is_server() and get_multiplayer_authority() != 1:
+		var n := NetHub.node()
+		if n:
+			n.rpc_id(get_multiplayer_authority(), "teleport_self", ult_mark_pos)
+	else:
+		global_position = ult_mark_pos
+		velocity = Vector3.ZERO
+	return true
 
 signal made_noise  # шаг на бегу — для событийного слуха ботов
 signal hp_changed(hp: int)
@@ -77,6 +111,8 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 	hp -= dmg
 	hp_changed.emit(hp)
 	if hp <= 0:
+		if try_second_wind():
+			return  # ульта Артемия: вместо смерти — возврат на метку
 		died.emit()
 		var mt := Match.find(get_tree())
 		if mt and mt.phase != Match.Phase.WAIT:
@@ -144,6 +180,8 @@ func max_speed() -> float:
 	var s := float(m["CROUCH_SPEED"]) if crouch else (float(m["WALK_SPEED"]) if walk else float(m["RUN_SPEED"]))
 	s *= float(Balance.CHARACTERS.get(char_id, {}).get("speedMul", 1.0))  # пассивка перса (Макс 1.05)
 	s *= weapon_speed * speed_factor
+	if Time.get_ticks_msec() / 1000.0 < boost_until:
+		s *= float(Balance.ABILITY["BOOST_MUL"])  # Порыв Макса
 	s *= (1.0 - aim_t * 0.42)  # прицеливание замедляет (web player.js:151)
 	return s
 
@@ -152,7 +190,8 @@ func _physics_process(dt: float) -> void:
 	if dead:
 		return
 	var mt := Match.find(get_tree())
-	var frozen := mt != null and mt.phase == Match.Phase.BUY  # закупка: смотреть можно, ходить нельзя (web G.freeze)
+	var now_s := Time.get_ticks_msec() / 1000.0
+	var frozen := (mt != null and mt.phase == Match.Phase.BUY) or now_s < stun_until  # закупка/стан: смотреть можно, ходить нельзя
 	var m: Dictionary = Balance.MOVE
 	crouch = Input.is_action_pressed("crouch")
 	walk = Input.is_action_pressed("walk")

@@ -13,6 +13,7 @@ config/features=PackedStringArray("4.7", "Forward Plus")
 [autoload]
 
 Net="*res://src/net/net.gd"
+Fx="*res://src/agents/fx.gd"
 
 [display]
 

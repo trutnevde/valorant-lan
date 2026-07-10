@@ -98,15 +98,4 @@ func _spawn_for(tm: String, idx: Dictionary, atk: Array, def: Array) -> Vector3:
 
 
 func _attach_kit(p: FpsPlayer) -> void:
-	# кит агента компонентами; пока реализован Макс (остальные — фаза G6)
-	if p.char_id != "max":
-		return
-	var kit := Node.new()
-	kit.name = "Kit"
-	p.add_child(kit)
-	var dash: Node = (load("res://scenes/agents/max/dash.gd") as GDScript).new()
-	dash.name = "Dash"
-	kit.add_child(dash)
-	var launch: Node = (load("res://scenes/agents/max/launch.gd") as GDScript).new()
-	launch.name = "Launch"
-	kit.add_child(launch)
+	KitFactory.attach(p, p.char_id)  # дуэлянты готовы (G6a); остальные — G6b/G6c

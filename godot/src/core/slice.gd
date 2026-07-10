@@ -17,16 +17,11 @@ func _ready() -> void:
 	player.char_id = "max"
 	player.team = "A"
 
-	# кит Макса — компоненты способностей (правило 4)
-	var kit := Node.new()
-	kit.name = "Kit"
-	player.add_child(kit)
-	var dash: Node = (load("res://scenes/agents/max/dash.gd") as GDScript).new()
-	dash.name = "Dash"
-	kit.add_child(dash)
-	var launch: Node = (load("res://scenes/agents/max/launch.gd") as GDScript).new()
-	launch.name = "Launch"
-	kit.add_child(launch)
+	# кит агента компонентами (правило 4); тренировка уважает выбор из лобби
+	var net := NetHub.node()
+	if net:
+		player.char_id = String(net.get("my_char"))
+	KitFactory.attach(player, player.char_id)
 
 	# боты-враги на спавне защиты
 	var bot_scene: PackedScene = load("res://scenes/bots/bot.tscn")

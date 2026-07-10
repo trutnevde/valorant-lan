@@ -27,6 +27,8 @@ var deaths := 0
 var ult := 0
 var char_id := "sanek"
 var _bought := false
+var blind_until := 0.0  # ослеплён вспышкой — не видит
+var stun_until := 0.0   # оглушён — стоит
 
 var target: Node3D = null
 var engaging_until := -99.0
@@ -91,6 +93,18 @@ func _now() -> float:
 func _physics_process(dt: float) -> void:
 	if hp <= 0:
 		return
+	if _now() < stun_until:
+		return  # оглушён — стоит (лопнувший клон Фафика и т.п.)
+	var mt := Match.find(get_tree())
+	if mt and mt.phase == Match.Phase.BUY:
+		# ЗАМОРОЗКА на закупке — паритет web server.js tickBot (движения нет, watchdog молчит)
+		_ai_acc += dt
+		if _ai_acc >= AI_TICK:
+			_ai_acc = 0.0
+			_think()  # внутри — только покупка
+		_stuck_t = 0.0
+		_last_pos = global_position
+		return
 	_ai_acc += dt
 	if _ai_acc >= AI_TICK:
 		_ai_acc = 0.0
@@ -127,6 +141,8 @@ func _think() -> void:
 
 
 func _visible_enemy() -> Node3D:
+	if _now() < blind_until:
+		return null  # ослеплённый бот не видит (честность)
 	var fwd := -global_transform.basis.z
 	var best: Node3D = null
 	var bd := VISION_DIST
@@ -294,6 +310,14 @@ func round_reset() -> void:
 	weapon_id = "classic"  # новый раунд — с пистолетом, пока не купит
 	target = null
 	engaging_until = -99.0
+	blind_until = 0.0
+	stun_until = 0.0
+	# на спавн + СБРОС пути (иначе после телепорта бот скребёт стены по протухшему пути)
+	global_position = _spawn_pos
+	velocity = Vector3.ZERO
+	agent.target_position = global_position
+	_stuck_t = 0.0
+	_last_pos = global_position
 
 
 func give_weapon(id: String) -> void:
