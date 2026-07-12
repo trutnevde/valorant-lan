@@ -8,7 +8,7 @@ const BASE_FOV := 74.0  # web main.js:204
 @onready var head: Node3D = $Head
 @onready var cam: Camera3D = $Head/Camera3D
 @onready var col: CollisionShape3D = $Col
-@onready var step_sfx: AudioStreamPlayer = $StepSfx
+@onready var step_sfx: AudioStreamPlayer3D = $StepSfx
 
 var yaw := 0.0
 var pitch := 0.0
@@ -111,11 +111,15 @@ func _ready() -> void:
 	add_to_group("noise_makers")
 	for i in range(1, 7):
 		_steps.append(load("res://assets/audio/step%d.ogg" % i))
+	get_node("/root/Ears").call("register", step_sfx, "Steps", self)  # окклюзия шагов
 	var remote := NetHub.online() and not is_multiplayer_authority()
 	var body := get_node_or_null("BodyVis") as Node3D
+	_remote_audio = remote
 	if remote:
 		# чужой игрок: без ввода/камеры/HUD, но с видимым телом
 		set_physics_process(false)
+		set_process(true)  # но шаги ведём от реплицированной позиции (иначе враг беззвучен)
+		_last_remote_pos = global_position
 		cam.current = false
 		($HUD as CanvasLayer).visible = false
 		($WeaponRig as Node).set_physics_process(false)
@@ -320,6 +324,25 @@ func _move_with_step_up(_dt: float) -> void:
 		global_position = probe + motion
 		velocity = pre_vel
 		move_and_slide()  # доехать и приземлиться на ступень
+
+
+var _remote_audio := false
+var _last_remote_pos := Vector3.ZERO
+
+
+func _process(delta: float) -> void:
+	# только для чужих игроков: шаги от дельты реплицированной позиции (физика у них выключена)
+	if not _remote_audio or delta <= 0.0:
+		return
+	var d := Vector2(global_position.x - _last_remote_pos.x, global_position.z - _last_remote_pos.z)
+	_last_remote_pos = global_position
+	var h_speed := d.length() / delta
+	if h_speed <= 3.0 or char_id == "max":  # медленно/крадётся/«Ветер» Макса — тихо
+		return
+	_step_dist += d.length()
+	if _step_dist > 2.7:
+		_step_dist = 0.0
+		_play_step(0.55)
 
 
 func _footsteps(dt: float) -> void:

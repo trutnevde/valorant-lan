@@ -80,6 +80,7 @@ func _spawn_logic(kind: String, data: Dictionary) -> bool:
 func _fx(kind: String, data: Dictionary) -> void:
 	if get_tree().current_scene == null:
 		return  # headless-тесты без сцены — визуал некуда вешать
+	_fx_sound(kind, data)
 	match kind:
 		"clone_decoy":
 			# клон-обманка видим ВСЕМ: копия на каждом пире, одинаковое имя → одинаковый путь
@@ -306,6 +307,33 @@ func _sync(node: Node) -> void:
 		var n := NetHub.node()
 		if n:
 			n.rpc("_sync_hp", node.get_path(), int(node.get("hp")))
+
+
+# ===== позиционный звук способностей (бродкаст через _fx → слышат все пиры) =====
+const _FX_SND := {
+	"smoke": "whoosh", "dispel": "zap", "flash": "pop", "cocoon": "whoosh2",
+	"levit": "energy", "turret_body": "slam", "trap_vis": "confirm", "chicken": "pop",
+	"banquet_dome": "buff", "orbital_beam": "boom", "crispy_vis": "slam",
+	"stampede_vis": "slam", "fire_zone_vis_acid": "energy", "fire_zone_vis_horseshoe": "slam",
+	"ira_corpse_vis": "buff", "corpse": "hurt", "reveal": "confirm",
+}
+var _snd_cache := {}
+
+
+func _fx_sound(kind: String, data: Dictionary) -> void:
+	if not _FX_SND.has(kind):
+		return
+	var name: String = _FX_SND[kind]
+	if not _snd_cache.has(name):
+		_snd_cache[name] = load("res://assets/audio/%s.ogg" % name)
+	var pos := Vector3.ZERO
+	if data.has("x") and data.has("z"):
+		pos = Vector3(float(data["x"]), 0, float(data["z"]))
+	elif data.has("fx") and data.has("fz"):
+		pos = Vector3(float(data["fx"]), float(data.get("fy", 0.0)), float(data["fz"]))
+	elif data.has("ax") and data.has("az"):
+		pos = Vector3(float(data["ax"]), 0, float(data["az"]))
+	get_node("/root/Ears").call("one_shot", get_tree().current_scene, pos, _snd_cache[name], "SFX", 1.0, -3.0)
 
 
 # ===== простые визуалы (грейбокс-уровень; красота — G10) =====

@@ -14,6 +14,10 @@ const AI_TICK := 0.05  # 20 Гц как веб-сервер
 
 @onready var agent: NavigationAgent3D = $NavAgent
 @onready var shot_sfx: AudioStreamPlayer3D = $ShotSfx
+@onready var step_sfx: AudioStreamPlayer3D = $StepSfx
+
+var _steps: Array = []
+var _step_dist := 0.0
 
 var team := "B"
 var preset := "medium"
@@ -65,6 +69,12 @@ func _ready() -> void:
 	rng.randomize()
 	add_to_group("combatants")
 	add_to_group("noise_makers")
+	for i in range(1, 7):
+		_steps.append(load("res://assets/audio/step%d.ogg" % i))
+	var ears := get_node_or_null("/root/Ears")
+	if ears:
+		ears.call("register", shot_sfx, "SFX", self)
+		ears.call("register", step_sfx, "Steps", self)
 	if NetHub.online() and not multiplayer.is_server():
 		set_physics_process(false)  # AI ботов гоняет только хост; клиенты видят синк
 	hp = int(Balance.RULES["BASE_HP"])
@@ -459,6 +469,23 @@ func _on_safe_velocity(safe: Vector3) -> void:
 	velocity.x = safe.x
 	velocity.z = safe.z
 	move_and_slide()
+	_bot_steps()
+
+
+func _bot_steps() -> void:
+	# шаги бота (враг слышен позиционно); Макс-«Ветер» бесшумен, как у игрока
+	if char_id == "max" or not is_on_floor():
+		return
+	var h := Vector2(velocity.x, velocity.z).length()
+	if h <= 3.0:
+		return
+	_step_dist += h * get_physics_process_delta_time()
+	if _step_dist > 2.7:
+		_step_dist = 0.0
+		step_sfx.stream = _steps[randi() % _steps.size()]
+		step_sfx.volume_db = -6.0
+		step_sfx.pitch_scale = 0.9 + randf() * 0.2
+		step_sfx.play()
 
 
 func _watchdog(dt: float) -> void:

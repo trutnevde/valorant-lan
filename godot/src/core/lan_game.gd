@@ -11,6 +11,10 @@ var match_node: Match
 func _ready() -> void:
 	var map: Node3D = (load("res://scenes/maps/duel.tscn") as PackedScene).instantiate()
 	add_child(map)
+	# реверб-зоны на сайтах (гулкость закрытых точек) — движковый Area3D reverb
+	var meta = JSON.parse_string(String(map.get_meta("map_meta", "{}")))
+	if meta is Dictionary:
+		get_node("/root/Ears").call("setup_reverb_zones", map, meta)
 	# матч-контроллер (одинаковый путь у всех пиров — RPC состояния находит ноду)
 	match_node = Match.new()
 	match_node.name = "Match"

@@ -7,7 +7,7 @@ const ADS_SPEED := 10.0        # скорость входа в прицел (we
 const HEAD_Y := 1.5            # верх капсулы мишени — метки part на шейпах решают точнее
 
 @onready var player: FpsPlayer = get_parent() as FpsPlayer
-@onready var shot_sfx: AudioStreamPlayer = $ShotSfx
+@onready var shot_sfx: AudioStreamPlayer3D = $ShotSfx
 @onready var dry_sfx: AudioStreamPlayer = $DrySfx
 @onready var reload_sfx: AudioStreamPlayer = $ReloadSfx
 @onready var hit_sfx: AudioStreamPlayer = $HitSfx
@@ -54,6 +54,7 @@ func _ready() -> void:
 	for s in ["gun_pistol", "gun_magnum", "gun_heavy", "gun_rifle"]:
 		_shot_streams[s] = load("res://assets/audio/%s.wav" % s)
 	dry_sfx.stream = load("res://assets/audio/ui_click.wav")
+	get_node("/root/Ears").call("register", shot_sfx, "SFX", player)  # окклюзия выстрела
 	equip(current_id)
 
 
@@ -231,6 +232,16 @@ func shoot() -> void:
 	apply_recoil()
 	_play_shot()
 	fired.emit()
+	if NetHub.online():
+		_remote_shot.rpc(current_id)  # остальные пиры слышат выстрел позиционно
+
+
+@rpc("authority", "unreliable")
+func _remote_shot(id: String) -> void:
+	var sample: String = SHOT_SAMPLE.get(id, "gun_rifle")
+	shot_sfx.stream = _shot_streams[sample]
+	shot_sfx.pitch_scale = 0.95 + rng.randf() * 0.1
+	shot_sfx.play()
 
 
 func _fire_ray() -> void:

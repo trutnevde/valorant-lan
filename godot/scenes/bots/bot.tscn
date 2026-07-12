@@ -68,7 +68,15 @@ mesh = SubResource("botmesh")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
 stream = ExtResource("2")
 volume_db = -8.0
+bus = &"SFX"
 max_distance = 70.0
+unit_size = 7.0
+
+[node name="StepSfx" type="AudioStreamPlayer3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+bus = &"Steps"
+max_distance = 45.0
+unit_size = 5.0
 
 [node name="Sync" type="MultiplayerSynchronizer" parent="."]
 replication_config = SubResource("botrepl")
