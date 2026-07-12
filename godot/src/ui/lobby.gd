@@ -26,6 +26,12 @@ func _ready() -> void:
 	%JoinBtn.pressed.connect(_on_join)
 	%TrainBtn.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://scenes/maps/slice.tscn"))
 	%TeamBtn.pressed.connect(func() -> void: net.rpc_id(1, "switch_team"))
+	var dp := %DiffPick as OptionButton
+	for d in ["easy", "medium", "hard"]:
+		dp.add_item({ "easy": "БОТЫ: ЛЁГКИЕ", "medium": "БОТЫ: СРЕДНИЕ", "hard": "БОТЫ: ЖЁСТКИЕ" }[d])
+	dp.select(1)
+	dp.item_selected.connect(func(i: int) -> void:
+		net.rpc_id(1, "set_difficulty", ["easy", "medium", "hard"][i]))
 	start_btn.pressed.connect(func() -> void: net.rpc("start_game"))
 	char_pick.item_selected.connect(func(i: int) -> void:
 		net.set("my_char", _char_ids[i])

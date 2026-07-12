@@ -37,6 +37,9 @@ func _ready() -> void:
 			_attach_kit(p)
 
 	var bot_scene: PackedScene = load("res://scenes/bots/bot.tscn")
+	var chars: Array = Balance.CHARACTERS.keys()
+	var net := NetHub.node()
+	var diff := String(net.get("difficulty")) if net else "medium"
 	for tm in ["A", "B"]:
 		for i in FILL_BOTS_PER_TEAM:
 			var b: Bot = bot_scene.instantiate()
@@ -44,7 +47,8 @@ func _ready() -> void:
 			add_child(b)
 			b.set_multiplayer_authority(1)  # ботов ведёт хост
 			b.team = tm
-			b.preset = "medium"
+			b.preset = diff  # сложность из лобби
+			b.char_id = chars[(i * 2 + (0 if tm == "A" else 1)) % chars.size()]  # разные агенты — разные скиллы
 			b.global_position = _spawn_for(tm, idx, atk, def)
 
 	# матч стартует хост после спавна; смена сторон — рассадка на каждый раунд

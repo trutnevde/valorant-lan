@@ -22,8 +22,9 @@ func _initialize() -> void:
 	await process_frame
 
 	var navmesh := NavigationMesh.new()
-	# агент = капсула игрока/бота из Balance (радиус 0.38, подъём на ступени 0.45)
-	navmesh.agent_radius = float(Balance.MOVE["RADIUS"])
+	# агент = капсула из Balance (0.38) + ЗАПАС 0.14: пути держат отступ от углов стен,
+	# иначе боты срезают угол впритык и скребут его (RVO против угла = стак)
+	navmesh.agent_radius = float(Balance.MOVE["RADIUS"]) + 0.14
 	navmesh.agent_height = float(Balance.MOVE["HEIGHT"])
 	navmesh.agent_max_climb = float(Balance.MOVE["STEP_UP"])
 	navmesh.agent_max_slope = 60.0

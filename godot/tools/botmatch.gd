@@ -51,10 +51,16 @@ func _spawn_points(map: Node3D, grp: String) -> Array:
 	return out
 
 
+var _char_i := 0
+
+
 func _spawn_bot(scene: PackedScene, map: Node3D, tm: String, pos: Vector3) -> Bot:
 	var b := scene.instantiate() as Bot
 	b.team = tm
 	b.preset = preset
+	var chars: Array = Balance.CHARACTERS.keys()
+	b.char_id = chars[_char_i % chars.size()]  # разные агенты → в гейте живут и скиллы
+	_char_i += 1
 	map.add_child(b)
 	b.global_position = pos + Vector3(0, 0.2, 0)
 	return b

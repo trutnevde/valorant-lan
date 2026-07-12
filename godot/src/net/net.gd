@@ -9,6 +9,7 @@ const DEFAULT_PORT := 27016  # веб занимает 27015
 var players := {}   # peer_id -> {name, char, team}
 var my_name := "Игрок"
 var my_char := "max"
+var difficulty := "medium"  # пресет ботов (лобби, только хост)
 
 signal players_changed
 signal game_started
@@ -99,6 +100,20 @@ func set_char(ch: String) -> void:
 	if players.has(id):
 		players[id]["char"] = ch
 		_sync_players.rpc(players)
+
+
+@rpc("any_peer", "reliable")
+func set_difficulty(d: String) -> void:
+	if not is_host() or not Balance.BOT_PRESETS.has(d):
+		return
+	difficulty = d
+	_sync_difficulty.rpc(d)
+
+
+@rpc("authority", "reliable", "call_local")
+func _sync_difficulty(d: String) -> void:
+	difficulty = d
+	players_changed.emit()
 
 
 @rpc("any_peer", "reliable")
