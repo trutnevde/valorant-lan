@@ -868,6 +868,11 @@ function botGoHold(bot, dt, combat, siteKey) {
   else if (!combat) bot.yaw += dt * 0.6; // держит свою позицию, сканирует
 }
 
+// ===== телеметрия гейта (test/botmatch.mjs): включается ENV TICK_TELEMETRY=1 =====
+const TICK_TELEMETRY = process.env.TICK_TELEMETRY === '1';
+const BOT_STAT = { shots: 0, hits: 0 };
+const TICK_WIN = [];  // длительности тика внутри окна; на окно печатаем p95
+
 function botShoot(bot, e, dist) {
   const t = now();
   const ai = bot.ai;
@@ -894,10 +899,13 @@ function botShoot(bot, e, dist) {
   addNoise(bot, !(WEAPONS[bw] && WEAPONS[bw].silenced));
   // адекватный вызов: попадают заметно чаще, иногда вешают голову
   const pHit = Math.max(0.13, Math.min(0.42, 0.46 - dist * 0.009));
+  BOT_STAT.shots++;
   if (Math.random() < pHit) {
+    BOT_STAT.hits++;
     const head = Math.random() < 0.13;  // 13% голов
     applyDamage(e, head ? w.head : w.dmg, bot.id, bw, head ? 'head' : 'body');
   }
+  if (TICK_TELEMETRY) console.log('BOTACC ' + BOT_STAT.hits + ' ' + BOT_STAT.shots);
 }
 
 // ===== боты используют способности =====
@@ -1191,7 +1199,7 @@ function moveToward(bot, target, dt, combat = false) {
 }
 
 // ===== Главный тик (20 Гц) =====
-setInterval(() => {
+function serverTick() {
   const t = now();
   if (!match.running) return;
 
@@ -1409,6 +1417,18 @@ setInterval(() => {
     if (b.bot && b.alive && match.state !== PHASES.WAIT) {
       broadcast({ t: 'state', id: b.id, p: b.lastPos.map(v => +v.toFixed(2)), yaw: +b.yaw.toFixed(2), pitch: 0, crouch: false });
     }
+  }
+}
+
+setInterval(() => {
+  const s0 = process.hrtime.bigint();
+  serverTick();
+  if (!TICK_TELEMETRY) return;
+  TICK_WIN.push(Number(process.hrtime.bigint() - s0) / 1e6);
+  if (TICK_WIN.length >= 40) {   // окно ~2 сек: печатаем p95 и обнуляем
+    const sorted = [...TICK_WIN].sort((a, b) => a - b);
+    console.log('TICKP95 ' + sorted[Math.floor(sorted.length * 0.95)].toFixed(2));
+    TICK_WIN.length = 0;
   }
 }, 50);
 

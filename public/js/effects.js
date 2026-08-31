@@ -10,18 +10,18 @@ function makeHorse() {
   const g = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ color: 0xdcc9a0, emissive: 0x6a5a2a, emissiveIntensity: 0.4, transparent: true, opacity: 0.78, roughness: 0.6 });
   const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.32, 0.9, 5, 10), mat);
-  body.rotation.x = Math.PI / 2;
+  body.rotation.z = Math.PI / 2;
   body.position.y = 1.0;
   g.add(body);
   const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.22, 0.6, 8), mat);
-  neck.position.set(0, 1.35, -0.6);
-  neck.rotation.x = -0.7;
+  neck.position.set(-0.6, 1.35, 0);
+  neck.rotation.z = 0.7;
   g.add(neck);
-  const head = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.24, 0.5), mat);
-  head.position.set(0, 1.6, -0.95);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.24, 0.22), mat);
+  head.position.set(-0.95, 1.6, 0);
   g.add(head);
   const legs = [];
-  for (const lx of [-0.18, 0.18]) for (const lz of [-0.45, 0.45]) {
+  for (const lx of [-0.45, 0.45]) for (const lz of [-0.18, 0.18]) {
     const leg = new THREE.Mesh(new THREE.CapsuleGeometry(0.07, 0.7, 3, 6), mat);
     leg.position.set(lx, 0.55, lz);
     g.add(leg);
@@ -29,8 +29,8 @@ function makeHorse() {
   }
   // хвост
   const tail = new THREE.Mesh(new THREE.ConeGeometry(0.12, 0.6, 6), mat);
-  tail.position.set(0, 1.1, 0.7);
-  tail.rotation.x = 0.8;
+  tail.position.set(0.7, 1.1, 0);
+  tail.rotation.z = -0.8;
   g.add(tail);
   return { group: g, legs };
 }
@@ -471,7 +471,7 @@ export class Effects {
   // ===== дым (обычный серый или зелёная вонючка Дениса) =====
   // Плотный ОБЪЁМНЫЙ дым: ядро-сфера (DoubleSide, чтобы изнутри тоже было глухо)
   // + густое облако клубов-биллбордов, заполняющих объём — внутри ничего не видно.
-  smoke(pos, r, dur, stink = false) {
+  smoke(pos, r, dur, stink = false, maxOp = 1) {   // maxOp<1 — пассивка Геры «Ясный глаз»: вражеский дым полупрозрачен
     const color = stink ? 0x5c7a3e : 0x9aa6b0;
     const group = new THREE.Group();
     group.position.set(pos.x, Math.max(pos.y, 0), pos.z);
@@ -510,9 +510,9 @@ export class Effects {
       update: (dt) => {
         t += dt;
         const env = t < 0.35 ? t / 0.35 : (t > dur - 0.7 ? Math.max(0, (dur - t) / 0.7) : 1);
-        coreMat.opacity = env;               // ПОЛНОСТЬЮ плотный (1.0)
-        innerMat.opacity = env;
-        puffMat.opacity = env * 0.92;        // общий материал — задаём один раз (не ×12)
+        coreMat.opacity = env * maxOp;       // ПОЛНОСТЬЮ плотный (1.0), кроме взгляда Геры сквозь вражеский дым
+        innerMat.opacity = env * maxOp;
+        puffMat.opacity = env * 0.92 * maxOp; // общий материал — задаём один раз (не ×12)
         puffMat.rotation += dt * 0.1;
         for (const s of puffs) s.position.y = s.userData.baseY + Math.sin(t * 0.8 + s.userData.ph) * 0.15;
         core.rotation.y += dt * 0.15;
@@ -581,7 +581,7 @@ export class Effects {
     g.add(headM);
     const barrel = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.04, 0.45, 6), new THREE.MeshLambertMaterial({ color: '#2b2f36' }));
     barrel.rotation.x = Math.PI / 2;
-    barrel.position.set(0, 0.5, 0.35);
+    barrel.position.set(0, 0.5, -0.35);
     g.add(barrel);
     const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.05), new THREE.MeshBasicMaterial({ color: 0x33ff66 }));
     lamp.position.set(0, 0.68, 0);
@@ -694,9 +694,10 @@ export class Effects {
     g.position.copy(from);
     g.lookAt(to);
     this.scene.add(g);
-    let t = 0, landed = false;
-    this.add({
+    let t = 0, landed = false, dead = false;
+    const handle = {
       update: (dt) => {
+        if (dead) return false;
         t += dt;
         const k = Math.min(1, t / travel);
         g.position.lerpVectors(from, to, k);
@@ -704,8 +705,10 @@ export class Effects {
         return t < travel + 0.06;
       },
       dispose: () => this.scene.remove(g),
-      kill: () => { landed = true; },
-    });
+      kill: () => { dead = true; landed = true; this.scene.remove(g); },  // сбита в полёте: убрать сразу, onLand не вызывать
+    };
+    this.add(handle);
+    return { group: g, kill: handle.kill };
   }
 
   // всплеск лечения (зелёные искры + крестик)
@@ -754,13 +757,13 @@ export class Effects {
     body.castShadow = true;
     g.add(body);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), std('#f4f0e6'));
-    head.position.set(0, 0.16, -0.12);
+    head.position.set(0, 0.16, 0.12);
     g.add(head);
     const comb = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6), std('#e8302c'));
-    comb.position.set(0, 0.26, -0.12);
+    comb.position.set(0, 0.26, 0.12);
     g.add(comb);
     const beak = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.08, 4), std('#ffcf3f'));
-    beak.position.set(0, 0.15, -0.22); beak.rotation.x = -Math.PI / 2;
+    beak.position.set(0, 0.15, 0.22); beak.rotation.x = Math.PI / 2;
     g.add(beak);
     for (const s of [-1, 1]) {
       const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.14, 5), std('#ffcf3f'));
@@ -768,7 +771,7 @@ export class Effects {
       g.add(leg);
     }
     const eye = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 8), new THREE.MeshStandardMaterial({ color: 0x33ff66, emissive: 0x22cc44, emissiveIntensity: 0.9 }));
-    eye.position.set(0.05, 0.18, -0.19);
+    eye.position.set(0.05, 0.18, 0.19);
     g.add(eye);
     this.scene.add(g);
     let alive = true, t = 0;

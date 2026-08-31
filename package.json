@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/smoke.js",
-    "gate": "node test/smoke.js && node tools/validate-maps.mjs"
+    "gate": "node test/smoke.js && node tools/validate-maps.mjs && node test/hitreg.mjs && node test/botmatch.mjs"
   },
   "dependencies": {
     "ws": "^8.18.0"

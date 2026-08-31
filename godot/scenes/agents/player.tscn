@@ -1,0 +1,207 @@
+[gd_scene load_steps=13 format=3 uid="uid://fps_player00"]
+
+[ext_resource type="Script" path="res://src/core/player.gd" id="1"]
+[ext_resource type="Script" path="res://src/core/weapon.gd" id="2"]
+[ext_resource type="Script" path="res://src/ui/hud.gd" id="3"]
+
+[sub_resource type="CapsuleShape3D" id="cap"]
+radius = 0.38
+height = 1.8
+
+[sub_resource type="BoxShape3D" id="pbody"]
+size = Vector3(0.52, 0.9, 0.3)
+
+[sub_resource type="SphereShape3D" id="phead"]
+radius = 0.2
+
+[sub_resource type="BoxShape3D" id="pleg"]
+size = Vector3(0.42, 0.9, 0.26)
+
+[sub_resource type="CapsuleMesh" id="pbodymesh"]
+radius = 0.3
+height = 1.5
+
+[sub_resource type="StandardMaterial3D" id="pbodymat"]
+albedo_color = Color(0.3, 0.55, 0.85, 1)
+
+[sub_resource type="SceneReplicationConfig" id="repl"]
+properties/0/path = NodePath(".:position")
+properties/0/spawn = true
+properties/0/replication_mode = 1
+properties/1/path = NodePath(".:rotation")
+properties/1/spawn = true
+properties/1/replication_mode = 1
+properties/2/path = NodePath("Head:rotation")
+properties/2/spawn = true
+properties/2/replication_mode = 1
+
+[sub_resource type="BoxMesh" id="gunbox"]
+size = Vector3(0.06, 0.08, 0.42)
+
+[sub_resource type="StandardMaterial3D" id="gunmat"]
+albedo_color = Color(0.12, 0.13, 0.16, 1)
+metallic = 0.6
+roughness = 0.4
+
+[node name="Player" type="CharacterBody3D"]
+script = ExtResource("1")
+
+[node name="Col" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.9, 0)
+shape = SubResource("cap")
+
+[node name="Body" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.12, 0)
+shape = SubResource("pbody")
+
+[node name="HeadHit" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.68, 0)
+shape = SubResource("phead")
+
+[node name="Leg" type="CollisionShape3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
+shape = SubResource("pleg")
+
+[node name="BodyVis" type="Node3D" parent="."]
+visible = false
+
+[node name="Torso" type="MeshInstance3D" parent="BodyVis"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
+mesh = SubResource("pbodymesh")
+surface_material_override/0 = SubResource("pbodymat")
+
+[node name="Noggin" type="MeshInstance3D" parent="BodyVis"]
+transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 1.68, 0)
+mesh = SubResource("pbodymesh")
+surface_material_override/0 = SubResource("pbodymat")
+
+[node name="Sync" type="MultiplayerSynchronizer" parent="."]
+replication_config = SubResource("repl")
+
+[node name="Head" type="Node3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.68, 0)
+
+[node name="Camera3D" type="Camera3D" parent="Head"]
+fov = 74.0
+near = 0.05
+far = 400.0
+
+[node name="Viewmodel" type="Node3D" parent="Head"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, -0.18, -0.35)
+
+[node name="Gun" type="MeshInstance3D" parent="Head/Viewmodel"]
+mesh = SubResource("gunbox")
+surface_material_override/0 = SubResource("gunmat")
+
+[node name="StepSfx" type="AudioStreamPlayer3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.2, 0)
+bus = &"Steps"
+max_distance = 50.0
+unit_size = 5.0
+
+[node name="WeaponRig" type="Node3D" parent="."]
+script = ExtResource("2")
+
+[node name="ShotSfx" type="AudioStreamPlayer3D" parent="WeaponRig"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.5, 0)
+volume_db = -6.0
+bus = &"SFX"
+max_distance = 80.0
+unit_size = 7.0
+
+[node name="DrySfx" type="AudioStreamPlayer" parent="WeaponRig"]
+volume_db = -10.0
+bus = &"UI"
+
+[node name="ReloadSfx" type="AudioStreamPlayer" parent="WeaponRig"]
+volume_db = -8.0
+bus = &"SFX"
+
+[node name="HitSfx" type="AudioStreamPlayer" parent="WeaponRig"]
+volume_db = -7.0
+bus = &"UI"
+
+[node name="HUD" type="CanvasLayer" parent="."]
+script = ExtResource("3")
+
+[node name="ChV" type="ColorRect" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -1.0
+offset_top = -7.0
+offset_right = 1.0
+offset_bottom = 7.0
+color = Color(0.4, 1, 0.9, 0.9)
+
+[node name="ChH" type="ColorRect" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -7.0
+offset_top = -1.0
+offset_right = 7.0
+offset_bottom = 1.0
+color = Color(0.4, 1, 0.9, 0.9)
+
+[node name="Ammo" type="Label" parent="HUD"]
+anchors_preset = 3
+anchor_left = 1.0
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = -320.0
+offset_top = -48.0
+offset_right = -24.0
+offset_bottom = -20.0
+horizontal_alignment = 2
+
+[node name="Hitmark" type="Label" parent="HUD"]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = 16.0
+offset_top = 12.0
+offset_right = 120.0
+offset_bottom = 36.0
+modulate = Color(1, 1, 1, 0)
+
+[node name="Hp" type="Label" parent="HUD"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -48.0
+offset_right = 180.0
+offset_bottom = -20.0
+
+[node name="Kit" type="Label" parent="HUD"]
+anchors_preset = 2
+anchor_top = 1.0
+anchor_bottom = 1.0
+offset_left = 24.0
+offset_top = -80.0
+offset_right = 340.0
+offset_bottom = -52.0
+
+[node name="DmgFlash" type="ColorRect" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(0.8, 0.1, 0.1, 1)
+modulate = Color(1, 1, 1, 0)
+mouse_filter = 2
+
+[node name="BlindFlash" type="ColorRect" parent="HUD"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+color = Color(1, 1, 1, 1)
+modulate = Color(1, 1, 1, 0)
+mouse_filter = 2

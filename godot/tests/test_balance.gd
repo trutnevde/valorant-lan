@@ -1,0 +1,59 @@
+# Сверка среза баланса с исходником (public/js/shared.js @ aa1df9a).
+# ВНИМАНИЕ: исходный срез 144e737 был локальным коммитом машины, потерянной вместе с
+# рабочей копией; репо восстановлено с гитхаба (aa1df9a) + транскрипта сессии. Числа
+# сверены заново тестами ниже (RULES/WEAPONS/MOVE/пресеты/способности) — дрейфа нет.
+# Значения захардкожены при генерации — трипвайр от случайной правки balance.gd руками
+# и от дрейфа при перегенерации из изменившегося shared.js (паритет!).
+extends GutTest
+
+
+func test_snapshot_hash() -> void:
+	assert_eq(Balance.SNAPSHOT_HASH, "aa1df9a", "срез баланса сменился — сверь с VERSIONS.md")
+
+
+func test_rules() -> void:
+	assert_eq(int(Balance.RULES["ROUNDS_TO_WIN"]), 5)
+	assert_eq(int(Balance.RULES["BUY_TIME"]), 15)
+	assert_eq(int(Balance.RULES["ROUND_TIME"]), 100)
+	assert_eq(int(Balance.RULES["SPIKE_TIME"]), 45)
+	assert_eq(int(Balance.RULES["DEFUSE_TIME"]), 7)
+	assert_eq(int(Balance.RULES["BASE_HP"]), 100)
+	assert_almost_eq(float(Balance.RULES["ARMOR_ABSORB"]), 0.66, 0.001)
+
+
+func test_weapons() -> void:
+	assert_eq(int(Balance.WEAPONS["vandal"]["dmg"]), 40)
+	assert_eq(int(Balance.WEAPONS["vandal"]["head"]), 160)
+	assert_eq(int(Balance.WEAPONS["phantom"]["rpm"]), 660)
+	assert_eq(int(Balance.WEAPONS["operator"]["dmg"]), 150)
+	assert_eq(int(Balance.WEAPONS["classic"]["price"]), 0)
+	assert_eq(int(Balance.WEAPONS["sheriff"]["head"]), 159)
+	assert_eq(int(Balance.WEAPONS["bucky"]["pellets"]), 8)
+
+
+func test_move() -> void:
+	assert_almost_eq(float(Balance.MOVE["RUN_SPEED"]), 6.2, 0.001)
+	assert_almost_eq(float(Balance.MOVE["RADIUS"]), 0.38, 0.001)
+	assert_almost_eq(float(Balance.MOVE["STEP_UP"]), 0.45, 0.001)
+	assert_almost_eq(float(Balance.MOVE["JUMP_VEL"]), 6.5, 0.001)
+
+
+func test_agents_and_ability() -> void:
+	assert_eq(Balance.CHARACTERS.size(), 10, "10 агентов в ростере")
+	assert_eq(int(Balance.CHARACTERS["artemiy"]["ultCost"]), 5)
+	assert_eq(int(Balance.CHARACTERS["gera"]["ultCost"]), 7)
+	assert_almost_eq(float(Balance.ABILITY["SMOKE_R"]), 4.3, 0.001)
+	assert_eq(int(Balance.ABILITY["SOVA_SHOCK_DMG"]), 55)
+	assert_almost_eq(float(Balance.ABILITY["GERA_SMOKE_DMG_MUL"]), 1.15, 0.001)
+	assert_eq(int(Balance.ABILITY["KNIFE_HEAD"]), 150)
+
+
+func test_bot_presets() -> void:
+	assert_almost_eq(float(Balance.BOT_PRESETS["medium"]["pHitMax"]), 0.42, 0.001)
+	assert_almost_eq(float(Balance.BOT_PRESETS["hard"]["head"]), 0.22, 0.001)
+	assert_almost_eq(float(Balance.BOT_PRESETS["easy"]["react"]), 0.35, 0.001)
+
+
+func test_weapon_feel_helper() -> void:
+	assert_almost_eq(float(Balance.weapon_feel("knife")["speed"]), 1.10, 0.001)
+	assert_almost_eq(float(Balance.weapon_feel("operator")["speed"]), 0.88, 0.001)

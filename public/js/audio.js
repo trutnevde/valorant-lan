@@ -1,4 +1,7 @@
-// Звук: реальные CC0-сэмплы (выстрелы/шаги/перезарядка/взрыв) + синтез для всего остального.
+// Звук: реальные CC0-сэмплы — основной источник ВСЕХ игровых событий (выстрелы/шаги/перезарядка/
+// взрыв/попадания/ХС/скиллы/шип/UI). Осцилляторный синтез оставлен только как (1) тихий фолбэк,
+// если сэмпл не догрузился, и (2) характерная озвучка без CC0-аналога (курица/кони/пожирание/огонь)
+// + одобренный игроком чистый синус-бип шипа (нужно «пиканье», а не «дзынь»). Провенанс — ATTRIBUTION.md.
 // Всё локально/офлайн. Позиционный 3D: мировые звуки идут через PannerNode (HRTF) → слышно направление/дистанцию.
 
 // CC0-сэмплы (OpenGameArt, public domain), лежат локально в assets/sfx/.
@@ -141,7 +144,7 @@ export class Sfx {
     if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t + dur);
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(g); g.connect(this.dest);
+    o.connect(g); g.connect(this.master);
     o.start(t); o.stop(t + dur + 0.02);
   }
   noise({ dur = 0.1, vol = 0.25, fc = 1200, q = 1, type = 'lowpass', fc2 = 0, delay = 0 }) {
@@ -159,7 +162,7 @@ export class Sfx {
     const g = this.ctx.createGain();
     g.gain.setValueAtTime(vol, t);
     g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(flt); flt.connect(g); g.connect(this.dest);
+    src.connect(flt); flt.connect(g); g.connect(this.master);
     src.start(t);
   }
 
@@ -175,7 +178,7 @@ export class Sfx {
     const src = this.ctx.createBufferSource(); src.buffer = buf;
     const flt = this.ctx.createBiquadFilter(); flt.type = 'highpass'; flt.frequency.value = fc; flt.Q.value = 0.6;
     const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    src.connect(flt); flt.connect(g); g.connect(this.dest); src.start(t);
+    src.connect(flt); flt.connect(g); g.connect(this.master); src.start(t);
   }
   // низкочастотное «тело» выстрела с искажением
   body({ f = 140, f2 = 45, vol = 0.35, dur = 0.1, delay = 0, type = 'sawtooth' }) {
@@ -186,7 +189,7 @@ export class Sfx {
     const ws = this.ctx.createWaveShaper(); const c = new Float32Array(256);
     for (let i = 0; i < 256; i++) { const x = i / 128 - 1; c[i] = Math.tanh(x * 3); } ws.curve = c;
     const g = this.ctx.createGain(); g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + dur);
-    o.connect(ws); ws.connect(g); g.connect(this.dest); o.start(t); o.stop(t + dur + 0.02);
+    o.connect(ws); ws.connect(g); g.connect(this.master); o.start(t); o.stop(t + dur + 0.02);
   }
   // ===== оружие: транзиент + тело + хвост, всё с джиттером =====
   shot(w, vol = 1) {
@@ -311,7 +314,7 @@ export class Sfx {
     const flt = this.ctx.createBiquadFilter();
     flt.type = 'lowpass'; flt.frequency.value = 300; flt.Q.value = 4;
     const g = this.ctx.createGain(); g.gain.value = 0.14;
-    src.connect(flt); flt.connect(g); g.connect(this.dest);
+    src.connect(flt); flt.connect(g); g.connect(this.master);
     src.start();
     this.rotNode = { src, g };
   }
@@ -356,19 +359,6 @@ export class Sfx {
   turretShot(vol = 1) { this.noise({ dur: 0.05, vol: 0.3 * vol, fc: 2600, fc2: 800 }); }
   xray() { if (this.playBuf('energy', { vol: 0.55, rate: 0.85 })) return; this.tone({ f: 300, f2: 1600, dur: 0.6, vol: 0.3, type: 'sine' }); this.tone({ f: 450, f2: 2400, dur: 0.6, vol: 0.2, type: 'sine', delay: 0.1 }); }
   puddleSplat(vol = 1) { this.noise({ dur: 0.25, vol: 0.35 * vol, fc: 600, fc2: 150 }); }
-
-  // ===== Ира (KFC) =====
-  throwLight() { this.noise({ dur: 0.12, vol: 0.2, fc: 2500, fc2: 900, type: 'bandpass' }); }
-  crispyPlace(vol = 1) { this.noise({ dur: 0.35, vol: 0.35 * vol, fc: 3000, q: 0.6, type: 'highpass' }); this.tone({ f: 300, f2: 500, dur: 0.15, vol: 0.15 * vol, type: 'triangle' }); }
-  buffetPop(vol = 1) { this.tone({ f: 500, f2: 900, dur: 0.25, vol: 0.3 * vol, type: 'sine' }); this.noise({ dur: 0.4, vol: 0.25 * vol, fc: 800, fc2: 2000 }); }
-  banquetSummon() { [330, 440, 550, 660].forEach((f, i) => this.tone({ f, dur: 0.25, vol: 0.28, type: 'triangle', delay: i * 0.1 })); this.noise({ dur: 0.6, vol: 0.2, fc: 500, fc2: 1500, delay: 0.2 }); }
-  chickenSpawn() { this.tone({ f: 600, f2: 900, dur: 0.1, vol: 0.2, type: 'square' }); this.chickenCluck(0.7); }
-  chickenCluck(vol = 1) {
-    // «ко-ко-ко-кудах!»
-    for (let i = 0; i < 3; i++) this.tone({ f: 700 + Math.random() * 100, f2: 500, dur: 0.06, vol: 0.18 * vol, type: 'square', delay: i * 0.09 });
-    this.tone({ f: 900, f2: 1500, dur: 0.18, vol: 0.25 * vol, type: 'square', delay: 0.3 });
-    this.tone({ f: 1500, f2: 700, dur: 0.15, vol: 0.2 * vol, type: 'square', delay: 0.45 });
-  }
 
   // ===== Конилий (кони) =====
   neigh(vol = 1) {

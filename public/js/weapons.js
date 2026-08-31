@@ -1,21 +1,9 @@
 // Оружие v2: отдача как в CS (панч камеры + подъём прицела + паттерн спрея),
 // дробовики (дробины), спад урона, зум, ножи ульты Макса
 import * as THREE from './three.module.js';
-import { WEAPONS, ABILITY, weaponFeel } from './shared.js';
+import { WEAPONS, ABILITY } from './shared.js';
 
 const BASE_FOV = 74;
-
-// калибр трассера: снайперка — паровой след, винтовка — жирный, пистолет — тонкий
-export function tracerStyle(w) {
-  if (!w) return { r: 0.02, life: 0.07, color: 0xffe0a0 };
-  switch (w.cat) {
-    case 'sniper': return { r: 0.05, life: 0.26, color: 0xd8ecff };
-    case 'lmg':
-    case 'rifle': return { r: 0.028, life: 0.09, color: 0xffe0a0 };
-    case 'shotgun': return { r: 0.013, life: 0.06, color: 0xffd9a0 };
-    default: return { r: 0.02, life: 0.07, color: 0xffe0a0 };
-  }
-}
 const now = () => performance.now() / 1000;
 
 export class WeaponSystem {
@@ -29,7 +17,6 @@ export class WeaponSystem {
     this.firing = false;
     this.kick = 0;
     this.sprayIdx = 0;       // номер пули в очереди — задаёт паттерн
-    this.readyAt = 0;        // оружие ещё достаётся — стрелять нельзя
     // ощущения оружия
     this.aiming = false;
     this.aimT = 0;           // 0..1 — прицеливание (оружие к лицу)
@@ -97,11 +84,9 @@ export class WeaponSystem {
 
   equip(slot) {
     if (slot === 'primary' && !this.loadout.primary) return;
-    if (this.slot === slot && now() > this.readyAt) { /* уже в руках */ }
     this.slot = slot;
     this.reloading = 0;
     this.sprayIdx = 0;
-    this.readyAt = now() + weaponFeel(this.currentId).equip;
     this.toggleScope(false);
     for (const [id, vm] of Object.entries(this.viewmodels)) vm.visible = id === this.currentId && !this.knivesActive;
     if (this.knivesActive) this.viewmodels.knife.visible = true;
@@ -141,7 +126,7 @@ export class WeaponSystem {
 
   tryShoot(isClick = false) {
     const t = now();
-    if (!this.canAct() || this.reloading || t < this.readyAt) return;
+    if (!this.canAct() || this.reloading) return;
 
     // ножи Макса перекрывают обычное оружие
     if (this.knivesActive) {
@@ -176,9 +161,7 @@ export class WeaponSystem {
     let s = w.spread;
     if (p.crouch) s *= 0.65;
     const hSpeed = Math.hypot(p.vel.x, p.vel.z);
-    // штраф растёт со скоростью: стоя — точно, на бегу — молоко; снайперкам хуже всех
-    const movePenalty = w.cat === 'sniper' ? 5 : w.cat === 'rifle' ? 3 : 2.2;
-    s *= 1 + Math.min(1, hSpeed / 6.2) * movePenalty;
+    if (hSpeed > 2) s *= 2.2;
     if (!p.grounded) s *= 4;
     // разгон разброса в длинной очереди
     if (w.auto && this.sprayIdx > 3) s *= 1 + Math.min(1.2, (this.sprayIdx - 3) * 0.06);
@@ -242,7 +225,11 @@ export class WeaponSystem {
       const r = G.remotes.get(pid);
       let part = hit.object.userData.part || 'body';
       if (part === 'body' && r && hit.point.y < r.group.position.y + 0.75) part = 'leg';
-      const dmg = Math.round(dmgFor(part));
+      let dmg = Math.round(dmgFor(part));
+      // Пассивка Геры «Охотник за туманщиками»: +15% по врагу, стоящему в дыму
+      if (dmg > 0 && G.me && G.me.char === 'gera' && r && G.abilities && G.abilities.pointInSmoke(r.group.position.x, r.group.position.z)) {
+        dmg = Math.round(dmg * ABILITY.GERA_SMOKE_DMG_MUL);
+      }
       if (dmg > 0) {
         G.net.send({ t: 'hit', target: pid, dmg, part, weapon: weaponId });
         G.fx.blood(hit.point);
@@ -264,6 +251,7 @@ export class WeaponSystem {
 
   shoot() {
     const G = this.G, w = this.w, id = this.currentId;
+    G.lastShotT = now();   // сбрасывает «Разгон» Конилия
     const eye = G.player.eyePos();
     const baseDir = this.aimDir();
     const pellets = w.pellets || 1;
@@ -292,18 +280,12 @@ export class WeaponSystem {
         }, id);
       }
       if (!w.melee && (pellets === 1 || i % 2 === 0)) {
-        const ts = tracerStyle(w);
-        G.fx.tracer(this.muzzleWorld(), end, ts.color, ts.r, ts.life);
+        G.fx.tracer(this.muzzleWorld(), end);
       }
     }
 
     if (!w.melee) {
-      const mp = this.muzzleWorld();
-      G.fx.muzzle(mp, baseDir);
-      // гильза вправо + дымок из ствола
-      const right = new THREE.Vector3().crossVectors(baseDir, new THREE.Vector3(0, 1, 0)).normalize();
-      G.fx.casing(mp.clone().addScaledVector(baseDir, -0.25).addScaledVector(right, 0.06), right);
-      if (this.sprayIdx % 2 === 0) G.fx.smokePuff(mp);
+      G.fx.muzzle(this.muzzleWorld(), baseDir);
       this.applyRecoil(w);
       this.kick = 1;
     } else {
@@ -387,7 +369,7 @@ export class WeaponSystem {
     }
 
     // ===== прицеливание (ADS) =====
-    const canAim = this.aiming && !this.knivesActive && !this.w.melee && G.me.alive && now() > this.readyAt;
+    const canAim = this.aiming && !this.knivesActive && !this.w.melee && G.me.alive;
     this.aimT += ((canAim ? 1 : 0) - this.aimT) * Math.min(1, dt * 13);
     G.aimT = this.aimT;
     const sniperScoped = this.w.scope && this.aimT > 0.55;
@@ -427,17 +409,9 @@ export class WeaponSystem {
     const bobX = Math.sin(this.bobPhase) * 0.015 * bobAmt;
     const bobY = -Math.abs(Math.sin(this.bobPhase)) * 0.013 * bobAmt + idleBob;
 
-    // ===== анимация доставания: ствол поднимается снизу =====
-    const feel = weaponFeel(this.currentId);
-    const eq = Math.max(0, Math.min(1, (this.readyAt - now()) / feel.equip));
-
-    // ===== динамический прицел-блум: раскрывается от реального разброса =====
-    const bloomSpread = this.w.melee ? 0 : this.spread();
-    G.hud.setCrosshairGap(Math.min(30, bloomSpread * 950));
-
     // ===== поза прицеливания: оружие к центру и ближе к лицу =====
     const a = this.aimT;
-    const aimX = -0.28 * a, aimY = 0.088 * a - eq * 0.24, aimZ = 0.14 * a;
+    const aimX = -0.28 * a, aimY = 0.088 * a, aimZ = 0.14 * a;
 
     // ===== применяем всё к vmRoot (оружие + руки едины) =====
     this.vmRoot.visible = !sniperScoped;
@@ -447,7 +421,7 @@ export class WeaponSystem {
       aimZ + this.vkickPos
     );
     this.vmRoot.rotation.set(
-      this.swayCurY * swayMul * 3 - this.vkickRot - eq * 0.7 + (moving ? Math.sin(this.bobPhase) * 0.012 * bobAmt : 0),
+      this.swayCurY * swayMul * 3 - this.vkickRot + (moving ? Math.sin(this.bobPhase) * 0.012 * bobAmt : 0),
       -this.swayCurX * swayMul * 3.5,
       this.swayCurX * swayMul * 2.2 + (moving ? Math.sin(this.bobPhase * 0.5) * 0.02 * bobAmt : 0)
     );
