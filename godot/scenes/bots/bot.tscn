@@ -1,7 +1,8 @@
-[gd_scene load_steps=10 format=3 uid="uid://bot_v1_00000"]
+[gd_scene load_steps=11 format=3 uid="uid://bot_v1_00000"]
 
 [ext_resource type="Script" path="res://src/bots/bot.gd" id="1"]
 [ext_resource type="AudioStream" path="res://assets/audio/gun_rifle.wav" id="2"]
+[ext_resource type="Script" path="res://src/agents/body_vis.gd" id="3"]
 
 [sub_resource type="SceneReplicationConfig" id="botrepl"]
 properties/0/path = NodePath(".:position")
@@ -53,14 +54,8 @@ shape = SubResource("headsph")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.45, 0)
 shape = SubResource("legbox")
 
-[node name="Mesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
-mesh = SubResource("botmesh")
-surface_material_override/0 = SubResource("botmat")
-
-[node name="HeadMesh" type="MeshInstance3D" parent="."]
-transform = Transform3D(0.55, 0, 0, 0, 0.55, 0, 0, 0, 0.55, 0, 1.68, 0)
-mesh = SubResource("botmesh")
+[node name="BodyVis" type="Node3D" parent="."]
+script = ExtResource("3")
 
 [node name="NavAgent" type="NavigationAgent3D" parent="."]
 

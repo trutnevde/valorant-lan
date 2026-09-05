@@ -1,8 +1,9 @@
-[gd_scene load_steps=13 format=3 uid="uid://fps_player00"]
+[gd_scene load_steps=14 format=3 uid="uid://fps_player00"]
 
 [ext_resource type="Script" path="res://src/core/player.gd" id="1"]
 [ext_resource type="Script" path="res://src/core/weapon.gd" id="2"]
 [ext_resource type="Script" path="res://src/ui/hud.gd" id="3"]
+[ext_resource type="Script" path="res://src/agents/body_vis.gd" id="4"]
 
 [sub_resource type="CapsuleShape3D" id="cap"]
 radius = 0.38
@@ -64,16 +65,7 @@ shape = SubResource("pleg")
 
 [node name="BodyVis" type="Node3D" parent="."]
 visible = false
-
-[node name="Torso" type="MeshInstance3D" parent="BodyVis"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.0, 0)
-mesh = SubResource("pbodymesh")
-surface_material_override/0 = SubResource("pbodymat")
-
-[node name="Noggin" type="MeshInstance3D" parent="BodyVis"]
-transform = Transform3D(0.5, 0, 0, 0, 0.5, 0, 0, 0, 0.5, 0, 1.68, 0)
-mesh = SubResource("pbodymesh")
-surface_material_override/0 = SubResource("pbodymat")
+script = ExtResource("4")
 
 [node name="Sync" type="MultiplayerSynchronizer" parent="."]
 replication_config = SubResource("repl")
