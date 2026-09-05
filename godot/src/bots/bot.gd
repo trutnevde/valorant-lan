@@ -447,6 +447,13 @@ func _move(dt: float) -> void:
 		move_and_slide()
 		return
 	var next := agent.get_next_path_position()
+	# RVO и столкновения умеют вытолкнуть бота С навмеша — в карман у стены (на «Высоте»
+	# это щель между лестницей и трёхметровой платформой). Оттуда путь недостижим, и бот
+	# стоит до срабатывания watchdog. Заметив уход с меша, правим курс на ближайшую точку
+	# меша (движковый map_get_closest_point) — это возврат в игру, а не телепорт.
+	var on_mesh := _snap_nav(global_position)
+	if Vector2(global_position.x - on_mesh.x, global_position.z - on_mesh.z).length() > 0.7:
+		next = on_mesh
 	var dir := (next - global_position)
 	dir.y = 0.0
 	var speed := SPEED_COMBAT if combat else SPEED_CALM
@@ -468,7 +475,7 @@ func _move(dt: float) -> void:
 func _on_safe_velocity(safe: Vector3) -> void:
 	velocity.x = safe.x
 	velocity.z = safe.z
-	move_and_slide()
+	StepMove.move(self)  # тот же авто-подъём, что у игрока — иначе бот не залезет на лестницу
 	_bot_steps()
 
 

@@ -306,24 +306,9 @@ func _physics_process(dt: float) -> void:
 	_apply_camera(dt)
 
 
-# авто-подъём на ступени до STEP_UP (web resolveAxis:265) — CharacterBody3D сам не умеет боксы
+# авто-подъём на ступени до STEP_UP (web resolveAxis:265) — общий код с ботом (StepMove)
 func _move_with_step_up(_dt: float) -> void:
-	var step_up := float(Balance.MOVE["STEP_UP"])
-	var pre := global_position
-	var pre_vel := velocity
-	move_and_slide()
-	if not is_on_wall() or not is_on_floor():
-		return
-	var flat := Vector3(pre_vel.x, 0.0, pre_vel.z)
-	if flat.length() < 0.5:
-		return
-	# упёрлись в стенку: пробуем тот же ход с подъёмом на step_up (если есть просвет)
-	var probe := pre + Vector3(0, step_up + 0.02, 0)
-	var motion := flat * get_physics_process_delta_time()
-	if not test_move(Transform3D(global_transform.basis, probe), motion):
-		global_position = probe + motion
-		velocity = pre_vel
-		move_and_slide()  # доехать и приземлиться на ступень
+	StepMove.move(self)
 
 
 var _remote_audio := false

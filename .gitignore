@@ -6,3 +6,4 @@ Thumbs.db
 # Godot-порт (ветка godot-port)
 godot/.godot/
 godot/build/
+.recovery/

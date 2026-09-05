@@ -11,6 +11,26 @@ func test_all_ten_kits() -> void:
 		assert_eq(p.get_node("Kit").get_child_count(), 4, ch + ": 4 способности (паритет всех десяти)")
 
 
+# Сторож интерфейса: HUD-панель способностей (G9) читает `key` у каждого ребёнка Kit.
+# Компонент старого образца (extends Node со своим вводом) роняет её — так и случилось
+# с Рывком и Взлётом Макса, найдено смоук-стартом после восстановления копии.
+func test_all_ability_components_share_interface() -> void:
+	for ch: String in Balance.CHARACTERS:
+		var p: FpsPlayer = (load("res://scenes/agents/player.tscn") as PackedScene).instantiate()
+		add_child_autofree(p)
+		p.char_id = ch
+		KitFactory.attach(p, ch)
+		var keys: Array = []
+		for ab in p.get_node("Kit").get_children():
+			assert_true(ab is Ability, "%s/%s: компонент должен быть Ability" % [ch, ab.name])
+			var k := String(ab.get("key"))
+			assert_true(k in ["C", "Q", "E", "X"], "%s/%s: key=%s вне C/Q/E/X" % [ch, ab.name, k])
+			assert_eq(String(ab.get("char_id")), ch, "%s/%s: char_id совпадает" % [ch, ab.name])
+			keys.append(k)
+		keys.sort()
+		assert_eq(keys, ["C", "E", "Q", "X"], ch + ": ровно по одному C/Q/E/X")
+
+
 func test_gallop_and_banquet_speed() -> void:
 	var p: FpsPlayer = (load("res://scenes/agents/player.tscn") as PackedScene).instantiate()
 	add_child_autofree(p)
