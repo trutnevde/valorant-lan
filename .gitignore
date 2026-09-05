@@ -7,3 +7,6 @@ Thumbs.db
 godot/.godot/
 godot/build/
 .recovery/
+
+# worktree фоновых агентов
+.claude/worktrees/
