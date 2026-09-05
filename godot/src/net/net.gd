@@ -262,3 +262,66 @@ func _sync_hp(target_path: NodePath, hp: int) -> void:
 		target.set("hp", hp)
 		if target.has_signal("hp_changed"):
 			target.emit_signal("hp_changed", hp)
+
+
+# ===== БОЕВОЕ СОСТОЯНИЕ (G11) =====
+# Раньше по сети ездил ТОЛЬКО hp. Из-за этого после смерти клиент оставался «живым» у себя:
+# ходил и стрелял, тогда как у хоста лежал трупом — и рассинхрон был необратимым до конца
+# матча. Кредиты, ульта и счёт киллов не доезжали вовсе, HUD показывал стухшие числа.
+# Теперь хост рассылает состояние целиком: жизнь, смерть, видимость, коллизия, экономика.
+@rpc("authority", "reliable")
+func _sync_combat(path: NodePath, hp: int, is_dead: bool, credits: int, ult: int, kills: int, deaths: int) -> void:
+	var n := get_node_or_null(path)
+	if n == null:
+		return
+	n.set("hp", hp)
+	if "credits" in n:
+		n.set("credits", credits)
+	if "ult" in n:
+		n.set("ult", ult)
+	if "kills" in n:
+		n.set("kills", kills)
+	if "deaths" in n:
+		n.set("deaths", deaths)
+	if "dead" in n:
+		n.set("dead", is_dead)
+	if n is Node3D:
+		(n as Node3D).visible = not is_dead
+	if n is CollisionObject3D:
+		(n as CollisionObject3D).set_collision_layer_value(1, not is_dead)
+	if n.has_signal("hp_changed"):
+		n.emit_signal("hp_changed", hp)
+
+
+# хост: разослать состояние одного бойца
+func push_combat(n: Node) -> void:
+	if not is_online() or not is_host() or n == null or not is_instance_valid(n):
+		return
+	_sync_combat.rpc(n.get_path(), int(n.get("hp")),
+		bool(n.get("dead")) if "dead" in n else int(n.get("hp")) <= 0,
+		int(n.get("credits")) if "credits" in n else 0,
+		int(n.get("ult")) if "ult" in n else 0,
+		int(n.get("kills")) if "kills" in n else 0,
+		int(n.get("deaths")) if "deaths" in n else 0)
+
+
+# хост: разослать состояние всех (старт раунда, конец раунда, подключение)
+func push_all_combat() -> void:
+	if not is_online() or not is_host():
+		return
+	for c in get_tree().get_nodes_in_group("combatants"):
+		push_combat(c)
+
+
+# Раунд-ресет на клиентах: заряды способностей, лоадаут и снятие контроля — состояние
+# ЛОКАЛЬНОЕ, по сети его не передать, поэтому просто просим каждый пир пересобрать своё.
+@rpc("authority", "reliable", "call_local")
+func _sync_round_reset() -> void:
+	for c in get_tree().get_nodes_in_group("combatants"):
+		if c.has_method("round_reset"):
+			c.call("round_reset")
+
+
+func broadcast_round_reset() -> void:
+	if is_online() and is_host():
+		_sync_round_reset.rpc()

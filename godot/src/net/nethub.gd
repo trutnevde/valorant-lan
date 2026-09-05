@@ -26,3 +26,22 @@ static func report_hit(target: Node, dmg: int, part: String, attacker: Node = nu
 	if n:
 		n.rpc_id(1, "report_hit", target.get_path(), dmg, part,
 			attacker.get_path() if attacker else NodePath(), weapon)
+
+
+# хост: разослать боевое состояние (жизнь/смерть/экономика). Компилируется и без автолоада.
+static func push_combat(target: Node) -> void:
+	var n := node()
+	if n:
+		n.call("push_combat", target)
+
+
+static func push_all_combat() -> void:
+	var n := node()
+	if n:
+		n.call("push_all_combat")
+
+
+static func broadcast_round_reset() -> void:
+	var n := node()
+	if n:
+		n.call("broadcast_round_reset")

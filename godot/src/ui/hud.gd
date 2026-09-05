@@ -38,6 +38,7 @@ func _build_minimap() -> void:
 	_minimap.offset_left = 14.0
 	_minimap.offset_top = 14.0
 	_minimap.size = Vector2(210, 210)
+	_minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE  # иначе съедает движение мыши
 	add_child(_minimap)
 	_minimap.call("setup", player)
 
@@ -65,6 +66,7 @@ func _build_tactical_map() -> void:
 	_tac_hint.offset_right = 300.0
 	_tac_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_tac_hint.visible = false
+	_tac_hint.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_tac_hint)
 
 
@@ -106,6 +108,7 @@ func _build_ability_bar() -> void:
 	_ability_bar.offset_bottom = -84.0
 	_ability_bar.alignment = BoxContainer.ALIGNMENT_CENTER
 	_ability_bar.add_theme_constant_override("separation", 10)
+	_ability_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_ability_bar)
 
 
@@ -221,6 +224,8 @@ func _announce(txt: String) -> void:
 
 
 func _on_kill(a: String, b: String, w: String, head: bool) -> void:
+	if _feed == null:
+		return  # тренировка без матча: ленты нет, но сообщать всё равно могут (напр. смена графики)
 	var l := Label.new()
 	l.text = ("%s ✕ %s [%s]%s" % [a, b, w, " ХЕД" if head else ""]) if b != "" else a
 	_feed.add_child(l)

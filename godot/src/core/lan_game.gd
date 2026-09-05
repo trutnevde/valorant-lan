@@ -3,7 +3,8 @@
 # Авторитет ноды игрока = его пир; боты — хост (id 1).
 extends Node3D
 
-const FILL_BOTS_PER_TEAM := 1  # добить команды ботами (для теста G4; лобби-настройка — позже)
+const FILL_BOTS_PER_TEAM := 1        # добить команды ботами в сетевой игре
+const FILL_BOTS_OFFLINE := 3         # офлайн («тренировка») — полноценный матч 3 на 3
 
 var match_node: Match
 
@@ -30,6 +31,16 @@ func _ready() -> void:
 
 	var player_scene: PackedScene = load("res://scenes/agents/player.tscn")
 	var players: Dictionary = NetHub.node().get("players")
+	# ОФЛАЙН (кнопка «ТРЕНИРОВКА»): реестра игроков нет, потому что никто не подключался.
+	# Раньше из-за этого офлайн-режим вообще не спавнил игрока, и «тренировкой» служил тир
+	# без раундов и шипа — то есть шип нельзя было поставить в принципе.
+	if players.is_empty():
+		var n0 := NetHub.node()
+		players = { 1: {
+			"name": String(n0.get("my_name")) if n0 else "Игрок",
+			"char": String(n0.get("my_char")) if n0 else "max",
+			"team": "A",
+		} }
 	var ids: Array = players.keys()
 	ids.sort()
 	for id: int in ids:
@@ -41,6 +52,7 @@ func _ready() -> void:
 		p.char_id = String(info["char"])
 		p.team = String(info["team"])
 		p.global_position = _spawn_for(String(info["team"]), idx, atk, def)
+		_face_center(p, p.global_position)
 		if id == multiplayer.get_unique_id():
 			_attach_kit(p)
 
@@ -48,8 +60,11 @@ func _ready() -> void:
 	var chars: Array = Balance.CHARACTERS.keys()
 	var net := NetHub.node()
 	var diff := String(net.get("difficulty")) if net else "medium"
+	var fill := FILL_BOTS_PER_TEAM if NetHub.online() else FILL_BOTS_OFFLINE
 	for tm in ["A", "B"]:
-		for i in FILL_BOTS_PER_TEAM:
+		for i in fill:
+			if not NetHub.online() and tm == "A" and i == fill - 1:
+				continue  # место в команде A занял живой игрок
 			var b: Bot = bot_scene.instantiate()
 			b.name = "Bot_%s_%d" % [tm, i]
 			add_child(b)
@@ -58,6 +73,7 @@ func _ready() -> void:
 			b.preset = diff  # сложность из лобби
 			b.char_id = chars[(i * 2 + (0 if tm == "A" else 1)) % chars.size()]  # разные агенты — разные скиллы
 			b.global_position = _spawn_for(tm, idx, atk, def)
+			_face_center(b, b.global_position)
 
 	# матч стартует хост после спавна; смена сторон — рассадка на каждый раунд
 	if NetHub.is_host():
@@ -95,9 +111,25 @@ func _apply_spawns(table: Dictionary) -> void:
 			continue
 		# каждый пир двигает только СВОИ ноды (авторитет синхронизаторов)
 		if (node as Node).get_multiplayer_authority() == multiplayer.get_unique_id() or not NetHub.online():
-			(node as Node3D).global_position = table[nm]
+			var pos: Vector3 = table[nm]
+			(node as Node3D).global_position = pos
 			if node is CharacterBody3D:
 				(node as CharacterBody3D).velocity = Vector3.ZERO
+			_face_center(node, pos)
+
+
+# Разворот на спавне В ЦЕНТР КАРТЫ. Без него боец появляется в той ориентации, в какой был
+# создан, а спавны стоят у периметра — игрок утыкался носом в глухую бетонную стену.
+# Мышь при этом работала, но картинка не менялась, и выглядело это как «камера не крутится».
+func _face_center(node: Node, pos: Vector3) -> void:
+	var to_center := Vector3(-pos.x, 0.0, -pos.z)
+	if to_center.length() < 0.5:
+		return
+	var yaw := atan2(-to_center.x, -to_center.z)
+	if node is FpsPlayer:
+		(node as FpsPlayer).yaw = yaw
+		(node as FpsPlayer).pitch = 0.0
+	(node as Node3D).rotation.y = yaw
 
 
 func _spawn_for(tm: String, idx: Dictionary, atk: Array, def: Array) -> Vector3:

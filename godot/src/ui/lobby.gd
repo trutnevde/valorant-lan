@@ -25,7 +25,13 @@ func _ready() -> void:
 	net.connect("connection_failed", func() -> void: status.text = "Не удалось подключиться")
 	%HostBtn.pressed.connect(_on_host)
 	%JoinBtn.pressed.connect(_on_join)
-	%TrainBtn.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://scenes/maps/slice.tscn"))
+	# «Тренировка» — НАСТОЯЩИЙ офлайн-матч против ботов (раунды, закупка, шип), а не тир:
+	# кнопка обещает «офлайн против ботов», и раньше вела в slice.tscn, где ни раундов,
+	# ни шипа не было в принципе — поставить спайк было невозможно.
+	%TrainBtn.pressed.connect(func() -> void:
+		_apply_name()
+		get_tree().change_scene_to_file("res://scenes/maps/lan_game.tscn"))
+	%RangeBtn.pressed.connect(func() -> void: get_tree().change_scene_to_file("res://scenes/maps/slice.tscn"))
 	%TeamBtn.pressed.connect(func() -> void: net.rpc_id(1, "switch_team"))
 	var dp := %DiffPick as OptionButton
 	for d in ["easy", "medium", "hard"]:

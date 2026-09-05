@@ -14,6 +14,10 @@ func _ready() -> void:
 	add_child(player)
 	var atk := get_tree().get_nodes_in_group("spawn_attack")
 	player.global_position = (atk[0] as Node3D).global_position + Vector3(0, 0.2, 0) if atk.size() > 0 else Vector3(0, 0.2, 19)
+	# развернуть в центр карты — иначе спавн у периметра смотрит в глухую стену
+	var tc := Vector3(-player.global_position.x, 0.0, -player.global_position.z)
+	if tc.length() > 0.5:
+		player.yaw = atan2(-tc.x, -tc.z)
 	player.char_id = "max"
 	player.team = "A"
 

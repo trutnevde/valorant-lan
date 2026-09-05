@@ -446,6 +446,7 @@ func _move(dt: float) -> void:
 		velocity.y -= float(Balance.MOVE["GRAVITY"]) * dt
 		move_and_slide()
 		return
+	_repath_if_off_route()
 	var next := agent.get_next_path_position()
 	# RVO и столкновения умеют вытолкнуть бота С навмеша — в карман у стены (на «Высоте»
 	# это щель между лестницей и трёхметровой платформой). Оттуда путь недостижим, и бот
@@ -470,6 +471,41 @@ func _move(dt: float) -> void:
 			rotation.y = lerp_angle(rotation.y, atan2(-dir.x, -dir.z), 0.15)
 	agent.set_velocity(desired)  # RVO: безопасная скорость придёт в _on_safe_velocity
 	velocity.y -= float(Balance.MOVE["GRAVITY"]) * dt
+
+
+# Отход от СОБСТВЕННОГО маршрута. NavigationAgent3D умеет это сам (path_max_distance),
+# но сверяется только ПОСЛЕ прохождения первой путевой точки: пока индекс нулевой,
+# проверки нет вовсе. А отжимает бота с маршрута обычно как раз до первой точки — RVO
+# в чоке, толчея, падение с платформы. Тогда бот молча идёт в путевую точку, оказавшуюся
+# за геометрией, упирается в стену и стоит до watchdog (замер: 3.7–7.1 м от своего же
+# маршрута, путь не менялся по 5–30 с). Считаем отход сами и просим переложить путь.
+const REPATH_OFF_ROUTE := 1.5  # м: дальше нормального обхода по RVO, ближе любого залёта
+const REPATH_COOLDOWN := 0.25  # с: перекладка — это A*, чаще смысла нет
+
+var _next_repath := 0.0
+
+
+func _repath_if_off_route() -> void:
+	var t := _now()
+	if t < _next_repath:
+		return
+	var p := agent.get_current_navigation_path()
+	if p.size() < 2:
+		return
+	var off := INF
+	for i in p.size() - 1:
+		off = minf(off, global_position.distance_to(
+			Geometry3D.get_closest_point_to_segment(global_position, p[i], p[i + 1])))
+	if off <= REPATH_OFF_ROUTE:
+		return
+	_next_repath = t + REPATH_COOLDOWN
+	# публичного «пересчитай» у агента нет, но смена цели его запускает: сбрасываем цель
+	# на себя и тут же возвращаем прежнюю — путь пересчитается от текущей позиции
+	var tgt := agent.target_position
+	if tgt.is_equal_approx(global_position):
+		return
+	agent.target_position = global_position
+	agent.target_position = tgt
 
 
 func _on_safe_velocity(safe: Vector3) -> void:

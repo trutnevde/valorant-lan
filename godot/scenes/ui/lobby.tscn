@@ -67,7 +67,12 @@ text = "ПОДКЛЮЧИТЬСЯ"
 [node name="TrainBtn" type="Button" parent="Center/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "ТРЕНИРОВКА (офлайн против ботов)"
+text = "МАТЧ С БОТАМИ (офлайн: раунды, закупка, шип)"
+
+[node name="RangeBtn" type="Button" parent="Center/Panel/MenuBox"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "ТИР (пострелять по ботам без раундов)"
 
 [node name="LobbyBox" type="VBoxContainer" parent="Center/Panel"]
 unique_name_in_owner = true
@@ -80,7 +85,7 @@ unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 180)
 
-[node name="CharPick" type="OptionButton" parent="Center/Panel/LobbyBox"]
+[node name="CharPick" type="OptionButton" parent="Center/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
@@ -89,11 +94,11 @@ unique_name_in_owner = true
 layout_mode = 2
 text = "СМЕНИТЬ КОМАНДУ"
 
-[node name="DiffPick" type="OptionButton" parent="Center/Panel/LobbyBox"]
+[node name="DiffPick" type="OptionButton" parent="Center/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MapPick" type="OptionButton" parent="Center/Panel/LobbyBox"]
+[node name="MapPick" type="OptionButton" parent="Center/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 

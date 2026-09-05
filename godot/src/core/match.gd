@@ -92,7 +92,10 @@ func start_round() -> void:
 		var humans := attackers.filter(func(c: Node) -> bool: return not (c is Bot))
 		var pool: Array = humans if not humans.is_empty() else attackers
 		spike_carrier = pool[randi() % pool.size()]
+	NetHub.broadcast_round_reset()  # клиенты пересобирают заряды/лоадаут/CC у себя
 	_broadcast_state()
+	NetHub.push_all_combat()        # и получают живое состояние всех бойцов
+	_broadcast_spike()
 	phase_changed.emit(phase, deadline)
 
 
@@ -259,6 +262,7 @@ func try_plant(planter: Node, in_site: bool, holding: bool, dt: float) -> void:
 		_give_credits(planter, int(Balance.RULES["PLANT_REWARD"]))
 		spike_carrier = null
 		spike_planted.emit(spike_planted_at)
+		_broadcast_spike()
 		_broadcast_state()
 		phase_changed.emit(phase, deadline)
 
@@ -319,6 +323,7 @@ func try_buy(buyer: Node, weapon_id: String) -> bool:
 	buyer.set("credits", int(buyer.get("credits")) - price)
 	if buyer.has_method("give_weapon"):
 		buyer.call("give_weapon", weapon_id)
+	NetHub.push_combat(buyer)  # кредиты списались — иначе у клиента в HUD старая сумма
 	return true
 
 
@@ -337,3 +342,23 @@ func _state(ph: int, time_left: float, a: int, b: int, atk: String, rnd: int) ->
 	round_no = rnd
 	phase_changed.emit(phase, deadline)
 	score_changed.emit(a, b, atk)
+
+
+# ===== шип по сети =====
+# Клиент не знал ни кто несёт шип, ни где он установлен: spike_carrier и spike_planted_at
+# жили только у хоста. Из-за этого носитель не понимал, что несёт шип, а после планта
+# у клиента не было ни точки на миникарте, ни цели для дефуза.
+func _broadcast_spike() -> void:
+	if NetHub.online() and multiplayer.is_server():
+		var cp := NodePath()
+		if spike_carrier != null and is_instance_valid(spike_carrier):
+			cp = spike_carrier.get_path()
+		_spike_state.rpc(cp, spike_planted_at)
+
+
+@rpc("authority", "reliable")
+func _spike_state(carrier_path: NodePath, planted_at: Vector3) -> void:
+	spike_carrier = get_node_or_null(carrier_path) as Node3D if carrier_path != NodePath() else null
+	spike_planted_at = planted_at
+	if planted_at != Vector3.INF:
+		spike_planted.emit(planted_at)

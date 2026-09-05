@@ -139,6 +139,10 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 	hp -= dmg
 	last_dmg_t = Time.get_ticks_msec() / 1000.0
 	hp_changed.emit(hp)
+	# Урон от пуль БОТОВ шёл мимо сети целиком: боты зовут take_hit напрямую у хоста, минуя
+	# report_hit и Fx._sync. Клиент не узнавал, что его расстреливают. Рассылаем здесь.
+	if hp > 0:
+		NetHub.push_combat(self)
 	if hp <= 0:
 		if try_second_wind():
 			return  # ульта Артемия: вместо смерти — возврат на метку
@@ -150,6 +154,10 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 			dead = true
 			visible = false
 			set_collision_layer_value(1, false)
+			# разослать смерть: иначе клиент остаётся «живым» у себя навсегда
+			NetHub.push_combat(self)
+			if attacker:
+				NetHub.push_combat(attacker)  # у убийцы выросли ульта, киллы и кредиты
 		else:
 			# тренировка/полигон: авто-респавн
 			var tw := create_tween()
