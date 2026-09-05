@@ -8,6 +8,7 @@ extends SceneTree
 var preset := "medium"
 var seconds := 45.0
 var per_team := 3
+var map_id := "duel"
 var bots: Array[Bot] = []
 var walls: Array = []
 var elapsed := 0.0
@@ -24,7 +25,9 @@ func _initialize() -> void:
 			seconds = float(arg.substr(10))
 		elif arg.begins_with("--bots="):
 			per_team = int(arg.substr(7))
-	var map: Node3D = (load("res://scenes/maps/duel.tscn") as PackedScene).instantiate()
+		elif arg.begins_with("--map="):
+			map_id = arg.substr(6)
+	var map: Node3D = (load("res://scenes/maps/%s.tscn" % map_id) as PackedScene).instantiate()
 	root.add_child(map)
 	current_scene = map
 	var meta: Dictionary = JSON.parse_string(String(map.get_meta("map_meta", "{}")))
@@ -38,7 +41,7 @@ func _initialize() -> void:
 	for i in per_team:
 		bots.append(_spawn_bot(bot_scene, map, "A", spawns_a[i % spawns_a.size()]))
 		bots.append(_spawn_bot(bot_scene, map, "B", spawns_d[i % spawns_d.size()]))
-	print("botmatch: карта duel, пресет %s, ботов %d, %d сек" % [preset, bots.size(), int(seconds)])
+	print("botmatch: карта %s, пресет %s, ботов %d, %d сек" % [map_id, preset, bots.size(), int(seconds)])
 	physics_frame.connect(_tick)
 
 

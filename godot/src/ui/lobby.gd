@@ -12,6 +12,7 @@ extends Control
 @onready var net: Node = NetHub.node()
 
 var _char_ids: Array[String] = []
+var _map_ids: Array[String] = []
 
 
 func _ready() -> void:
@@ -32,6 +33,13 @@ func _ready() -> void:
 	dp.select(1)
 	dp.item_selected.connect(func(i: int) -> void:
 		net.rpc_id(1, "set_difficulty", ["easy", "medium", "hard"][i]))
+	var mp := %MapPick as OptionButton
+	_map_ids.assign(Balance.MAPS.keys())
+	for mid: String in _map_ids:
+		mp.add_item("КАРТА: %s" % Balance.MAPS[mid]["name"])
+	mp.select(_map_ids.find("duel"))
+	mp.item_selected.connect(func(i: int) -> void:
+		net.rpc_id(1, "set_map", _map_ids[i]))
 	start_btn.pressed.connect(func() -> void: net.rpc("start_game"))
 	char_pick.item_selected.connect(func(i: int) -> void:
 		net.set("my_char", _char_ids[i])

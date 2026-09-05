@@ -10,6 +10,7 @@ var players := {}   # peer_id -> {name, char, team}
 var my_name := "Игрок"
 var my_char := "max"
 var difficulty := "medium"  # пресет ботов (лобби, только хост)
+var map_id := "duel"        # выбор карты (лобби, только хост)
 
 signal players_changed
 signal game_started
@@ -113,6 +114,20 @@ func set_difficulty(d: String) -> void:
 @rpc("authority", "reliable", "call_local")
 func _sync_difficulty(d: String) -> void:
 	difficulty = d
+	players_changed.emit()
+
+
+@rpc("any_peer", "reliable")
+func set_map(mp: String) -> void:
+	if not is_host() or not Balance.MAPS.has(mp):
+		return
+	map_id = mp
+	_sync_map.rpc(mp)
+
+
+@rpc("authority", "reliable", "call_local")
+func _sync_map(mp: String) -> void:
+	map_id = mp
 	players_changed.emit()
 
 

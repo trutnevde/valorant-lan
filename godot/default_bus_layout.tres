@@ -1,4 +1,4 @@
-[gd_resource type="AudioBusLayout" load_steps=3 format=3 uid="uid://audiobuslayout00"]
+[gd_resource type="AudioBusLayout" format=3 uid="uid://cejfjc11fkpp4"]
 
 [sub_resource type="AudioEffectLowPassFilter" id="lpf"]
 cutoff_hz = 620.0
@@ -7,16 +7,10 @@ resonance = 0.4
 [sub_resource type="AudioEffectReverb" id="rev"]
 room_size = 0.75
 damping = 0.35
-wet = 0.35
 dry = 0.85
+wet = 0.35
 
 [resource]
-bus/0/name = &"Master"
-bus/0/solo = false
-bus/0/mute = false
-bus/0/bypass_fx = false
-bus/0/volume_db = 0.0
-bus/0/send = &""
 bus/1/name = &"SFX"
 bus/1/solo = false
 bus/1/mute = false

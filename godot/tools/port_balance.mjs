@@ -7,8 +7,15 @@ import { fileURLToPath } from 'node:url';
 import { execSync } from 'node:child_process';
 import {
   RULES, WEAPONS, WEAPON_FEEL, ARMOR, CHARACTERS, ABILITY, MOVE,
-  BOT_PRESETS, PASSIVES, SIGNATURES,
+  BOT_PRESETS, PASSIVES, SIGNATURES, MAPS,
 } from '../../public/js/shared.js';
+
+// слим-каталог карт (id → отображаемое имя/размер) — для лобби и валидации; геометрия карт
+// живёт в .tscn (convert_maps.mjs), сюда числа баланса не входят.
+const MAP_CATALOG = {};
+for (const id of Object.keys(MAPS)) {
+  MAP_CATALOG[id] = { name: MAPS[id].name || id, w: MAPS[id].SIZE.w, d: MAPS[id].SIZE.d };
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const OUT = path.join(__dirname, '..', 'src', 'core', 'balance.gd');
@@ -45,6 +52,8 @@ const BOT_PRESETS := ${gd(BOT_PRESETS)}
 const PASSIVES := ${gd(PASSIVES)}
 
 const SIGNATURES := ${gd(SIGNATURES)}
+
+const MAPS := ${gd(MAP_CATALOG)}
 
 
 static func weapon_feel(id: String) -> Dictionary:

@@ -9,7 +9,11 @@ var match_node: Match
 
 
 func _ready() -> void:
-	var map: Node3D = (load("res://scenes/maps/duel.tscn") as PackedScene).instantiate()
+	var net0 := NetHub.node()
+	var mid := String(net0.get("map_id")) if net0 else "duel"
+	if not ResourceLoader.exists("res://scenes/maps/%s.tscn" % mid):
+		mid = "duel"
+	var map: Node3D = (load("res://scenes/maps/%s.tscn" % mid) as PackedScene).instantiate()
 	add_child(map)
 	# реверб-зоны на сайтах (гулкость закрытых точек) — движковый Area3D reverb
 	var meta = JSON.parse_string(String(map.get_meta("map_meta", "{}")))

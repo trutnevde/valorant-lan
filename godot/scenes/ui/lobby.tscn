@@ -93,6 +93,10 @@ text = "СМЕНИТЬ КОМАНДУ"
 unique_name_in_owner = true
 layout_mode = 2
 
+[node name="MapPick" type="OptionButton" parent="Center/Panel/LobbyBox"]
+unique_name_in_owner = true
+layout_mode = 2
+
 [node name="StartBtn" type="Button" parent="Center/Panel/LobbyBox"]
 unique_name_in_owner = true
 layout_mode = 2

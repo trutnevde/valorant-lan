@@ -3,6 +3,23 @@
 # и бродкастит ВИЗУАЛ всем. Офлайн — то же самое напрямую без сети.
 extends Node
 
+# реестр подсвеченных врагов для миникарты: node_path -> время до какого подсвечен
+var revealed := {}
+
+
+func revealed_positions() -> Array:
+	# живые подсвеченные враги (для миникарты): [{pos, }]
+	var now := Time.get_ticks_msec() / 1000.0
+	var out: Array = []
+	for path in revealed.keys():
+		if now >= float(revealed[path]):
+			revealed.erase(path)
+			continue
+		var n := get_node_or_null(NodePath(String(path))) as Node3D
+		if n and int(n.get("hp")) > 0:
+			out.append(n.global_position)
+	return out
+
 
 func cast(kind: String, data: Dictionary) -> void:
 	if NetHub.online() and not multiplayer.is_server():
@@ -123,13 +140,15 @@ func _fx(kind: String, data: Dictionary) -> void:
 					v.queue_free()
 			_vis_ring(Vector3(data["x"], 0.1, data["z"]), float(Balance.ABILITY["GERA_DISPEL_R"]), Color(0.37, 0.88, 0.82), 1.2)
 		"reveal":
-			# подсветка врагов МОЕЙ команде (маркер сквозь стены)
+			# подсветка врагов МОЕЙ команде (маркер сквозь стены + на миникарте)
 			var me := _my_player()
 			if me and String(data["team"]) == me.team:
+				var until := Time.get_ticks_msec() / 1000.0 + float(data["dur"])
 				for tp in (data["targets"] as Array):
 					var tgt := get_node_or_null(NodePath(String(tp))) as Node3D
 					if tgt:
 						_vis_reveal(tgt, float(data["dur"]))
+						revealed[String(tp)] = until  # реестр для миникарты
 		"corpse":
 			_vis_corpse(Vector3(data["x"], 0, data["z"]))
 		"turret_body":

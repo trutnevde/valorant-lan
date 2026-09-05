@@ -13,11 +13,38 @@ extends CanvasLayer
 var _last_hp := 100
 
 
+var _minimap: Control
+var _ability_bar: HBoxContainer
+
+
 func _ready() -> void:
 	weapon_rig.hit_target.connect(_on_hit)
 	if player:
 		player.hp_changed.connect(_on_hp)
 		player.blinded.connect(_on_blind)
+		_build_minimap()
+		_build_ability_bar()
+
+
+func _build_minimap() -> void:
+	_minimap = (load("res://src/ui/minimap.gd") as GDScript).new()
+	_minimap.custom_minimum_size = Vector2(210, 210)
+	_minimap.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_minimap.offset_left = 14.0
+	_minimap.offset_top = 14.0
+	_minimap.size = Vector2(210, 210)
+	add_child(_minimap)
+	_minimap.call("setup", player)
+
+
+func _build_ability_bar() -> void:
+	_ability_bar = HBoxContainer.new()
+	_ability_bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	_ability_bar.offset_top = -118.0
+	_ability_bar.offset_bottom = -84.0
+	_ability_bar.alignment = BoxContainer.ALIGNMENT_CENTER
+	_ability_bar.add_theme_constant_override("separation", 10)
+	add_child(_ability_bar)
 
 
 func _on_blind(dur: float) -> void:
@@ -42,11 +69,44 @@ func _process(_dt: float) -> void:
 	if hp_label and player:
 		hp_label.text = "HP %d" % maxi(0, player.hp)
 	if kit_label:
-		var dash := player.get_node_or_null("Kit/Dash")
-		var launch := player.get_node_or_null("Kit/Launch")
-		if dash and launch:
-			kit_label.text = "C Рывок ×%d   Q Взлёт ×%d" % [int(dash.get("charges")), int(launch.get("charges"))]
+		kit_label.visible = false  # заменено панелью способностей
+	_refresh_abilities()
 	_process_match(_dt)
+
+
+# генеричная панель способностей: C/Q/E/X с зарядами/кулдауном/прогрессом ульты (любой агент)
+var _chips := {}  # key -> {panel, label}
+
+
+func _refresh_abilities() -> void:
+	if _ability_bar == null:
+		return
+	var kit := player.get_node_or_null("Kit")
+	if kit == null:
+		return
+	var cost := int(Balance.CHARACTERS[player.char_id]["ultCost"])
+	for ab in kit.get_children():
+		var key := String(ab.get("key"))
+		if not _chips.has(key):
+			var panel := PanelContainer.new()
+			var lbl := Label.new()
+			lbl.add_theme_font_size_override("font_size", 15)
+			lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			panel.custom_minimum_size = Vector2(150, 30)
+			panel.add_child(lbl)
+			_ability_bar.add_child(panel)
+			_chips[key] = { "panel": panel, "label": lbl }
+		var nm := String(Balance.CHARACTERS[player.char_id]["abilities"][key]["name"])
+		var lbl2: Label = _chips[key]["label"]
+		var ready := true
+		if key == "X":
+			ready = player.ult >= cost
+			lbl2.text = "[X] %s  %d/%d" % [nm, mini(player.ult, cost), cost]
+		else:
+			var ch := int(ab.get("charges"))
+			ready = ch > 0
+			lbl2.text = "[%s] %s  ×%d" % [key, nm, ch]
+		lbl2.modulate = Color(1, 1, 1) if ready else Color(0.5, 0.52, 0.55)
 
 
 func _on_hp(hp: int) -> void:

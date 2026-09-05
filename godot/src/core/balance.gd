@@ -1,9 +1,9 @@
-# balance.gd — АВТОГЕНЕРАЦИЯ из ../public/js/shared.js (срез: коммит 144e737).
+# balance.gd — АВТОГЕНЕРАЦИЯ из ../public/js/shared.js (срез: коммит 80dcf62).
 # НЕ ПРАВИТЬ РУКАМИ. Перегенерация: node godot/tools/port_balance.mjs (из корня репы).
 # Паритет с веб-версией: все игровые числа берутся ТОЛЬКО отсюда (правило 3 godot/CLAUDE.md).
 class_name Balance
 
-const SNAPSHOT_HASH := "144e737"
+const SNAPSHOT_HASH := "80dcf62"
 
 const RULES := {
 	"ROUNDS_TO_WIN": 5,
@@ -992,6 +992,29 @@ const SIGNATURES := {
 	"gera": {
 		"key": "C",
 		"cd": 30
+	}
+}
+
+const MAPS := {
+	"duel": {
+		"name": "Дуэль",
+		"w": 62,
+		"d": 46
+	},
+	"height": {
+		"name": "Высота",
+		"w": 66,
+		"d": 48
+	},
+	"bastion": {
+		"name": "Бастион",
+		"w": 70,
+		"d": 54
+	},
+	"dust2": {
+		"name": "Пыль 2",
+		"w": 100,
+		"d": 76
 	}
 }
 
