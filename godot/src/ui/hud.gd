@@ -25,6 +25,10 @@ func _ready() -> void:
 		_build_minimap()
 		_build_ability_bar()
 		_build_tactical_map()
+		# перф-фолбэк (клавиша P): показываем уровень, иначе игрок не поймёт, что нажал
+		var q := get_node_or_null("/root/Quality")
+		if q:
+			q.connect("changed", func(_l: int) -> void: _announce("ГРАФИКА: " + String(q.call("level_name"))))
 
 
 func _build_minimap() -> void:

@@ -9,6 +9,7 @@ extends Node
 var _scene_path := "res://scenes/maps/bastion.tscn"
 var _seconds := 20.0
 var _warmup := 3.0
+var _quality := -1
 
 var _cam: Camera3D
 var _t := 0.0
@@ -22,6 +23,9 @@ func _ready() -> void:
 			_scene_path = arg.substr(8)
 		elif arg.begins_with("--seconds="):
 			_seconds = float(arg.substr(10))
+		elif arg.begins_with("--quality="):
+			# 0 полное / 1 среднее / 2 быстрое — чтобы мерить перф-фолбэк (клавиша P)
+			_quality = int(arg.substr(10))
 	var packed: PackedScene = load(_scene_path)
 	if packed == null:
 		print(JSON.stringify({ "pass": false, "error": "сцена не загрузилась: " + _scene_path }))
@@ -38,6 +42,15 @@ func _ready() -> void:
 	_cam.far = 400.0
 	add_child(_cam)
 	_cam.current = true
+	# БЕЗ ЭТОГО ЗАМЕР ВРЁТ: с включённым V-Sync кадры упираются в развёртку монитора
+	# (на этой машине ~164 Гц) и одинаковы на любом уровне качества — видно «запас», которого
+	# на самом деле не измеряли. Снимаем ограничение, чтобы увидеть настоящую цену кадра.
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	Engine.max_fps = 0
+	if _quality >= 0:
+		var q := get_node_or_null("/root/Quality")
+		if q:
+			q.call("set_level", _quality)
 
 
 func _process(dt: float) -> void:
@@ -68,6 +81,7 @@ func _report() -> void:
 	var low_dt := low_sum / float(low_n)
 	var out := {
 		"scene": _scene_path,
+		"quality": (get_node_or_null("/root/Quality").get("level") if get_node_or_null("/root/Quality") else -1),
 		"frames": n,
 		"fps_avg": snappedf(1.0 / maxf(0.0001, avg_dt), 0.1),
 		"fps_1pct_low": snappedf(1.0 / maxf(0.0001, low_dt), 0.1),
@@ -77,7 +91,12 @@ func _report() -> void:
 		"primitives": int(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)),
 		"video_mem_mb": snappedf(Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, 0.1),
 	}
-	# бюджет: средний ≥60 и 1% low ≥45 (провалы ниже — уже заметный рывок)
-	out["pass"] = out["fps_avg"] >= 60.0 and out["fps_1pct_low"] >= 45.0
+	# Критерий — ВРЕМЯ КАДРА, а не FPS: правило 6 требует 60 FPS на СРЕДНЕЙ видеокарте, а
+	# меряем мы на той, что есть. 60 FPS = 16.67 мс. Держим потолок 5.5 мс, то есть трёхкратный
+	# запас на более слабое железо; это и есть страховка от регресса, которую можно проверить
+	# на любой машине. Отдельно сторожим 1% low: 11 мс — уже заметный рывок.
+	out["frame_budget_ms"] = 5.5
+	out["headroom_x"] = snappedf(16.67 / maxf(0.01, float(out["frame_ms_avg"])), 0.1)
+	out["pass"] = float(out["frame_ms_avg"]) <= 5.5 and (1000.0 / maxf(0.01, float(out["fps_1pct_low"]))) <= 11.0
 	print(JSON.stringify(out))
 	get_tree().quit(0 if out["pass"] else 1)
