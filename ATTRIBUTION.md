@@ -30,8 +30,8 @@ Godot-порт использует те же наборы, скопирован
 | В игре | Автор / пак | Источник | Файлы |
 |--------|-------------|----------|-------|
 | Бойцы (риг Mixamo, анимации Idle/Walk/Run/Jump/Death, 6 текстур одежды) | Quaternius — «Animated Human» | зеркало на OpenGameArt: <https://opengameart.org/content/animated-human-low-poly> | `characters/quaternius/human.fbx`, `Textures/*.png` |
-| Автоматы и винтовки | Quaternius — «GunPack Vol.1» (AK-47, винтовка) | <https://opengameart.org/content/low-poly-guns> | `weapons/quaternius/*.obj`, `*.mtl`, `*Texture.png` |
-| Пистолеты, ПП, дробовики | Kenney — «Blaster Kit» 2.1 | <https://kenney.nl/assets/blaster-kit> | `weapons/blaster/*.glb`, `Textures/colormap.png` |
+| Всё оружие (пистолеты, револьвер, ПП, дробовики, автоматы, буллпап, снайперки, штык) | Quaternius — «Ultimate Gun Pack» (июль 2019) | зеркало на OpenGameArt: <https://opengameart.org/content/low-poly-guns-pack> | `weapons/qgun/*.fbx` |
+| Руки первого лица (риг, кожа) | «FPS Arms (rigged)» | <https://opengameart.org/content/fps-arms-rigged-only> | `weapons/arms/fps_arms.fbx`, `arms_diffuse.png` |
 | Ящики на картах | Kenney — «Prototype Kit» | <https://kenney.nl/assets/prototype-kit> | `props/prototype/*.glb`, `Textures/colormap.png` |
 
 Стволы «по мотивам»: реальные названия оружия из веб-баланса сопоставлены низкополигональным

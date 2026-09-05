@@ -1,28 +1,40 @@
-# Вьюмодель первого лица: руки + ствол из Blaster Kit, и ВСЁ ощущение веса с веба 1:1
-# (web weapons.js:416-461): свей за мышью с рецентровкой, боб при ходьбе и «дыхание» в покое,
-# толчок ствола отдачей, доставание снизу, поза прицеливания к центру, наклон при
-# перезарядке. Раньше здесь висел один BoxMesh без единого движения.
+# Вьюмодель первого лица: риг рук ArmsRig + ствол из WeaponModels в РЕАЛЬНОМ масштабе, и всё
+# ощущение веса с веба 1:1 (web weapons.js:416-461): свей за мышью с рецентровкой, боб при
+# ходьбе и «дыхание» в покое, толчок ствола отдачей, доставание снизу, поза прицеливания
+# к центру, наклон при перезарядке.
 #
-# Узел живёт в Head/Viewmodel игрока; базовое смещение узла (0.22,-0.18,-0.35) — «плечо»,
-# поверх которого накладываются формулы веба.
+# Рисуется отдельной камерой (ViewmodelCamera: слой 2, узкий FOV): ствол настоящего размера
+# не закрывает пол-экрана и не проваливается в стены. Раньше ствол уменьшали в 0.58 и
+# отодвигали, а руками были капсулы, которые до него не доставали.
+#
+# Узел живёт в Head/Viewmodel игрока; его базовое смещение считается по классу ствола
+# (place_for), поверх него накладываются формулы веба. Плечи рига стоят относительно ГЛАЗ.
 class_name Viewmodel
 extends Node3D
 
 const SWAY_SENS := 0.00009    # web:60
-const HAND_COL := Color(0.16, 0.15, 0.17)
-const GUN_SCALE := 0.58       # реальный 0.8-м ствол в 35 см от глаза закрывал четверть экрана
+const SHOULDERS := Vector3(0.0, -0.2, 0.05)   # центр плеч относительно глаз
+# посадка ствола относительно ГЛАЗ: X/Z центра габаритов и высота ВЕРХА ствола (линии
+# прицела); короткое и длинное оружие сидят по-разному, как в классических FPS
+const PLACE_SHORT := Vector3(0.10, -0.06, -0.46)
+const PLACE_LONG := Vector3(0.13, -0.11, -0.60)
+const SHORT_LEN := 0.25
+const LONG_LEN := 0.75
+const AIM_PULL := 0.1                          # в прицеливании ствол подтягивается к глазу
 
 var _rig: WeaponRig
 var _player: FpsPlayer
 var _gun: Node3D
 var _gun_id := ""
-var _hands: Node3D
+var _arms: ArmsRig
 var _base := Vector3.ZERO
 var _sway := Vector2.ZERO      # цель отставания от мыши
 var _sway_cur := Vector2.ZERO  # сглаженная
 var _bob_phase := 0.0
 var _reload_tilt := 0.0
+var _aim_off := Vector3.ZERO   # смещение узла в прицеливании: мушка на линию глаз по центру
 var _muzzle := Node3D.new()
+var _local := false
 
 
 func _ready() -> void:
@@ -32,63 +44,65 @@ func _ready() -> void:
 	_player = n as FpsPlayer
 	if _player == null:
 		return
+	if NetHub.online() and not _player.is_multiplayer_authority():
+		visible = false  # чужому игроку вьюмодель не нужна — у него видно тело
+		return
+	_local = true
 	_rig = _player.get_node_or_null("WeaponRig") as WeaponRig
-	_base = position
-	_hands = _build_hands()
-	add_child(_hands)
+	_base = PLACE_SHORT
 	add_child(_muzzle)
 	_muzzle.name = "Muzzle"
+	_arms = ArmsRig.new()
+	_arms.name = "Arms"
+	_arms.position = SHOULDERS - _base
+	add_child(_arms)
+	_arms.build(_dark_skin())
+	_to_view_layer(_arms)
 	_swap_gun("classic")
 
 
-# руки: два перчаточных «кулака» + предплечья в цвете агента, чтобы читалось, за кого играешь
-func _build_hands() -> Node3D:
-	var root := Node3D.new()
-	root.name = "Hands"
-	var accent := HAND_COL
-	var card: Dictionary = Balance.CHARACTERS.get(_player.char_id, {})
-	if card.has("darkColor"):
-		accent = Color(String(card["darkColor"]))
-	var skin := StandardMaterial3D.new()
-	skin.albedo_color = accent
-	skin.roughness = 0.85
-	var glove := StandardMaterial3D.new()
-	glove.albedo_color = HAND_COL
-	glove.roughness = 0.7
-	# правая: на рукояти; левая: под цевьём
-	for side: float in [1.0, -1.0]:
-		var fore := MeshInstance3D.new()
-		var cm := CapsuleMesh.new()
-		cm.radius = 0.024
-		cm.height = 0.2
-		fore.mesh = cm
-		fore.material_override = skin
-		fore.rotation = Vector3(-0.35 * side + 0.9, 0.0, 0.25 * side)
-		fore.position = Vector3(0.03 * side + 0.02, -0.09, 0.02 - (0.14 if side < 0 else 0.0))
-		root.add_child(fore)
-		var fist := MeshInstance3D.new()
-		var sm := SphereMesh.new()
-		sm.radius = 0.03
-		sm.height = 0.06
-		fist.mesh = sm
-		fist.material_override = glove
-		fist.position = Vector3(0.02 * side + 0.02, -0.05, -0.08 - (0.22 if side < 0 else 0.0))
-		root.add_child(fist)
-	return root
+# тон кожи — по одежде агента из CharRig (тёмные варианты пака → тёмная кожа рук)
+func _dark_skin() -> bool:
+	var rig_script := load("res://src/agents/char_rig.gd") as GDScript
+	var outfit: Dictionary = rig_script.get_script_constant_map().get("OUTFIT", {})
+	return String(outfit.get(_player.char_id, "")).contains("Dark")
+
+
+# всё видимое во вьюмодели — на слой камеры вьюмодели (основная камера его не рисует)
+static func _to_view_layer(root: Node) -> void:
+	var nodes: Array = [root]
+	nodes.append_array(root.find_children("*", "VisualInstance3D", true, false))
+	for v in nodes:
+		if v is VisualInstance3D:
+			(v as VisualInstance3D).layers = ViewmodelCamera.VIEW_LAYER
 
 
 func _swap_gun(id: String) -> void:
 	if _gun and is_instance_valid(_gun):
 		_gun.queue_free()
 	_gun = WeaponModels.make(id)  # имя узла «Gun_<id>» — по нему WeaponModels отдаёт длину
-	# хват: ствол чуть правее и ниже центра, рукоять у правого кулака
-	# уменьшенная и отодвинутая вьюмодель — классический приём FPS вместо отдельного FOV
-	_gun.scale = Vector3.ONE * GUN_SCALE
-	_gun.position = Vector3(0.03, -0.04, -0.16)
 	add_child(_gun)
+	_to_view_layer(_gun)
 	_gun_id = id
-	var len := WeaponModels.length_of(_gun) * GUN_SCALE
-	_muzzle.position = _gun.position + Vector3(0.0, 0.03, -len)
+	var box := WeaponModels.local_aabb(_gun)
+	_base = place_for(box)
+	position = _base
+	_arms.position = SHOULDERS - _base
+	var top := box.position.y + box.size.y
+	# дуло — передний срез ствола по его габаритам, у линии прицела
+	_muzzle.position = Vector3(0.0, top - 0.015, box.position.z)
+	# прицеливание: узел уезжает так, чтобы верх ствола (мушка) лёг на линию глаз по центру
+	_aim_off = Vector3(-_base.x, -_base.y - top - 0.012, AIM_PULL)
+	_arms.hold(_gun)
+
+
+# где держать ствол: по длине — от пистолетной посадки к винтовочной (ПП посередине) — так,
+# чтобы ВЕРХ его габаритов лёг на заданную высоту под глазами; корень модели — центр
+# её габаритов (WeaponModels.make)
+static func place_for(box: AABB) -> Vector3:
+	var t := clampf((box.size.z - SHORT_LEN) / (LONG_LEN - SHORT_LEN), 0.0, 1.0)
+	var p := PLACE_SHORT.lerp(PLACE_LONG, t)
+	return Vector3(p.x, p.y - (box.position.y + box.size.y), p.z)
 
 
 func muzzle_pos() -> Vector3:
@@ -96,14 +110,14 @@ func muzzle_pos() -> Vector3:
 
 
 func _input(event: InputEvent) -> void:
-	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+	if _local and event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var mm := event as InputEventMouseMotion
 		_sway.x = clampf(_sway.x - mm.relative.x * SWAY_SENS, -0.05, 0.05)
 		_sway.y = clampf(_sway.y - mm.relative.y * SWAY_SENS, -0.05, 0.05)
 
 
 func _process(dt: float) -> void:
-	if _player == null or _rig == null:
+	if not _local or _rig == null:
 		return
 	var want := "knife" if _rig.knives_active() else _rig.current_id
 	if want != _gun_id:
@@ -125,10 +139,10 @@ func _process(dt: float) -> void:
 	var feel := Balance.weapon_feel(_rig.current_id)
 	var now := Time.get_ticks_msec() / 1000.0
 	var eq := clampf((_rig.ready_at - now) / maxf(0.01, float(feel["equip"])), 0.0, 1.0)
-	# поза прицеливания (web:445)
-	var aim_x := -0.28 * a
-	var aim_y := 0.088 * a - eq * 0.24
-	var aim_z := 0.14 * a
+	# поза прицеливания (web:445) — к центру и на линию глаз, по габаритам текущего ствола
+	var aim_x := _aim_off.x * a
+	var aim_y := _aim_off.y * a - eq * 0.24
+	var aim_z := _aim_off.z * a
 	# наклон при перезарядке
 	var reloading := _rig.reloading_until > now
 	_reload_tilt += ((0.55 if reloading else 0.0) - _reload_tilt) * minf(1.0, dt * 8.0)

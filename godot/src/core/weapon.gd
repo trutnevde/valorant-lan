@@ -104,10 +104,6 @@ func _physics_process(dt: float) -> void:
 	# вьюмодель-кик затухает
 	vkick_pos = maxf(0.0, vkick_pos - dt * 0.14)
 	vkick_rot = maxf(0.0, vkick_rot - dt * 0.25)
-	var vm := get_node_or_null("../Head/Viewmodel") as Node3D
-	if vm:
-		vm.position.z = 0.0 + vkick_pos
-		vm.rotation.x = vkick_rot
 
 	if reloading_until > 0.0 and _now() >= reloading_until:
 		reloading_until = -1.0

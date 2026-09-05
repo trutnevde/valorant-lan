@@ -187,12 +187,34 @@ func _swap_gun(id: String) -> void:
 	if _gun and is_instance_valid(_gun):
 		_gun.queue_free()
 	_gun = WeaponModels.make(id)
-	_gun.rotation = Vector3(0.0, -PI * 0.5, 0.0)  # ствол вдоль пальцев
 	_hand.add_child(_gun)
+	# Ствол вдоль пальцев (ладонь обхватывает рукоять), верхом в сторону большого пальца:
+	# оси берём из самого скелета (rest-позы указательного и большого пальцев), а не из
+	# угаданных углов — риг можно менять.
+	var skel := _hand.get_parent() as Skeleton3D
+	var hb := skel.find_bone(_hand.bone_name)
+	var fingers := Vector3.UP
+	var thumb := Vector3.RIGHT
+	for c in skel.get_bone_children(hb):
+		var nm := skel.get_bone_name(c)
+		var dir := skel.get_bone_rest(c).origin.normalized()
+		if nm.findn("Thumb") >= 0:
+			thumb = dir
+		elif nm.findn("Middle") >= 0 or fingers == Vector3.UP:
+			fingers = dir
+	var up := thumb - fingers * fingers.dot(thumb)
+	if up.length_squared() < 0.01:
+		up = Vector3.RIGHT
+	_gun.basis = Basis.looking_at(fingers, up.normalized())
 	# Компенсируем ФАКТИЧЕСКИЙ мировой масштаб кости, а не свой авто-фит: у FBX внутри свой
 	# коэффициент (сантиметры → метры), и делить только на _fit давало ствол в сантиметр.
 	var gs := _hand.global_transform.basis.get_scale()
 	_gun.scale = Vector3(1.0 / maxf(0.0001, gs.x), 1.0 / maxf(0.0001, gs.y), 1.0 / maxf(0.0001, gs.z))
+	# рукоять — в ладонь: корень модели стоит в центре габаритов, сдвигаем на точку хвата
+	var box := WeaponModels.local_aabb(_gun)
+	var long_gun := box.size.z > 0.75
+	var grip := Vector3(0.0, box.position.y + box.size.y * 0.35, box.position.z + box.size.z * (0.62 if long_gun else 0.72))
+	_gun.position = -(_gun.basis * grip)
 	_gun_id = id
 
 

@@ -1,35 +1,36 @@
 # Модели оружия. Один источник для первого лица (Viewmodel) и третьего (в руке CharRig):
 # ствол выглядит одинаково у себя в руках и у врага. Раньше был один BoxMesh на все стволы.
 #
-# Два CC0-набора:
-#  • Quaternius GunPack (OBJ + текстуры) — АК и винтовка: реалистичные силуэты для
-#    автоматов, снайперок и пулемётов;
-#  • Kenney Blaster Kit (GLB) — компактные стволы для пистолетов, ПП и дробовиков.
-# Каждой модели — своя таблица: ось «вперёд» и реальная длина в метрах, чтобы всё смотрело
-# в -Z (вперёд по Godot) и было в масштабе мира.
+# Один CC0-набор на всё — Quaternius «Ultimate Gun Pack» (FBX, цветные материалы, реальные
+# пропорции: пистолеты, револьверы, ПП, дробовики, автоматы, буллпапы, снайперки, штык).
+# Все модели пака лежат вдоль +X — таблица разворачивает их в -Z (вперёд по Godot) и
+# масштабирует до реальной длины в метрах; корень узла — в центре габаритов.
 class_name WeaponModels
 
-const Q := "res://assets/models/weapons/quaternius/"
-const K := "res://assets/models/weapons/blaster/"
+const Q := "res://assets/models/weapons/qgun/"
+const ROT_X_TO_FWD := Vector3(0, PI * 0.5, 0)  # +X модели → -Z
 
-# {src: путь, len: длина в метрах, rot: разворот (эйлер), tex: текстура для OBJ}
+# {src: файл, len: длина в метрах}; разворот у всего пака одинаковый
 const MODELS := {
-	"ak":    { "src": Q + "ak47.obj",  "len": 0.88, "rot": Vector3(0, -PI * 0.5, 0), "tex": Q + "ak47Texture.png" },
-	"rifle": { "src": Q + "Rifle.obj", "len": 1.18, "rot": Vector3(0, 0, 0),         "tex": Q + "RifleTexture.png" },
-	"kb":    { "src": K + "blaster-b.glb", "len": 0.38 }, "kc": { "src": K + "blaster-c.glb", "len": 0.42 },
-	"ki":    { "src": K + "blaster-i.glb", "len": 0.44 }, "ko": { "src": K + "blaster-o.glb", "len": 0.46 },
-	"kh":    { "src": K + "blaster-h.glb", "len": 0.58 }, "kj": { "src": K + "blaster-j.glb", "len": 0.60 },
-	"kl":    { "src": K + "blaster-l.glb", "len": 0.62 }, "kk": { "src": K + "blaster-k.glb", "len": 0.66 },
-	"km":    { "src": K + "blaster-m.glb", "len": 0.70 },
-}
-
-const BY_WEAPON := {
-	"classic": "kb", "ghost": "kc", "frenzy": "ki", "sheriff": "ko",
-	"stinger": "kh", "spectre": "kj",
-	"shorty": "kl", "bucky": "kk", "judge": "km",
-	"bulldog": "ak", "phantom": "ak", "vandal": "ak", "guardian": "ak",
-	"marshal": "rifle", "operator": "rifle", "outlaw": "rifle",
-	"ares": "rifle", "odin": "rifle",
+	"classic":  { "src": Q + "Pistol_5.fbx", "len": 0.19 },
+	"ghost":    { "src": Q + "Pistol_6.fbx", "len": 0.25 },
+	"frenzy":   { "src": Q + "Pistol_4.fbx", "len": 0.22 },
+	"sheriff":  { "src": Q + "Revolver_2.fbx", "len": 0.30 },
+	"stinger":  { "src": Q + "SubmachineGun_3.fbx", "len": 0.44 },
+	"spectre":  { "src": Q + "SubmachineGun_2.fbx", "len": 0.56 },
+	"shorty":   { "src": Q + "Shotgun_SawedOff.fbx", "len": 0.52 },
+	"bucky":    { "src": Q + "Shotgun_3.fbx", "len": 1.0 },
+	"judge":    { "src": Q + "Shotgun_4.fbx", "len": 0.95 },
+	"bulldog":  { "src": Q + "Bullpup_3.fbx", "len": 0.72 },
+	"guardian": { "src": Q + "AssaultRifle2_4.fbx", "len": 1.0 },
+	"phantom":  { "src": Q + "AssaultRifle2_2.fbx", "len": 0.84 },
+	"vandal":   { "src": Q + "AssaultRifle_3.fbx", "len": 0.88 },
+	"marshal":  { "src": Q + "SniperRifle_1.fbx", "len": 1.1 },
+	"operator": { "src": Q + "SniperRifle_2.fbx", "len": 1.25 },
+	"outlaw":   { "src": Q + "SniperRifle_4.fbx", "len": 1.15 },
+	"ares":     { "src": Q + "AssaultRifle_5.fbx", "len": 1.0 },
+	"odin":     { "src": Q + "AssaultRifle2_1.fbx", "len": 1.05 },
+	"knife":    { "src": Q + "Bayonet.fbx", "len": 0.32 },
 }
 
 static var _cache := {}
@@ -37,10 +38,7 @@ static var _len_cache := {}
 
 
 static func make(id: String) -> Node3D:
-	var key: String = BY_WEAPON.get(id, "")
-	if key == "":
-		return _knife()
-	var spec: Dictionary = MODELS[key]
+	var spec: Dictionary = MODELS.get(id, MODELS["knife"])
 	var root := Node3D.new()
 	root.name = "Gun_" + id
 	var inner: Node3D = null
@@ -50,23 +48,17 @@ static func make(id: String) -> Node3D:
 	elif res is Mesh:
 		var mi := MeshInstance3D.new()
 		mi.mesh = res as Mesh
-		if spec.has("tex"):
-			var tex := load(String(spec["tex"])) as Texture2D
-			for s in (res as Mesh).get_surface_count():
-				var mat := StandardMaterial3D.new()
-				mat.albedo_texture = tex
-				mat.roughness = 0.6
-				mat.metallic = 0.25
-				mi.set_surface_override_material(s, mat)
 		inner = mi
 	if inner == null:
-		return _knife()
-	# нормализация: разворот в -Z и масштаб до реальной длины
-	inner.rotation = spec.get("rot", Vector3.ZERO)
+		return _fallback(root)
+	# нормализация: разворот в -Z, масштаб до реальной длины, центр габаритов в корень
+	inner.rotation = ROT_X_TO_FWD
 	var raw_len := _measure_z(inner)
 	var scale := float(spec["len"]) / maxf(0.001, raw_len)
 	inner.scale = Vector3.ONE * scale
 	root.add_child(inner)
+	var box := local_aabb(root)
+	inner.position = -(box.position + box.size * 0.5)
 	_len_cache[id] = float(spec["len"])
 	return root
 
@@ -91,7 +83,11 @@ static func _measure_z(n: Node3D) -> float:
 		if mi.mesh == null:
 			continue
 		var a := mi.get_aabb()
-		var local := mi.transform if mi != n else Transform3D.IDENTITY
+		var local := Transform3D.IDENTITY
+		var k: Node = mi
+		while k != n and k is Node3D:
+			local = (k as Node3D).transform * local
+			k = k.get_parent()
 		for i in 8:
 			var c := a.position + Vector3(a.size.x * (i & 1), a.size.y * ((i >> 1) & 1), a.size.z * ((i >> 2) & 1))
 			var p := xf * (local * c)
@@ -106,27 +102,36 @@ static func length_of(node: Node3D) -> float:
 	return float(_len_cache.get(id, 0.5))
 
 
-static func _knife() -> Node3D:
-	var root := Node3D.new()
-	root.name = "Gun_knife"
-	var blade := MeshInstance3D.new()
+# AABB всех мешей узла в ЕГО локале (без его собственного transform) — для хвата и дула
+static func local_aabb(n: Node3D) -> AABB:
+	var lo := Vector3(INF, INF, INF)
+	var hi := -lo
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var m := mi as MeshInstance3D
+		if m.mesh == null:
+			continue
+		var xf := Transform3D.IDENTITY
+		var k: Node = m
+		while k != n and k is Node3D:
+			xf = (k as Node3D).transform * xf
+			k = k.get_parent()
+		var a := m.get_aabb()
+		for i in 8:
+			var c := xf * (a.position + Vector3(a.size.x * (i & 1), a.size.y * ((i >> 1) & 1), a.size.z * ((i >> 2) & 1)))
+			lo = lo.min(c)
+			hi = hi.max(c)
+	if hi.x < lo.x:
+		return AABB(Vector3.ZERO, Vector3.ONE * 0.3)
+	return AABB(lo, hi - lo)
+
+
+# запасной ствол, если модель не импортировалась: чтобы игра не падала без ассета
+static func _fallback(root: Node3D) -> Node3D:
+	var mi := MeshInstance3D.new()
 	var bm := BoxMesh.new()
-	bm.size = Vector3(0.025, 0.05, 0.30)
-	blade.mesh = bm
-	var m := StandardMaterial3D.new()
-	m.albedo_color = Color(0.82, 0.84, 0.88)
-	m.metallic = 0.9
-	m.roughness = 0.25
-	blade.material_override = m
-	blade.position = Vector3(0, 0, -0.18)
-	root.add_child(blade)
-	var grip := MeshInstance3D.new()
-	var gm := BoxMesh.new()
-	gm.size = Vector3(0.035, 0.035, 0.12)
-	grip.mesh = gm
-	var gmat := StandardMaterial3D.new()
-	gmat.albedo_color = Color(0.12, 0.1, 0.09)
-	grip.material_override = gmat
-	root.add_child(grip)
-	_len_cache["knife"] = 0.3
+	bm.size = Vector3(0.04, 0.08, 0.4)
+	mi.mesh = bm
+	mi.position = Vector3(0, 0, -0.1)
+	root.add_child(mi)
+	_len_cache[String(root.name).trim_prefix("Gun_")] = 0.4
 	return root

@@ -1,10 +1,11 @@
-[gd_scene load_steps=15 format=3 uid="uid://fps_player00"]
+[gd_scene load_steps=16 format=3 uid="uid://fps_player00"]
 
 [ext_resource type="Script" path="res://src/core/player.gd" id="1"]
 [ext_resource type="Script" path="res://src/core/weapon.gd" id="2"]
 [ext_resource type="Script" path="res://src/ui/hud.gd" id="3"]
 [ext_resource type="Script" path="res://src/agents/char_rig.gd" id="4"]
 [ext_resource type="Script" path="res://src/core/viewmodel.gd" id="5"]
+[ext_resource type="Script" path="res://src/core/viewmodel_camera.gd" id="6"]
 
 [sub_resource type="CapsuleShape3D" id="cap"]
 radius = 0.38
@@ -75,12 +76,13 @@ replication_config = SubResource("repl")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.68, 0)
 
 [node name="Camera3D" type="Camera3D" parent="Head"]
+cull_mask = 1048573
 fov = 74.0
 near = 0.05
 far = 400.0
 
 [node name="Viewmodel" type="Node3D" parent="Head"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.22, -0.18, -0.35)
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.13, -0.21, -0.3)
 script = ExtResource("5")
 
 [node name="StepSfx" type="AudioStreamPlayer3D" parent="."]
@@ -110,6 +112,24 @@ bus = &"SFX"
 [node name="HitSfx" type="AudioStreamPlayer" parent="WeaponRig"]
 volume_db = -7.0
 bus = &"UI"
+
+[node name="ViewLayer" type="SubViewportContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+stretch = true
+
+[node name="ViewVP" type="SubViewport" parent="ViewLayer"]
+transparent_bg = true
+handle_input_locally = false
+size = Vector2i(2, 2)
+render_target_update_mode = 4
+
+[node name="ViewCam" type="Camera3D" parent="ViewLayer/ViewVP"]
+script = ExtResource("6")
 
 [node name="HUD" type="CanvasLayer" parent="."]
 script = ExtResource("3")

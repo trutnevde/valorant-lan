@@ -132,6 +132,9 @@ func _ready() -> void:
 		_last_remote_pos = global_position
 		cam.current = false
 		($HUD as CanvasLayer).visible = false
+		var vl := get_node_or_null("ViewLayer") as Control
+		if vl:
+			vl.queue_free()  # второй проход рендера — только у своего игрока
 		($WeaponRig as Node).set_physics_process(false)
 		if body:
 			body.visible = true
