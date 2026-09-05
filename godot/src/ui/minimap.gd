@@ -40,15 +40,61 @@ func _load_meta() -> void:
 			_sites["B"] = meta["site_b"]
 
 
-func _process(_dt: float) -> void:
-	if player != null:
-		queue_redraw()
+func _process(dt: float) -> void:
+	if player == null:
+		return
+	if player.char_id == "sanek":
+		_hook_noise(dt)
+	queue_redraw()
 
 
 func _w2m(wx: float, wz: float) -> Vector2:
 	var u := (wx + _sw * 0.5) / _sw
 	var v := (wz + _sd * 0.5) / _sd
 	return Vector2(clampf(u, 0, 1) * size.x, clampf(v, 0, 1) * size.y)
+
+
+# обратное преобразование: точка на карте → точка мира (клик по тактической карте)
+func m2w(p: Vector2) -> Vector3:
+	var u := clampf(p.x / maxf(1.0, size.x), 0.0, 1.0)
+	var v := clampf(p.y / maxf(1.0, size.y), 0.0, 1.0)
+	return Vector3(u * _sw - _sw * 0.5, 0.0, v * _sd - _sd * 0.5)
+
+
+# ===== пассивка Санька «Радар»: шум шагов врагов на его миникарте =====
+var _pings: Array = []      # [{pos: Vector3, until: float}]
+var _noise_hooked := {}     # instance_id -> true
+var _hook_acc := 0.0
+
+
+func _hook_noise(dt: float) -> void:
+	# бойцы появляются не сразу и меняются по раундам — периодически добираем новых
+	_hook_acc += dt
+	if _hook_acc < 1.0:
+		return
+	_hook_acc = 0.0
+	for c in get_tree().get_nodes_in_group("noise_makers"):
+		var n := c as Node3D
+		if n == null or n == player or not n.has_signal("made_noise"):
+			continue
+		var id := n.get_instance_id()
+		if _noise_hooked.has(id):
+			continue
+		_noise_hooked[id] = true
+		n.made_noise.connect(_on_noise.bind(n))
+
+
+func _on_noise(src: Node3D) -> void:
+	# слышим ТОЛЬКО врагов и только в радиусе слышимости (честно: не рентген по всей карте)
+	if player == null or not is_instance_valid(src) or String(src.get("team")) == player.team:
+		return
+	if src.global_position.distance_to(player.global_position) > RADAR_HEAR:
+		return
+	_pings.append({ "pos": src.global_position, "until": Time.get_ticks_msec() / 1000.0 + RADAR_FADE })
+
+
+const RADAR_HEAR := 26.0  # дальность слуха «Радара» (поведение, не баланс)
+const RADAR_FADE := 2.2   # сколько отметка тает
 
 
 func _draw() -> void:
@@ -98,6 +144,20 @@ func _draw() -> void:
 	if fx:
 		for ep: Vector3 in fx.call("revealed_positions"):
 			draw_circle(_w2m(ep.x, ep.z), 3.5, Color(1.0, 0.25, 0.3))
+	# «Радар» Санька: тающие отметки шагов врагов (информация звуком/анимацией, без текста)
+	if player.char_id == "sanek":
+		var tnow := Time.get_ticks_msec() / 1000.0
+		var alive: Array = []
+		for pg: Dictionary in _pings:
+			var left: float = float(pg["until"]) - tnow
+			if left <= 0.0:
+				continue
+			alive.append(pg)
+			var pp: Vector3 = pg["pos"]
+			var k := left / RADAR_FADE
+			draw_arc(_w2m(pp.x, pp.z), 3.0 + (1.0 - k) * 7.0, 0.0, TAU, 20,
+				Color(1.0, 0.85, 0.3, k * 0.9), 1.5)
+		_pings = alive
 	# свой маркер-стрелка (по yaw)
 	var me := _w2m(player.global_position.x, player.global_position.z)
 	var fwd := Vector3(-sin(player.yaw), 0, -cos(player.yaw))

@@ -7,8 +7,10 @@ extends Node
 var char_id := ""
 var key := "C"   # C/Q/E/X
 var charges := 0
+var map_target := false   # целится кликом по тактической карте (дымы Вовы, орбиталка, ульта Фафика)
 
 var _sig_ready_at := 0.0
+var _pending_point := Vector3.INF  # подтверждённая точка карты на время одного каста
 
 @onready var player: FpsPlayer = _find_player()
 
@@ -49,25 +51,45 @@ func _physics_process(_dt: float) -> void:
 	if not Input.is_action_just_pressed("ability_" + key.to_lower()):
 		return
 	if key == "X":
-		var cost := int(Balance.CHARACTERS[char_id]["ultCost"])
-		if player.ult < cost:
+		if player.ult < int(Balance.CHARACTERS[char_id]["ultCost"]) or not can_cast():
 			return
-		if not can_cast():
-			return
-		player.ult = 0  # потратил ульту
-		cast()
 	else:
 		if charges <= 0 or not can_cast():
 			return
+	# карта-цель: заряд НЕ тратим, пока игрок не ткнул точку (или не отменил)
+	if map_target:
+		var hud := player.get_node_or_null("HUD")
+		if hud and hud.has_method("request_map_target"):
+			hud.call("request_map_target", self)
+			return
+	_consume_and_cast()
+
+
+# списание заряда/ульты + сам каст — общий путь для обычного и карта-целевого применения
+func _consume_and_cast() -> void:
+	if key == "X":
+		player.ult = 0  # потратил ульту
+	else:
 		charges -= 1
 		if _is_signature() and _sig_ready_at == 0.0:
 			_sig_ready_at = _now() + float(Balance.SIGNATURES[char_id]["cd"])
-		cast()
+	cast()
 	used.emit(charges)
 
 
-# точка на земле/стене по взгляду (аналог web groundPoint)
+# HUD подтвердил точку на тактической карте
+func map_target_confirmed(p: Vector3) -> void:
+	_pending_point = p
+	_consume_and_cast()
+	_pending_point = Vector3.INF
+
+
+# точка на земле/стене по взгляду (аналог web groundPoint).
+# Если способность карта-целевая и точка уже подтверждена кликом — возвращаем её,
+# поэтому компонентам способностей менять ничего не нужно.
 func ground_point(max_dist := 22.0) -> Vector3:
+	if _pending_point != Vector3.INF:
+		return _pending_point
 	var origin := player.eye_pos()
 	var dir := player.aim_dir()
 	var space := player.get_world_3d().direct_space_state

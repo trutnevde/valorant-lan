@@ -24,6 +24,7 @@ func _ready() -> void:
 		player.blinded.connect(_on_blind)
 		_build_minimap()
 		_build_ability_bar()
+		_build_tactical_map()
 
 
 func _build_minimap() -> void:
@@ -35,6 +36,63 @@ func _build_minimap() -> void:
 	_minimap.size = Vector2(210, 210)
 	add_child(_minimap)
 	_minimap.call("setup", player)
+
+
+# ===== тактическая карта: целеуказание кликом (дымы/орбиталка Вовы, клоны Фафика) =====
+var _tac: Control
+var _tac_hint: Label
+var _tac_ability: Node = null
+
+
+func _build_tactical_map() -> void:
+	_tac = (load("res://src/ui/minimap.gd") as GDScript).new()
+	_tac.set_anchors_preset(Control.PRESET_CENTER)
+	_tac.size = Vector2(640, 640)
+	_tac.position = Vector2(-320, -320)
+	_tac.visible = false
+	_tac.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_tac)
+	_tac.call("setup", player)
+	_tac.gui_input.connect(_on_tac_input)
+	_tac_hint = Label.new()
+	_tac_hint.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_tac_hint.offset_top = 40.0
+	_tac_hint.offset_left = -300.0
+	_tac_hint.offset_right = 300.0
+	_tac_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_tac_hint.visible = false
+	add_child(_tac_hint)
+
+
+func request_map_target(ab: Node) -> void:
+	_tac_ability = ab
+	_tac.visible = true
+	_tac_hint.text = "ЛКМ — отметить точку   ·   ПКМ / ESC — отмена"
+	_tac_hint.visible = true
+	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+func _close_tac() -> void:
+	_tac_ability = null
+	_tac.visible = false
+	_tac_hint.visible = false
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _on_tac_input(ev: InputEvent) -> void:
+	if _tac_ability == null or not (ev is InputEventMouseButton) or not ev.pressed:
+		return
+	var mb := ev as InputEventMouseButton
+	if mb.button_index == MOUSE_BUTTON_RIGHT:
+		_close_tac()
+		return
+	if mb.button_index != MOUSE_BUTTON_LEFT:
+		return
+	var world: Vector3 = _tac.call("m2w", mb.position)
+	var ab := _tac_ability
+	_close_tac()
+	if is_instance_valid(ab):
+		ab.call("map_target_confirmed", world)
 
 
 func _build_ability_bar() -> void:
@@ -71,6 +129,8 @@ func _process(_dt: float) -> void:
 	if kit_label:
 		kit_label.visible = false  # заменено панелью способностей
 	_refresh_abilities()
+	if _tac_ability != null and Input.is_action_just_pressed("ui_cancel"):
+		_close_tac()
 	_process_match(_dt)
 
 
