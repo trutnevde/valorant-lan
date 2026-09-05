@@ -20,11 +20,17 @@
 | Стены и крупные боксы | `concrete_wall_008` | `public/assets/textures/wall/…` |
 | Деревянные ящики | `wood_planks` | `public/assets/textures/wood/…` |
 
+Godot-порт использует те же наборы, скопированные в `godot/assets/textures/<набор>/` (фаза G10):
+стены и ступени, пол игровой зоны, деревянные ящики. Лицензия та же — CC0.
+
 ## Небо / освещение (IBL) — Poly Haven (CC0)
 
 | В игре | Слаг | Файл |
 |--------|------|------|
 | Небо + свет | `kloppenheim_06_puresky` | `public/assets/hdri/sky.hdr` |
+
+В Godot-порте тот же HDRI лежит в `godot/assets/hdri/sky.hdr` и работает как PanoramaSkyMaterial
+(небо + небесное освещение и отражения), фаза G10.
 
 ---
 
