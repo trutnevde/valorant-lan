@@ -307,6 +307,8 @@ func _play_shot() -> void:
 	shot_sfx.stream = _shot_streams[sample]
 	shot_sfx.pitch_scale = 0.95 + rng.randf() * 0.1
 	shot_sfx.play()
+	# дульная вспышка (G10): свет + сноп искр от ствола
+	Vfx.muzzle(self, player.eye_pos() + player.aim_dir() * 0.6, player.aim_dir())
 
 
 func _spawn_tracer(from: Vector3, to: Vector3) -> void:
@@ -329,6 +331,7 @@ func _spawn_tracer(from: Vector3, to: Vector3) -> void:
 
 
 func _spawn_decal(pos: Vector3, normal: Vector3) -> void:
+	Vfx.impact(self, pos, normal)  # пыль/искры от поверхности (G10)
 	var d := Decal.new()
 	d.size = Vector3(0.12, 0.08, 0.12)
 	d.modulate = Color(0.08, 0.08, 0.08, 0.9)

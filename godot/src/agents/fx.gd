@@ -396,23 +396,45 @@ func _vis_ring(pos: Vector3, r: float, color: Color, dur: float) -> void:
 
 
 func _vis_smoke(id: int, pos: Vector3, stink: bool) -> void:
-	var m := MeshInstance3D.new()
-	m.name = "SmokeVis_%d" % id
-	var sph := SphereMesh.new()
+	# ГЛУХОЙ дым — правило саги: непрозрачен снаружи И изнутри. Поэтому это объём, а не
+	# частицы: частицы всегда просвечивают. Форму «клубов» даём тремя смещёнными сферами,
+	# распускание — анимацией масштаба (G10), плотность при этом не страдает.
+	var root := Node3D.new()
+	root.name = "SmokeVis_%d" % id
 	var r := float(Balance.ABILITY["SMOKE_R"])
-	sph.radius = r
-	sph.height = r * 2.0
-	m.mesh = sph
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.36, 0.48, 0.24, 0.96) if stink else Color(0.6, 0.65, 0.7, 0.96)
-	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # непрозрачен и изнутри (глухой дым)
-	m.material_override = mat
-	get_tree().current_scene.add_child(m)
-	m.global_position = pos + Vector3(0, r * 0.55, 0)
-	var tw := m.create_tween()
+	var base := Color(0.36, 0.48, 0.24, 1.0) if stink else Color(0.62, 0.66, 0.71, 1.0)
+	var lobes := [
+		{ "off": Vector3.ZERO, "k": 1.0 },
+		{ "off": Vector3(r * 0.34, r * 0.20, -r * 0.22), "k": 0.72 },
+		{ "off": Vector3(-r * 0.30, -r * 0.16, r * 0.26), "k": 0.66 },
+	]
+	for i in lobes.size():
+		var lobe: Dictionary = lobes[i]
+		var m := MeshInstance3D.new()
+		var sph := SphereMesh.new()
+		sph.radial_segments = 20
+		sph.rings = 12
+		sph.radius = r * float(lobe["k"])
+		sph.height = r * float(lobe["k"]) * 2.0
+		m.mesh = sph
+		var mat := StandardMaterial3D.new()
+		# небольшой разброс тона между клубами — объём читается, но дым остаётся глухим
+		mat.albedo_color = base.lightened(0.06 * i).darkened(0.04 * (i % 2))
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED  # непрозрачен и изнутри
+		mat.roughness = 1.0
+		mat.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		m.material_override = mat
+		root.add_child(m)
+		m.position = lobe["off"]
+	get_tree().current_scene.add_child(root)
+	root.global_position = pos + Vector3(0, r * 0.55, 0)
+	# распускание: за 0.35с из точки в полный объём (в вебе так же — дым «набухает»)
+	root.scale = Vector3.ONE * 0.15
+	var grow := root.create_tween()
+	grow.tween_property(root, "scale", Vector3.ONE, 0.35).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	var tw := root.create_tween()
 	tw.tween_interval(float(Balance.ABILITY["SMOKE_TIME"]))
-	tw.tween_callback(m.queue_free)
+	tw.tween_callback(root.queue_free)
 
 
 func _vis_dome(pos: Vector3) -> void:
