@@ -107,7 +107,8 @@ func try_second_wind() -> bool:
 		velocity = Vector3.ZERO
 	return true
 
-signal made_noise  # шаг на бегу — для событийного слуха ботов
+# loud=true — выстрел (слышно за 28 м), false — шаг (за 14 м), паритет web server.js:904
+signal made_noise(loud: bool)
 signal hp_changed(hp: int)
 signal died
 
@@ -417,6 +418,7 @@ func _process(delta: float) -> void:
 	if _step_dist > 2.7:
 		_step_dist = 0.0
 		_play_step(0.55)
+		made_noise.emit(false)  # чужой игрок тоже шумит — иначе боты его не слышат
 
 
 func _footsteps(dt: float) -> void:
@@ -432,7 +434,7 @@ func _footsteps(dt: float) -> void:
 		var silent := char_id == "max"  # пассивка Макса «Ветер»: бесшумный бег (тише + боты не слышат)
 		_play_step(0.22 if silent else 0.55)
 		if not silent:
-			made_noise.emit()
+			made_noise.emit(false)
 
 
 func _play_step(vol: float) -> void:

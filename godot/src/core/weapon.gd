@@ -239,6 +239,7 @@ func shoot() -> void:
 	apply_recoil()
 	_play_shot()
 	fired.emit()
+	player.made_noise.emit(true)  # выстрел громкий: боты его слышат за 28 м
 	if NetHub.online():
 		_remote_shot.rpc(current_id)  # остальные пиры слышат выстрел позиционно
 

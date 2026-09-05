@@ -64,7 +64,7 @@ var stat_kills := 0
 var stat_deaths := 0
 var stat_stuck_events := 0
 
-signal made_noise
+signal made_noise(loud: bool)
 
 
 func _ready() -> void:
@@ -99,11 +99,13 @@ func cfg() -> Dictionary:
 	return Balance.BOT_PRESETS[preset]
 
 
-func _on_noise(src: Node3D) -> void:
+func _on_noise(loud: bool, src: Node3D) -> void:
 	if not is_instance_valid(src) or src.get("team") == team:
 		return
 	var d := global_position.distance_to(src.global_position)
-	if d < 28.0 * float(cfg()["hearMul"]):
+	# выстрел слышно за 28 м, шаг — за 14 (паритет web server.js:904). Раньше стоял плоский
+	# 28 на всё, и шаги ловились вдвое дальше канона.
+	if d < (28.0 if loud else 14.0) * float(cfg()["hearMul"]):
 		heard_pos = src.global_position
 		heard_until = _now() + 1.6
 
@@ -289,6 +291,9 @@ func _use_ability(t: float, combat: bool) -> void:
 	var fx := get_node("/root/Fx")
 	var cd_mul := float(cfg()["abilityMul"])
 	var cd := func(s: float) -> void: _next_ability = t + s * cd_mul
+	if _try_ult(t, combat, fx):
+		cd.call(6.0)
+		return
 	match char_id:
 		"artemiy", "vova", "fafik", "koniliy":
 			if combat and target != null and is_instance_valid(target):
@@ -422,7 +427,7 @@ func _aim_and_shoot(t: float) -> void:
 	next_shot = t + maxf(0.12, 60.0 / float(wd["rpm"])) + rng.randf() * 0.12
 	stat_shots += 1
 	shot_sfx.play()
-	made_noise.emit()
+	made_noise.emit(true)  # выстрел — громкий
 	# вероятностная модель попадания — ПАРИТЕТ web server.js botShoot
 	var dist := to.length()
 	var p_hit := clampf(float(cfg()["pHitMax"]) + 0.04 - dist * 0.009, float(cfg()["pHitMin"]), float(cfg()["pHitMax"]))
@@ -533,6 +538,7 @@ func _bot_steps() -> void:
 		step_sfx.volume_db = -6.0
 		step_sfx.pitch_scale = 0.9 + randf() * 0.2
 		step_sfx.play()
+		made_noise.emit(false)  # шаг — тихий шум, слышно за 14 м
 
 
 func _watchdog(dt: float) -> void:
@@ -648,3 +654,85 @@ func round_reset() -> void:
 
 func give_weapon(id: String) -> void:
 	weapon_id = id
+
+
+# ===== УЛЬТЫ БОТОВ =====
+# Раньше боты не применяли ульту НИ РАЗУ: заряд копился за киллы и просто лежал мёртвым
+# грузом. Из-за этого половина смысла агентов в бот-матче не работала, а игрок никогда не
+# видел вражескую ульту. Ульту тратим по тем же данным, что и игрок, — через Fx.
+#
+# ЧЕСТНО не покрыты: Макс («Стальные перья» — нужен WeaponRig, у бота его нет), Фафик
+# (клоны требуют управления собственной стрельбой и роспуском), Сова (стрела-снаряд с
+# прицеливанием по дуге). Эти три бота ульту копят, но не тратят — записано в PARITY.md.
+func _try_ult(t: float, combat: bool, fx: Node) -> bool:
+	var cost := int(Balance.CHARACTERS.get(char_id, {}).get("ultCost", 7))
+	if ult < cost:
+		return false
+	var has_target := combat and target != null and is_instance_valid(target)
+	var tp := target.global_position if has_target else global_position
+	match char_id:
+		"artemiy":
+			# ставим метку заранее — «Второе дыхание» полезно ДО драки, не после
+			fx.call("cast", "ult_mark", {
+				"x": global_position.x, "z": global_position.z,
+				"owner_path": String(get_path()),
+			})
+		"vova":
+			if not has_target:
+				return false
+			fx.call("cast", "generic", {
+				"logic": "res://src/agents/effects/util_zone.gd",
+				"shape": "circle", "x": tp.x, "z": tp.z, "r": float(Balance.ABILITY["ORBITAL_R"]),
+				"delay": float(Balance.ABILITY["ORBITAL_DELAY"]), "dur": float(Balance.ABILITY["ORBITAL_DUR"]),
+				"dps": float(Balance.ABILITY["ORBITAL_DPS"]), "weapon": "orbital",
+				"team": team, "owner_path": String(get_path()),
+			})
+			fx.call("cast", "orbital_beam", { "x": tp.x, "z": tp.z })
+		"sanek":
+			fx.call("cast", "generic", {
+				"logic": "res://src/agents/effects/xray_logic.gd", "team": team,
+			})
+		"koniliy":
+			if not has_target:
+				return false
+			var d := (tp - global_position)
+			d.y = 0.0
+			d = d.normalized()
+			fx.call("cast", "generic", {
+				"logic": "res://src/agents/effects/stampede.gd",
+				"fx": global_position.x, "fz": global_position.z,
+				"dx": d.x, "dz": d.z, "team": team,
+			})
+			fx.call("cast", "stampede_vis", {
+				"fx": global_position.x, "fz": global_position.z, "dx": d.x, "dz": d.z,
+			})
+		"ira":
+			# банкет — на СЕБЯ и союзников рядом, драка не нужна
+			fx.call("cast", "generic", {
+				"logic": "res://src/agents/effects/banquet_logic.gd",
+				"x": global_position.x, "z": global_position.z, "team": team,
+				"owner_path": String(get_path()),
+			})
+			fx.call("cast", "banquet_dome", { "x": global_position.x, "z": global_position.z })
+		"denis":
+			if not has_target:
+				return false
+			var hd := (tp + Vector3(0, 1.0, 0)) - (global_position + Vector3(0, 1.6, 0))
+			hd = hd.normalized()
+			fx.call("cast", "generic", {
+				"logic": "res://src/agents/effects/hook_projectile.gd",
+				"fx": global_position.x, "fy": global_position.y + 1.6, "fz": global_position.z,
+				"dx": hd.x, "dy": hd.y, "dz": hd.z,
+				"by_path": String(get_path()),
+				"cname": "Cocoon_bot_%d_%d" % [get_instance_id(), int(t)],
+			})
+		"gera":
+			if not has_target:
+				return false
+			fx.call("cast", "levit", {
+				"x": tp.x, "z": tp.z, "team": team, "owner_path": String(get_path()),
+			})
+		_:
+			return false  # Макс, Фафик, Сова — см. комментарий выше
+	ult = 0
+	return true

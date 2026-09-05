@@ -211,6 +211,9 @@ var _bar_bg: ColorRect
 var _bar_fill: ColorRect
 var _bar_label: Label
 var _board: PanelContainer
+var _spec_label: Label
+var _spec_idx := 0
+var _spec_target: Node3D = null
 var _board_grid: GridContainer
 var _snd := {}
 var _mt: Match
@@ -261,6 +264,16 @@ func _setup_match_ui() -> void:
 	_mt.round_ended.connect(func(w: String, r: String) -> void: _announce("Раунд: победа %s (%s)" % [w, r]))
 	_mt.match_ended.connect(func(w: String) -> void: _announce("МАТЧ ОКОНЧЕН — ПОБЕДА %s" % w))
 	_build_scoreboard()
+	_spec_label = Label.new()
+	_spec_label.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_spec_label.offset_top = -230.0
+	_spec_label.offset_bottom = -206.0
+	_spec_label.offset_left = -300.0
+	_spec_label.offset_right = 300.0
+	_spec_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_spec_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_spec_label.visible = false
+	add_child(_spec_label)
 	_mt.round_ended.connect(func(w: String, _r: String) -> void:
 		_snd_play("confirm" if w == player.team else "hurt", 0.0, 1.0 if w == player.team else 0.8))
 	_mt.match_ended.connect(func(_w: String) -> void: _board.visible = true)
@@ -316,6 +329,42 @@ func _refresh_scoreboard() -> void:
 			l.text = cell
 			l.modulate = tint
 			_board_grid.add_child(l)
+
+
+# Спектатор: пока раунд идёт, мёртвый смотрит глазами живых союзников (ЛКМ — следующий).
+# Раньше после смерти камера оставалась в трупе — до конца раунда чёрный экран в пол.
+func _spectate() -> void:
+	if _mt == null or _spec_label == null:
+		return
+	if not player.dead or _mt.phase == Match.Phase.BUY:
+		if _spec_label.visible:
+			_spec_label.visible = false
+			_spec_target = null
+			player.cam.current = true
+		return
+	var mates := _alive_mates()
+	if mates.is_empty():
+		_spec_label.visible = false
+		return
+	if Input.is_action_just_pressed("fire") or _spec_target == null or not is_instance_valid(_spec_target) or int(_spec_target.get("hp")) <= 0:
+		_spec_idx = (_spec_idx + 1) % mates.size()
+		_spec_target = mates[_spec_idx]
+		var c := _spec_target.get_node_or_null("Head/Camera3D") as Camera3D
+		if c:
+			c.current = true
+	_spec_label.visible = true
+	_spec_label.text = "НАБЛЮДЕНИЕ: %s   ·   ЛКМ — следующий" % String((_spec_target as Node).name)
+
+
+func _alive_mates() -> Array:
+	var out: Array = []
+	for c in get_tree().get_nodes_in_group("combatants"):
+		var n := c as Node3D
+		if n == null or n == player or int(n.get("hp")) <= 0:
+			continue
+		if String(n.get("team")) == player.team and n.get_node_or_null("Head/Camera3D") != null:
+			out.append(n)
+	return out
 
 
 func _snd_play(nm: String, vol := 0.0, pitch := 1.0) -> void:
@@ -407,6 +456,7 @@ func _process_match(_dt: float) -> void:
 	if _mt.spike_carrier == player and _mt.phase == Match.Phase.LIVE:
 		_match_label.text += "  ·  ТЫ НЕСЁШЬ ШИП (4 — плант в сайте)"
 	_update_bar()
+	_spectate()
 	if _board:
 		if _mt.phase != Match.Phase.MATCH_END:
 			_board.visible = Input.is_action_pressed("scoreboard")

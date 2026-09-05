@@ -84,7 +84,7 @@ func _hook_noise(dt: float) -> void:
 		n.made_noise.connect(_on_noise.bind(n))
 
 
-func _on_noise(src: Node3D) -> void:
+func _on_noise(_loud: bool, src: Node3D) -> void:
 	# слышим ТОЛЬКО врагов и только в радиусе слышимости (честно: не рентген по всей карте)
 	if player == null or not is_instance_valid(src) or String(src.get("team")) == player.team:
 		return
