@@ -46,7 +46,26 @@ const KITS := {
 }
 
 
+# Пассивки, которым нужен свой пер-кадровый узел. Остальные живут там, где им место:
+# скорость/бесшумность Макса и «Разгон» Конилия — в player.gd, «Прощальный ужин» Иры —
+# в match.on_death, «Барометр» Геры и «Радар» Санька — в миникарте, «Охотник за
+# туманщиками» Геры — в weapon.gd, саморег Дениса — в match.
+const PASSIVES := {
+	"vova": ["res://src/agents/passive_fog_master.gd"],  # «Хозяин тумана»
+}
+
+
 static func attach(player: Node, char_id: String) -> void:
+	# пассивки-узлы вешаем ОТДЕЛЬНО от Kit: в Kit лежат только Ability (на это есть тест,
+	# HUD-панель способностей читает key у каждого ребёнка Kit)
+	if PASSIVES.has(char_id):
+		var pas := Node.new()
+		pas.name = "Passives"
+		player.add_child(pas)
+		for ppath: String in PASSIVES[char_id]:
+			var pn: Node = (load(ppath) as GDScript).new()
+			pn.name = String(ppath.get_file().get_basename()).capitalize().replace(" ", "")
+			pas.add_child(pn)
 	if not KITS.has(char_id):
 		return  # агент без кита в порте (пока) — только стрельба
 	var kit := Node.new()

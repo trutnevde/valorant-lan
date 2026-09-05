@@ -31,6 +31,21 @@ func test_all_ability_components_share_interface() -> void:
 		assert_eq(keys, ["C", "E", "Q", "X"], ch + ": ровно по одному C/Q/E/X")
 
 
+# Пассивки-узлы висят ОТДЕЛЬНО от Kit: иначе HUD-панель способностей попробует прочитать
+# у них key и упадёт (ровно так уже ломались Рывок и Взлёт Макса).
+func test_passives_live_outside_kit() -> void:
+	var p: FpsPlayer = (load("res://scenes/agents/player.tscn") as PackedScene).instantiate()
+	add_child_autofree(p)
+	p.char_id = "vova"
+	KitFactory.attach(p, "vova")
+	var pas := p.get_node_or_null("Passives")
+	assert_not_null(pas, "у Вовы есть узел Passives")
+	assert_eq(pas.get_child_count(), 1, "«Хозяин тумана» подключён")
+	assert_eq(p.get_node("Kit").get_child_count(), 4, "в Kit по-прежнему ровно 4 способности")
+	for ab in p.get_node("Kit").get_children():
+		assert_true(ab is Ability, "в Kit только Ability")
+
+
 func test_gallop_and_banquet_speed() -> void:
 	var p: FpsPlayer = (load("res://scenes/agents/player.tscn") as PackedScene).instantiate()
 	add_child_autofree(p)
