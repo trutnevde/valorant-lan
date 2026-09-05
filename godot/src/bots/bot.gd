@@ -530,7 +530,16 @@ func _pick_patrol_point() -> void:
 var _shape_part := {}
 
 
-func part_at(shape_idx: int) -> String:
+# Зона попадания — ПО ВЫСОТЕ точки, как у игрока (см. player.gd part_at): капсула движения
+# Move идёт первым шейпом и перекрывает голову, поэтому индекс шейпа всегда давал «body».
+func part_at(shape_idx: int, hit_y: float = INF) -> String:
+	if hit_y != INF:
+		var rel := hit_y - global_position.y
+		if rel >= 1.48:
+			return "head"
+		if rel <= 0.75:
+			return "leg"
+		return "body"
 	if _shape_part.is_empty():
 		var idx := 0
 		for c in get_children():

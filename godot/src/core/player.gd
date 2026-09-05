@@ -161,12 +161,49 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 				hp_changed.emit(hp))
 
 
+# Можно ли сейчас стрелять/кастовать. Паритет web canAct/canUse (weapons.js:82, abilities.js:108).
+# Раньше этой проверки НЕ БЫЛО: стрелять и кастовать удавалось мёртвым, в фазу закупки,
+# в стане и на тяге (кокон/крюк/воронка). Это обесценивало весь контроль — Табун, клоны,
+# крюк и воронка не мешали цели действовать.
+func can_act() -> bool:
+	if dead:
+		return false
+	var t := Time.get_ticks_msec() / 1000.0
+	if t < stun_until:
+		return false
+	if t < forced_until and forced_to != Vector3.INF:
+		return false  # тянет коконом/крюком/воронкой
+	var mt := Match.find(get_tree())
+	if mt and mt.phase == Match.Phase.BUY:
+		return false
+	return true
+
+
 func round_reset() -> void:
 	hp = int(Balance.RULES["BASE_HP"])
 	dead = false
 	visible = true
 	set_collision_layer_value(1, true)
 	velocity = Vector3.ZERO
+	# снять CC, иначе стан/слепота/тяга переезжают в новый раунд
+	stun_until = 0.0
+	blind_until = 0.0
+	slow_until = 0.0
+	slow_mul = 1.0
+	levit_until = 0.0
+	banquet_until = 0.0
+	forced_until = 0.0
+	forced_to = Vector3.INF
+	# заряды способностей и боезапас — иначе всё потраченное в первом раунде пропадало
+	# до конца матча (заряды выдавались только в Ability._ready)
+	var kit := get_node_or_null("Kit")
+	if kit:
+		for ab in kit.get_children():
+			if ab.has_method("round_reset"):
+				ab.call("round_reset")
+	var rig := get_node_or_null("WeaponRig") as WeaponRig
+	if rig:
+		rig.reset_loadout()
 	hp_changed.emit(hp)
 
 
@@ -177,7 +214,27 @@ func give_weapon(id: String) -> void:
 var _shape_part := {}
 
 
-func part_at(shape_idx: int) -> String:
+# Зона попадания. ПО ВЫСОТЕ ТОЧКИ, а не по индексу шейпа — и вот почему:
+# у тела первым ребёнком идёт КАПСУЛА ДВИЖЕНИЯ Col (r=0.38, h=1.8), она охватывает и голову.
+# На высоте головы её сечение (~0.28) шире сферы головы (0.2), поэтому луч всегда попадал
+# именно в неё, part_at получал shape_idx=0 и возвращал «body» — ХЕДШОТЫ НЕ РАБОТАЛИ ВООБЩЕ,
+# урон 160 у «Вандала» не применялся ни разу. Старый тест этого не ловил: манекен в нём
+# собран без капсулы движения.
+# Пороги взяты с реальных хитбоксов сцены: HeadHit — сфера r=0.2 в центре y=1.68 (низ 1.48);
+# ноги — как в вебе (weapons.js:244: hit.point.y < origin + 0.75).
+const HEAD_MIN_Y := 1.48
+const LEG_MAX_Y := 0.75
+
+
+func part_at(shape_idx: int, hit_y: float = INF) -> String:
+	if hit_y != INF:
+		var rel := hit_y - global_position.y
+		if rel >= HEAD_MIN_Y * (1.0 if not crouch else 0.72):  # присед опускает голову
+			return "head"
+		if rel <= LEG_MAX_Y:
+			return "leg"
+		return "body"
+	# запасной путь (вызов без точки) — по имени шейпа
 	if _shape_part.is_empty():
 		var idx := 0
 		for c in get_children():

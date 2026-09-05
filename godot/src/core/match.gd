@@ -7,6 +7,8 @@ extends Node
 
 enum Phase { WAIT, BUY, LIVE, PLANTED, ROUND_END, MATCH_END }
 
+const MATCH_END_TIME := 12.0  # сколько показываем итог матча, потом новый матч (web backToLobby)
+
 var phase := Phase.WAIT
 var round_no := 0
 var score := { "A": 0, "B": 0 }
@@ -17,6 +19,7 @@ var _clock := 0.0
 # шип
 var spike_planted_at := Vector3.INF
 var plant_progress := 0.0     # сек удержания планта
+var _defuser: Node = null  # замок: кто именно разминирует (web defuseBusy)
 var defuse_accum := 0.0       # сек дефуза (половинки помнятся: web defuseHalfDone)
 var spike_carrier: Node3D = null
 
@@ -72,6 +75,7 @@ func start_round() -> void:
 	spike_planted_at = Vector3.INF
 	plant_progress = 0.0
 	defuse_accum = 0.0
+	_defuser = null
 	corpses.clear()
 	var sw := get_node("/root/Smokes")
 	(sw.get("smokes") as Array).clear()
@@ -116,11 +120,19 @@ func advance(dt: float) -> void:
 			if now() >= deadline:
 				if score["A"] >= int(Balance.RULES["ROUNDS_TO_WIN"]) or score["B"] >= int(Balance.RULES["ROUNDS_TO_WIN"]):
 					phase = Phase.MATCH_END
+					deadline = now() + MATCH_END_TIME
 					var w := "A" if score["A"] > score["B"] else "B"
 					match_ended.emit(w)
 					_broadcast_state()
+					phase_changed.emit(phase, deadline)  # на этом переходе сигнал раньше не шёл
 				else:
 					start_round()
+		Phase.MATCH_END:
+			# Раньше здесь стояло `_: pass` — дедлайн не выставлялся, и после пятого выигранного
+			# раунда игра зависала навсегда: второй матч был невозможен без перезапуска процесса.
+			# Паритет web backToLobby (server.js:263, 1425): показали итог — и начали заново.
+			if now() >= deadline:
+				start_match()
 		_:
 			pass
 
@@ -254,15 +266,24 @@ func try_plant(planter: Node, in_site: bool, holding: bool, dt: float) -> void:
 func try_defuse(defuser: Node, holding: bool, dt: float) -> void:
 	if phase != Phase.PLANTED or String(defuser.get("team")) != _defenders():
 		return
-	var near := (defuser as Node3D).global_position.distance_to(spike_planted_at) < 2.2
-	if not near or not holding:
-		# половинка помнится (web defuseHalfDone): срезаем до половины, не до нуля
-		var half := float(Balance.RULES["DEFUSE_TIME"]) * 0.5
-		if defuse_accum >= half:
-			defuse_accum = half
-		else:
-			defuse_accum = 0.0
+	if int(defuser.get("hp")) <= 0:
 		return
+	# ЗАМОК ВЛАДЕЛЬЦА (паритет web defuseBusy, server.js:606). Без него defuse_accum был
+	# общим счётчиком: двое защитников у шипа разминировали за 3.5 с вместо 7, трое — за 2.33,
+	# а любой стоящий рядом и НЕ жмущий F каждый кадр срезал чужой прогресс.
+	if _defuser != null and (not is_instance_valid(_defuser) or int(_defuser.get("hp")) <= 0):
+		_defuser = null  # прежний разминирующий умер — замок свободен
+	if _defuser != null and _defuser != defuser:
+		return
+	var near := (defuser as Node3D).global_position.distance_to(spike_planted_at) < 2.8
+	if not near or not holding:
+		if _defuser == defuser:
+			_defuser = null
+			# половинка помнится (web defuseHalfDone): срезаем до половины, не до нуля
+			var half := float(Balance.RULES["DEFUSE_TIME"]) * 0.5
+			defuse_accum = half if defuse_accum >= half else 0.0
+		return
+	_defuser = defuser
 	defuse_accum += dt
 	if defuse_accum >= float(Balance.RULES["DEFUSE_TIME"]):
 		spike_defused.emit()

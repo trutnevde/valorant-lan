@@ -25,8 +25,19 @@ func _find_player() -> FpsPlayer:
 
 
 func _ready() -> void:
+	round_reset()
+
+
+# Выдача зарядов на раунд. ВЫЗЫВАЕТСЯ ИЗ player.round_reset НА КАЖДЫЙ РАУНД — раньше заряды
+# выдавались только здесь, в _ready, то есть один раз за всю игру: потратил C/Q/E в первом
+# раунде — и до конца матча их нет (кроме сигнатурки с автоперезарядкой). Это било по 30 из
+# 40 способностей всех десяти агентов.
+func round_reset() -> void:
 	if key != "X":
 		charges = int(Balance.CHARACTERS[char_id]["abilities"][key].get("charges", 1))
+	_sig_ready_at = 0.0
+	_pending_point = Vector3.INF
+	used.emit(charges)
 
 
 func _now() -> float:
@@ -39,8 +50,8 @@ func _is_signature() -> bool:
 
 
 func _physics_process(_dt: float) -> void:
-	if player == null or player.dead:
-		return
+	if player == null or not player.can_act():
+		return  # мёртв / стан / тяга / закупка — паритет web canUse
 	# автоперезарядка сигнатурки
 	if _is_signature() and _sig_ready_at > 0.0 and _now() >= _sig_ready_at:
 		var mx := int(Balance.CHARACTERS[char_id]["abilities"][key].get("charges", 1))

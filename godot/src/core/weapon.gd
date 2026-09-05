@@ -139,6 +139,10 @@ func _ads_fov() -> float:
 
 func try_shoot(is_click: bool) -> void:
 	var t := _now()
+	# паритет web canAct (weapons.js:82): мёртвым, в закупке, в стане и на тяге не стреляют.
+	# Раньше проверки не было — клик по кнопке в buy-меню одновременно жал на курок.
+	if not player.can_act():
+		return
 	if reloading_until > _now() or t < ready_at:
 		return
 	# ножи Макса перекрывают обычное оружие (web weapons.js:147)
@@ -257,7 +261,7 @@ func _fire_ray() -> void:
 	_spawn_tracer(origin, res["position"] as Vector3)
 	_spawn_decal(res["position"] as Vector3, res["normal"] as Vector3)
 	if collider.has_method("part_at") and collider.has_method("take_hit"):
-		var part: String = collider.call("part_at", res["shape"] as int)
+		var part: String = collider.call("part_at", res["shape"] as int, (res["position"] as Vector3).y)
 		var wd := w()
 		var base := float(wd["head"]) if part == "head" else (float(wd["leg"]) if part == "leg" else float(wd["dmg"]))
 		var dmg := roundi(base * falloff_mult(dist))
@@ -286,7 +290,7 @@ func _fire_knife() -> void:
 	var collider: Object = res["collider"]
 	_spawn_tracer(origin, res["position"] as Vector3)
 	if collider.has_method("part_at") and collider.has_method("take_hit"):
-		var part: String = collider.call("part_at", res["shape"] as int)
+		var part: String = collider.call("part_at", res["shape"] as int, (res["position"] as Vector3).y)
 		var dmg := int(Balance.ABILITY["KNIFE_HEAD"] if part == "head" else Balance.ABILITY["KNIFE_DMG"])
 		if NetHub.online():
 			NetHub.report_hit(collider as Node, dmg, part, player, "knives")
