@@ -79,6 +79,9 @@ func reset_loadout() -> void:
 
 
 func equip(id: String) -> void:
+	# Смена ствола ОТМЕНЯЕТ перезарядку — иначе это бесплатный мгновенный релоад в один
+	# хоткей: жмёшь 2 и 1, и магазин полон без ожидания.
+	reloading_until = -1.0
 	current_id = id
 	if not ammo.has(id) and not bool(w().get("melee", false)):
 		ammo[id] = { "mag": int(w()["mag"]), "reserve": int(w()["reserve"]) }
@@ -252,7 +255,17 @@ func _fire_ray() -> void:
 	var origin := player.eye_pos()
 	var dir := player.aim_dir()
 	var s := spread()
-	dir = (dir + Vector3(rng.randf() - 0.5, rng.randf() - 0.5, rng.randf() - 0.5) * s * 2.0).normalized()
+	# Разброс — ДИСК В ПЛОСКОСТИ ПРИЦЕЛА, а не куб по мировым осям: кубом разброс зависел
+	# от того, куда смотришь (по диагонали мира он был шире), и по вертикали уводил иначе,
+	# чем по горизонтали. Берём равномерную точку в круге и раскладываем по right/up камеры.
+	var right := dir.cross(Vector3.UP)
+	if right.length_squared() < 0.0001:
+		right = Vector3.RIGHT
+	right = right.normalized()
+	var up := right.cross(dir).normalized()
+	var ang := rng.randf() * TAU
+	var rad := sqrt(rng.randf()) * s      # sqrt — иначе точки сгущаются к центру
+	dir = (dir + right * (cos(ang) * rad) + up * (sin(ang) * rad)).normalized()
 	var res := raycast(origin, dir, float(w().get("range", 200.0)) if bool(w().get("melee", false)) else 200.0)
 	if res.is_empty():
 		return

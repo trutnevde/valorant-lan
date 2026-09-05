@@ -136,6 +136,7 @@ func _process(_dt: float) -> void:
 	if kit_label:
 		kit_label.visible = false  # заменено панелью способностей
 	_refresh_abilities()
+	_crosshair_bloom()
 	if _tac_ability != null and Input.is_action_just_pressed("ui_cancel"):
 		_close_tac()
 	_process_match(_dt)
@@ -174,6 +175,24 @@ func _refresh_abilities() -> void:
 			ready = ch > 0
 			lbl2.text = "[%s] %s  ×%d" % [key, nm, ch]
 		lbl2.modulate = Color(1, 1, 1) if ready else Color(0.5, 0.52, 0.55)
+
+
+# Прицел «дышит» по фактическому разбросу — раньше он был статичен, и игрок никак не
+# видел, что бег, прыжок и спрей раздувают конус. Паритет web setCrosshairGap (hud.js).
+func _crosshair_bloom() -> void:
+	var v := get_node_or_null("ChV") as ColorRect
+	var h := get_node_or_null("ChH") as ColorRect
+	if v == null or h == null:
+		return
+	# разброс в радианах → пиксели полуэкрана через тангенс половины FOV
+	var s := weapon_rig.spread()
+	var half := get_viewport().get_visible_rect().size.y * 0.5
+	var px := clampf(tan(s) / maxf(0.001, tan(deg_to_rad(player.cam.fov) * 0.5)) * half, 3.0, 90.0)
+	var arm := 7.0
+	v.offset_top = -(px + arm)
+	v.offset_bottom = px + arm
+	h.offset_left = -(px + arm)
+	h.offset_right = px + arm
 
 
 func _on_hp(hp: int) -> void:
@@ -345,6 +364,12 @@ func _build_buy_menu() -> void:
 		btn.text = "%s — %d" % [Balance.WEAPONS[id]["name"], int(Balance.WEAPONS[id]["price"])]
 		btn.pressed.connect(_buy.bind(id))
 		grid.add_child(btn)
+	# броня — её вообще нельзя было купить, хотя Balance.ARMOR есть с самого начала
+	for ak: String in Balance.ARMOR:
+		var ab := Button.new()
+		ab.text = "%s — %d" % [Balance.ARMOR[ak]["name"], int(Balance.ARMOR[ak]["price"])]
+		ab.pressed.connect(_buy_armor.bind(ak))
+		grid.add_child(ab)
 	add_child(_buy_panel)
 
 
@@ -353,6 +378,13 @@ func _buy(id: String) -> void:
 		NetHub.node().rpc_id(1, "buy", id)
 	else:
 		_mt.try_buy(player, id)
+
+
+func _buy_armor(kind: String) -> void:
+	if NetHub.online() and not multiplayer.is_server():
+		NetHub.node().rpc_id(1, "buy_armor", kind)
+	else:
+		_mt.try_buy_armor(player, kind)
 
 
 func _phase_name(p: int) -> String:

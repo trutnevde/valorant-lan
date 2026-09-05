@@ -230,6 +230,16 @@ func buy(weapon_id: String) -> void:
 		_buy_ok.rpc_id(id, weapon_id, int(p.get("credits")))
 
 
+@rpc("any_peer", "reliable")
+func buy_armor(kind: String) -> void:
+	if not is_host():
+		return
+	var mt := Match.find(get_tree())
+	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_remote_sender_id())
+	if mt and p:
+		mt.try_buy_armor(p, kind)
+
+
 @rpc("authority", "reliable")
 func _buy_ok(weapon_id: String, credits: int) -> void:
 	var p := get_tree().current_scene.get_node_or_null("Player_%d" % multiplayer.get_unique_id())

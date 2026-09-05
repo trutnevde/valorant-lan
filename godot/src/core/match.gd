@@ -187,9 +187,16 @@ func _alive(tm: String) -> int:
 
 
 func _check_elimination() -> void:
-	if _alive(attack_team) == 0 and _alive(_defenders()) > 0:
+	var atk := _alive(attack_team)
+	var dfn := _alive(_defenders())
+	if atk == 0 and dfn == 0:
+		# ВЗАИМНЫЙ РАЗМЕН: обе команды легли в один тик. Раньше не срабатывала ни одна ветка
+		# и раунд не заканчивался вовсе — до истечения таймера. Шип не установлен, значит
+		# цель атаки не выполнена: раунд забирает защита.
+		end_round(_defenders(), "trade")
+	elif atk == 0:
 		end_round(_defenders(), "elim")
-	elif _alive(_defenders()) == 0 and _alive(attack_team) > 0:
+	elif dfn == 0:
 		end_round(attack_team, "elim")
 
 
@@ -325,6 +332,22 @@ func end_round(winner: String, reason: String) -> void:
 
 
 # ===== закупка (хост валидирует) =====
+# Броня: light 400/25, heavy 1000/50 (Balance.ARMOR). Дороже уже имеющейся — можно
+# доплатить, дешевле или столько же — отказ (паритет web server.js:510).
+func try_buy_armor(buyer: Node, kind: String) -> bool:
+	if phase != Phase.BUY or not Balance.ARMOR.has(kind):
+		return false
+	var a: Dictionary = Balance.ARMOR[kind]
+	var price := int(a["price"])
+	var value := int(a["value"])
+	if int(buyer.get("armor")) >= value or int(buyer.get("credits")) < price:
+		return false
+	buyer.set("credits", int(buyer.get("credits")) - price)
+	buyer.set("armor", value)
+	NetHub.push_combat(buyer)
+	return true
+
+
 func try_buy(buyer: Node, weapon_id: String) -> bool:
 	if phase != Phase.BUY:
 		return false

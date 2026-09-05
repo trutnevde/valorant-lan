@@ -39,6 +39,8 @@ var kills := 0
 var deaths := 0
 var ult := 0
 var dead := false
+var armor := 0          # броня: поглощает ARMOR_ABSORB урона, пока не кончится (web server.js:276)
+var tag_until := 0.0    # «tagging»: пуля вяжет ноги на 0.45с (web server.js:282)
 # статусы от способностей
 var blind_until := 0.0    # вспышки (белый экран — HUD)
 var stun_until := 0.0     # стан (движение заморожено)
@@ -136,8 +138,14 @@ func _ready() -> void:
 func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> void:
 	if hp <= 0:
 		return
+	# броня съедает часть урона, пока не кончится (паритет web server.js:276-279)
+	if armor > 0 and part != "ult":
+		var absorbed := mini(armor, roundi(dmg * float(Balance.RULES["ARMOR_ABSORB"])))
+		armor -= absorbed
+		dmg -= absorbed
 	hp -= dmg
 	last_dmg_t = Time.get_ticks_msec() / 1000.0
+	tag_until = last_dmg_t + TAG_TIME  # пуля вяжет ноги
 	hp_changed.emit(hp)
 	# Урон от пуль БОТОВ шёл мимо сети целиком: боты зовут take_hit напрямую у хоста, минуя
 	# report_hit и Fx._sync. Клиент не узнавал, что его расстреливают. Рассылаем здесь.
@@ -196,6 +204,8 @@ func round_reset() -> void:
 	# снять CC, иначе стан/слепота/тяга переезжают в новый раунд
 	stun_until = 0.0
 	blind_until = 0.0
+	armor = 0        # броня не переезжает в новый раунд (web server.js:249)
+	tag_until = 0.0
 	slow_until = 0.0
 	slow_mul = 1.0
 	levit_until = 0.0
@@ -285,6 +295,8 @@ func max_speed() -> float:
 		s *= float(Balance.ABILITY["BANQUET_SPEED"])  # Финальный банкет Иры
 	if tt < gallop_until:
 		s *= float(Balance.ABILITY["GALLOP_MUL"])  # Галоп Конилия
+	if Time.get_ticks_msec() / 1000.0 < tag_until:
+		s *= TAG_SLOW  # словил пулю — вязнут ноги (паритет web player.js:63)
 	if _kon_ramp >= 2.0:
 		s *= 1.12  # пассивка Конилия «Разгон»: 2с бега прямо без стрельбы
 	s *= (1.0 - aim_t * 0.42)  # прицеливание замедляет (web player.js:151)
@@ -375,6 +387,9 @@ func _physics_process(dt: float) -> void:
 func _move_with_step_up(_dt: float) -> void:
 	StepMove.move(self)
 
+
+const TAG_SLOW := 0.62      # web player.js:63 и server.js:1309
+const TAG_TIME := 0.45      # web server.js:282
 
 var _remote_audio := false
 var _last_remote_pos := Vector3.ZERO

@@ -36,6 +36,8 @@ var stun_until := 0.0   # оглушён — стоит
 var levit_until := 0.0  # «Невесомость» Геры: слоу + мажет
 var slow_until := 0.0   # зоны/сигналка
 var slow_mul := 1.0
+var armor := 0
+var tag_until := 0.0    # «tagging» — серверно и для ботов (web server.js:1309)
 var last_kill_t := -99.0
 var last_dmg_t := -99.0
 
@@ -462,6 +464,8 @@ func _move(dt: float) -> void:
 		speed *= float(Balance.ABILITY["GERA_ULT_SLOW"])  # всплыл — вязнет
 	if t < slow_until:
 		speed *= slow_mul  # кислота/подкова/криспи/сигналка
+	if t < tag_until:
+		speed *= 0.62      # словил пулю — вязнет (паритет web server.js:1309)
 	agent.max_speed = speed
 	var desired := Vector3.ZERO
 	if dir.length() > 0.05:
@@ -593,6 +597,12 @@ func part_at(shape_idx: int, hit_y: float = INF) -> String:
 func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> void:
 	if hp <= 0:
 		return
+	# броня и теггинг — как у игрока (web server.js:276-282)
+	if armor > 0 and part != "ult":
+		var absorbed := mini(armor, roundi(dmg * float(Balance.RULES["ARMOR_ABSORB"])))
+		armor -= absorbed
+		dmg -= absorbed
+	tag_until = _now() + 0.45
 	hp -= dmg
 	last_dmg_t = _now()
 	if hp <= 0:
@@ -622,6 +632,8 @@ func round_reset() -> void:
 	engaging_until = -99.0
 	blind_until = 0.0
 	stun_until = 0.0
+	armor = 0
+	tag_until = 0.0
 	ai_site = ""
 	_hold_spot = Vector3.INF
 	_guard_ang = -1.0
