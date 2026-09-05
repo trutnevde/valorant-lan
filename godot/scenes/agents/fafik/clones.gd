@@ -59,9 +59,23 @@ func cast() -> void:
 	var vm := player.get_node_or_null("Head/Viewmodel") as Node3D
 	if vm:
 		vm.visible = false
+	# АВТОРОСПУСК по истечении CLONES_TIME. Раньше ульта распускалась ТОЛЬКО повторным X:
+	# не нажал (или отвлёкся) — и стрельба оставалась заблокированной до конца матча.
+	get_tree().create_timer(float(Balance.ABILITY["CLONES_TIME"])).timeout.connect(func() -> void:
+		if active and is_instance_valid(self):
+			_dismiss())
+
+
+# смерть и новый раунд тоже обязаны вернуть оружие
+func round_reset() -> void:
+	if active:
+		_dismiss()
+	super()
 
 
 func _dismiss() -> void:
+	if not active:
+		return
 	active = false
 	var fx := get_node("/root/Fx")
 	for cname in _clone_names:

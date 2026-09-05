@@ -15,4 +15,5 @@ func cast() -> void:
 		"fx": eye.x, "fy": eye.y, "fz": eye.z,
 		"dx": dir.x, "dy": dir.y, "dz": dir.z,
 		"owner_path": String(player.get_path()),
+		"curve": false,
 	})

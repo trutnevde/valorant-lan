@@ -88,15 +88,22 @@ func apply_stun(dur: float) -> void:
 func try_second_wind() -> bool:
 	if Time.get_ticks_msec() / 1000.0 >= ult_mark_until or ult_mark_pos == Vector3.INF:
 		return false
+	# метку СНИМАЕМ целиком (web server.js:293 — victim.ultMark = null): иначе позиция
+	# оставалась висеть и путала следующую проверку
+	var mark := ult_mark_pos
 	ult_mark_until = 0.0
+	ult_mark_pos = Vector3.INF
 	hp = int(Balance.RULES["BASE_HP"])
+	armor = 0        # возвращаешься живым, но без брони — она осталась на трупе
+	tag_until = 0.0
 	hp_changed.emit(hp)
+	NetHub.push_combat(self)  # остальные должны узнать, что боец жив
 	if NetHub.online() and multiplayer.is_server() and get_multiplayer_authority() != 1:
 		var n := NetHub.node()
 		if n:
-			n.rpc_id(get_multiplayer_authority(), "teleport_self", ult_mark_pos)
+			n.rpc_id(get_multiplayer_authority(), "teleport_self", mark)
 	else:
-		global_position = ult_mark_pos
+		global_position = mark
 		velocity = Vector3.ZERO
 	return true
 
@@ -206,6 +213,8 @@ func round_reset() -> void:
 	blind_until = 0.0
 	armor = 0        # броня не переезжает в новый раунд (web server.js:249)
 	tag_until = 0.0
+	ult_mark_until = 0.0
+	ult_mark_pos = Vector3.INF
 	slow_until = 0.0
 	slow_mul = 1.0
 	levit_until = 0.0
