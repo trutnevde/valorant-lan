@@ -66,19 +66,36 @@ texture_filter = 4`);
 const TILE = 3.0;
 const FLOOR_TILE = 6.5;
 
+// ===== пропсы (G12): ящики <= 3.2 м рисуем моделями Kenney (CC0), коллизия остаётся боксом =====
+// Геометрия и навмеш не меняются — только визуал. Крупные платформы остаются PBR-боксами.
+const PROP_MAX = 3.2;
+const PROPS = ['res://assets/models/props/prototype/crate-color.glb', 'res://assets/models/props/prototype/crate.glb'];
+let propCounter = 0;
+function propExt(i) {
+  const id = `prop_${i}`;
+  if (!extIds[id]) { extIds[id] = id; ext.push(`[ext_resource type="PackedScene" path="${PROPS[i]}" id="${id}"]`); }
+  return id;
+}
+
 function box(name, cx, cz, w, d, h, colorIdx, yBase = 0, kind = 'wall') {
   const meshId = `mesh${subId++}`, shapeId = `shape${subId++}`;
-  sub.push(`[sub_resource type="BoxMesh" id="${meshId}"]\nsize = Vector3(${w}, ${h}, ${d})`);
-  sub.push(`[sub_resource type="BoxShape3D" id="${shapeId}"]\nsize = Vector3(${w}, ${h}, ${d})`);
+  sub.push(`[sub_resource type="BoxMesh" id="${meshId}"]
+size = Vector3(${w}, ${h}, ${d})`);
+  sub.push(`[sub_resource type="BoxShape3D" id="${shapeId}"]
+size = Vector3(${w}, ${h}, ${d})`);
   const y = yBase + h / 2;
-  // масштаб UV по самой длинной горизонтали и высоте — тайл остаётся квадратным
   const uv = [Math.max(1, Math.round(Math.max(w, d) / TILE)), Math.max(1, Math.round(h / TILE))];
+  const asProp = kind === 'wood' && w <= PROP_MAX && d <= PROP_MAX && h <= PROP_MAX;
+  const visual = asProp
+    ? `[node name="Vis" parent="Geometry/${name}" instance=ExtResource("${propExt(propCounter++ % PROPS.length)}")]
+transform = Transform3D(${w}, 0, 0, 0, ${h}, 0, 0, 0, ${d}, 0, ${-h / 2}, 0)`
+    : `[node name="Mesh" type="MeshInstance3D" parent="Geometry/${name}"]
+mesh = SubResource("${meshId}")
+surface_material_override/0 = SubResource("${pbrMat(kind, colorIdx, uv)}")`;
   nodes.push(`[node name="${name}" type="StaticBody3D" parent="Geometry" groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, ${cx}, ${y}, ${cz})
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/${name}"]
-mesh = SubResource("${meshId}")
-surface_material_override/0 = SubResource("${pbrMat(kind, colorIdx, uv)}")
+${visual}
 
 [node name="Col" type="CollisionShape3D" parent="Geometry/${name}"]
 shape = SubResource("${shapeId}")`);
@@ -174,6 +191,7 @@ ambient_light_energy = 1.0
 reflected_light_source = 2
 tonemap_mode = 3
 tonemap_white = 6.0
+tonemap_exposure = 0.82
 ssao_enabled = true
 ssao_radius = 1.4
 ssao_intensity = 1.6
@@ -181,13 +199,22 @@ ssao_power = 1.5
 ssil_enabled = true
 ssil_intensity = 0.55
 glow_enabled = true
-glow_intensity = 0.55
-glow_strength = 0.9
+glow_intensity = 0.32
+glow_strength = 0.85
 glow_bloom = 0.05
 glow_hdr_threshold = 1.15
 adjustment_enabled = true
 adjustment_contrast = 1.06
-adjustment_saturation = 1.08`);
+adjustment_saturation = 1.08
+fog_enabled = true
+fog_light_color = Color(0.58, 0.64, 0.74, 1)
+fog_density = 0.0045
+fog_sky_affect = 0.08
+volumetric_fog_enabled = true
+volumetric_fog_density = 0.007
+volumetric_fog_albedo = Color(0.9, 0.93, 1, 1)
+volumetric_fog_length = 96.0
+volumetric_fog_sky_affect = 0.04`);
 
 const out = `[gd_scene load_steps=${ext.length + sub.length + 1} format=3]
 

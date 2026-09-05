@@ -640,6 +640,9 @@ func round_reset() -> void:
 	stun_until = 0.0
 	armor = 0
 	tag_until = 0.0
+	var bv := get_node_or_null("BodyVis")
+	if bv and bv.has_method("round_reset"):
+		bv.call("round_reset")
 	ai_site = ""
 	_hold_spot = Vector3.INF
 	_guard_ang = -1.0

@@ -22,13 +22,9 @@ func _load_meta() -> void:
 	if scene == null:
 		return
 	var raw := "{}"
-	if scene.has_meta("map_meta"):
-		raw = scene.get_meta("map_meta")
-	else:
-		for c in scene.get_children():
-			if c.has_meta("map_meta"):
-				raw = c.get_meta("map_meta")
-				break
+	var holder := _find_meta(scene, 3)
+	if holder:
+		raw = holder.get_meta("map_meta")
 	var meta = JSON.parse_string(raw)
 	if meta is Dictionary:
 		_walls = meta.get("walls_aabb", [])
@@ -38,6 +34,20 @@ func _load_meta() -> void:
 			_sites["A"] = meta["site_a"]
 		if meta.has("site_b"):
 			_sites["B"] = meta["site_b"]
+
+
+# карта бывает вложена в обёртку (lan_game, agent_eyes) — мету ищем вглубь, иначе миникарта
+# рисовала одни точки без стен
+func _find_meta(n: Node, depth: int) -> Node:
+	if n.has_meta("map_meta"):
+		return n
+	if depth <= 0:
+		return null
+	for c in n.get_children():
+		var f := _find_meta(c, depth - 1)
+		if f:
+			return f
+	return null
 
 
 func _process(dt: float) -> void:

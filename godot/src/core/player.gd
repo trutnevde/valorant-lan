@@ -189,6 +189,11 @@ func take_hit(dmg: int, part: String, attacker: Node = null, weapon := "") -> vo
 # Раньше этой проверки НЕ БЫЛО: стрелять и кастовать удавалось мёртвым, в фазу закупки,
 # в стане и на тяге (кокон/крюк/воронка). Это обесценивало весь контроль — Табун, клоны,
 # крюк и воронка не мешали цели действовать.
+# для вьюмодели: присед камеры при приземлении (web p.landBob)
+func land_bob() -> float:
+	return _land_bob
+
+
 func can_act() -> bool:
 	if dead:
 		return false
@@ -232,6 +237,9 @@ func round_reset() -> void:
 	var rig := get_node_or_null("WeaponRig") as WeaponRig
 	if rig:
 		rig.reset_loadout()
+	var bv := get_node_or_null("BodyVis")
+	if bv and bv.has_method("round_reset"):
+		bv.call("round_reset")  # поза смерти -> стойка
 	hp_changed.emit(hp)
 
 

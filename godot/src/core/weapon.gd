@@ -326,7 +326,11 @@ func _play_shot() -> void:
 	shot_sfx.pitch_scale = 0.95 + rng.randf() * 0.1
 	shot_sfx.play()
 	# дульная вспышка (G10): свет + сноп искр от ствола
-	Vfx.muzzle(self, player.eye_pos() + player.aim_dir() * 0.6, player.aim_dir())
+	var vm := get_node_or_null("../Head/Viewmodel")
+	var mpos := player.eye_pos() + player.aim_dir() * 0.6
+	if vm and vm.has_method("muzzle_pos"):
+		mpos = vm.call("muzzle_pos")  # из дула вьюмодели
+	Vfx.muzzle(self, mpos, player.aim_dir())
 
 
 func _spawn_tracer(from: Vector3, to: Vector3) -> void:

@@ -1,0 +1,25 @@
+[remap]
+
+importer="wavefront_obj"
+importer_version=1
+type="Mesh"
+uid="uid://b6ycywqfxwmkv"
+path="res://.godot/imported/Rifle.obj-61a6f6c478bf485ab1b9947447495c5e.mesh"
+
+[deps]
+
+files=["res://.godot/imported/Rifle.obj-61a6f6c478bf485ab1b9947447495c5e.mesh"]
+
+source_file="res://assets/models/weapons/quaternius/Rifle.obj"
+dest_files=["res://.godot/imported/Rifle.obj-61a6f6c478bf485ab1b9947447495c5e.mesh", "res://.godot/imported/Rifle.obj-61a6f6c478bf485ab1b9947447495c5e.mesh"]
+
+[params]
+
+generate_tangents=true
+generate_lods=true
+generate_shadow_mesh=true
+generate_lightmap_uv2=false
+generate_lightmap_uv2_texel_size=0.2
+scale_mesh=Vector3(1, 1, 1)
+offset_mesh=Vector3(0, 0, 0)
+force_disable_mesh_compression=false

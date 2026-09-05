@@ -17,6 +17,10 @@ var _map_ids: Array[String] = []
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+	# главные действия — акцентной бирюзой, второстепенные — стеклом
+	%HostBtn.theme_type_variation = &"PrimaryButton"
+	%TrainBtn.theme_type_variation = &"PrimaryButton"
+	%StartBtn.theme_type_variation = &"PrimaryButton"
 	for id: String in Balance.CHARACTERS:
 		_char_ids.append(id)
 		char_pick.add_item("%s — %s" % [Balance.CHARACTERS[id]["name"], Balance.CHARACTERS[id]["title"]])

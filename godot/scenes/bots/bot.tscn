@@ -2,7 +2,7 @@
 
 [ext_resource type="Script" path="res://src/bots/bot.gd" id="1"]
 [ext_resource type="AudioStream" path="res://assets/audio/gun_rifle.wav" id="2"]
-[ext_resource type="Script" path="res://src/agents/body_vis.gd" id="3"]
+[ext_resource type="Script" path="res://src/agents/char_rig.gd" id="3"]
 
 [sub_resource type="SceneReplicationConfig" id="botrepl"]
 properties/0/path = NodePath(".:position")

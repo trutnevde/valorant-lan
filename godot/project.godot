@@ -17,6 +17,7 @@ Fx="*res://src/agents/fx.gd"
 Smokes="*res://src/agents/effects/smoke_world.gd"
 Ears="*res://src/audio/ears.gd"
 Quality="*res://src/core/quality.gd"
+Ui="*res://src/ui/ui_boot.gd"
 
 [audio]
 

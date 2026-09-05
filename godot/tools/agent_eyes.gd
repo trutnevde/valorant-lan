@@ -13,6 +13,7 @@ var _frames := 90
 var _out := "build/eyes.png"
 var _cam_mode := "over"
 var _yaw := 0.0
+var _near := ""   # --near=<группа>: встать в 2.5 м перед первым узлом группы (кроме своего игрока)
 
 
 func _ready() -> void:
@@ -27,6 +28,8 @@ func _ready() -> void:
 			_cam_mode = arg.substr(6)
 		elif arg.begins_with("--yaw="):
 			_yaw = deg_to_rad(float(arg.substr(6)))
+		elif arg.begins_with("--near="):
+			_near = arg.substr(7)
 	if _target_scene != "":
 		var packed: PackedScene = load(_target_scene)
 		if packed == null:
@@ -40,7 +43,8 @@ func _ready() -> void:
 
 
 func _ensure_camera(root: Node) -> void:
-	if _find_camera(root) != null:
+	# --cam=free: своя камера даже если у сцены есть камера игрока (обзор матча сверху)
+	if _find_camera(root) != null and _cam_mode != "free":
 		return  # у сцены своя камера — не мешаем
 	var w := 60.0
 	var d := 60.0
@@ -79,9 +83,30 @@ func _find_camera(n: Node) -> Camera3D:
 func _snap() -> void:
 	for i in _frames:
 		await get_tree().process_frame
+	if _near != "":
+		_frame_near()
+		for i in 12:
+			await get_tree().process_frame
 	var img: Image = get_viewport().get_texture().get_image()
 	var abs_out := _out if _out.is_absolute_path() else ProjectSettings.globalize_path("res://" + _out)
 	DirAccess.make_dir_recursive_absolute(abs_out.get_base_dir())
 	var err := img.save_png(abs_out)
 	print("agent_eyes: ", "OK " + abs_out if err == OK else "FAIL err=" + str(err))
 	get_tree().quit(0 if err == OK else 1)
+
+
+# камера вплотную к бойцу из группы — пруф для моделей/анимаций (не свой игрок)
+func _frame_near() -> void:
+	for n in get_tree().get_nodes_in_group(_near):
+		if n is FpsPlayer:
+			continue
+		var t := n as Node3D
+		var cam := Camera3D.new()
+		cam.fov = 55.0
+		add_child(cam)
+		var fwd := -t.global_transform.basis.z
+		cam.global_position = t.global_position + fwd * 2.6 + Vector3(0, 1.4, 0)
+		cam.look_at(t.global_position + Vector3(0, 1.0, 0), Vector3.UP)
+		cam.current = true
+		print("agent_eyes: камера у ", t.name)
+		return

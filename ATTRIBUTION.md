@@ -23,6 +23,20 @@
 Godot-порт использует те же наборы, скопированные в `godot/assets/textures/<набор>/` (фаза G10):
 стены и ступени, пол игровой зоны, деревянные ящики. Лицензия та же — CC0.
 
+## 3D-модели Godot-порта (CC0), фаза G12 «Визуал»
+
+Все паки — CC0, вендорены в `godot/assets/models/…`, рядом с каждым лежит `LICENSE.txt` из архива.
+
+| В игре | Автор / пак | Источник | Файлы |
+|--------|-------------|----------|-------|
+| Бойцы (риг Mixamo, анимации Idle/Walk/Run/Jump/Death, 6 текстур одежды) | Quaternius — «Animated Human» | зеркало на OpenGameArt: <https://opengameart.org/content/animated-human-low-poly> | `characters/quaternius/human.fbx`, `Textures/*.png` |
+| Автоматы и винтовки | Quaternius — «GunPack Vol.1» (AK-47, винтовка) | <https://opengameart.org/content/low-poly-guns> | `weapons/quaternius/*.obj`, `*.mtl`, `*Texture.png` |
+| Пистолеты, ПП, дробовики | Kenney — «Blaster Kit» 2.1 | <https://kenney.nl/assets/blaster-kit> | `weapons/blaster/*.glb`, `Textures/colormap.png` |
+| Ящики на картах | Kenney — «Prototype Kit» | <https://kenney.nl/assets/prototype-kit> | `props/prototype/*.glb`, `Textures/colormap.png` |
+
+Стволы «по мотивам»: реальные названия оружия из веб-баланса сопоставлены низкополигональным
+моделям без копирования чужих игровых ассетов (правило 6).
+
 ## Небо / освещение (IBL) — Poly Haven (CC0)
 
 | В игре | Слаг | Файл |

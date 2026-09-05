@@ -22,92 +22,102 @@ anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 
-[node name="Panel" type="VBoxContainer" parent="Center"]
+[node name="Card" type="PanelContainer" parent="Center"]
 layout_mode = 2
-custom_minimum_size = Vector2(520, 0)
+
+[node name="Panel" type="VBoxContainer" parent="Center/Card"]
+layout_mode = 2
+custom_minimum_size = Vector2(560, 0)
 theme_override_constants/separation = 14
 
-[node name="Title" type="Label" parent="Center/Panel"]
+[node name="Title" type="Label" parent="Center/Card/Panel"]
 layout_mode = 2
-text = "VALORANT: ЛОКАЛКА — GODOT"
+theme_type_variation = &"Title"
+text = "VALORANT: ЛОКАЛКА"
 horizontal_alignment = 1
 
-[node name="MenuBox" type="VBoxContainer" parent="Center/Panel"]
+[node name="Sub" type="Label" parent="Center/Card/Panel"]
+layout_mode = 2
+theme_type_variation = &"Muted"
+text = "тактический шутер для игры с друзьями по LAN"
+horizontal_alignment = 1
+
+[node name="MenuBox" type="VBoxContainer" parent="Center/Card/Panel"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="NameEdit" type="LineEdit" parent="Center/Panel/MenuBox"]
+[node name="NameEdit" type="LineEdit" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 placeholder_text = "Позывной"
 
-[node name="IpEdit" type="LineEdit" parent="Center/Panel/MenuBox"]
+[node name="IpEdit" type="LineEdit" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "26."
 placeholder_text = "IP хоста (Radmin 26.x.x.x)"
 
-[node name="Btns" type="HBoxContainer" parent="Center/Panel/MenuBox"]
+[node name="Btns" type="HBoxContainer" parent="Center/Card/Panel/MenuBox"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="HostBtn" type="Button" parent="Center/Panel/MenuBox/Btns"]
+[node name="HostBtn" type="Button" parent="Center/Card/Panel/MenuBox/Btns"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "СОЗДАТЬ ИГРУ"
 
-[node name="JoinBtn" type="Button" parent="Center/Panel/MenuBox/Btns"]
+[node name="JoinBtn" type="Button" parent="Center/Card/Panel/MenuBox/Btns"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
 text = "ПОДКЛЮЧИТЬСЯ"
 
-[node name="TrainBtn" type="Button" parent="Center/Panel/MenuBox"]
+[node name="TrainBtn" type="Button" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "МАТЧ С БОТАМИ (офлайн: раунды, закупка, шип)"
 
-[node name="RangeBtn" type="Button" parent="Center/Panel/MenuBox"]
+[node name="RangeBtn" type="Button" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "ТИР (пострелять по ботам без раундов)"
 
-[node name="LobbyBox" type="VBoxContainer" parent="Center/Panel"]
+[node name="LobbyBox" type="VBoxContainer" parent="Center/Card/Panel"]
 unique_name_in_owner = true
 visible = false
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="PlayerList" type="ItemList" parent="Center/Panel/LobbyBox"]
+[node name="PlayerList" type="ItemList" parent="Center/Card/Panel/LobbyBox"]
 unique_name_in_owner = true
 layout_mode = 2
 custom_minimum_size = Vector2(0, 180)
 
-[node name="CharPick" type="OptionButton" parent="Center/Panel/MenuBox"]
+[node name="CharPick" type="OptionButton" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="TeamBtn" type="Button" parent="Center/Panel/LobbyBox"]
+[node name="TeamBtn" type="Button" parent="Center/Card/Panel/LobbyBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "СМЕНИТЬ КОМАНДУ"
 
-[node name="DiffPick" type="OptionButton" parent="Center/Panel/MenuBox"]
+[node name="DiffPick" type="OptionButton" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="MapPick" type="OptionButton" parent="Center/Panel/MenuBox"]
+[node name="MapPick" type="OptionButton" parent="Center/Card/Panel/MenuBox"]
 unique_name_in_owner = true
 layout_mode = 2
 
-[node name="StartBtn" type="Button" parent="Center/Panel/LobbyBox"]
+[node name="StartBtn" type="Button" parent="Center/Card/Panel/LobbyBox"]
 unique_name_in_owner = true
 layout_mode = 2
 text = "В БОЙ"
 
-[node name="Status" type="Label" parent="Center/Panel"]
+[node name="Status" type="Label" parent="Center/Card/Panel"]
 unique_name_in_owner = true
 layout_mode = 2
 horizontal_alignment = 1
