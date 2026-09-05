@@ -23,6 +23,12 @@ var _defuser: Node = null  # замок: кто именно разминиру�
 var defuse_accum := 0.0       # сек дефуза (половинки помнятся: web defuseHalfDone)
 var spike_carrier: Node3D = null
 
+# Эко-серия проигрышей — паритет web server.js:244-245. ЧЕСТНО про правило 3: этих чисел
+# НЕТ в shared.js (в вебе они тоже захардкожены в server.js), поэтому взять их из
+# balance.gd нельзя — держим здесь со ссылкой на источник.
+const LOSS_STREAK_REWARD := [1900, 1900, 2400, 2900]
+var loss_streak := { "A": 0, "B": 0 }
+
 signal phase_changed(phase: int, deadline: float)
 signal score_changed(a: int, b: int, attack_team: String)
 signal round_ended(winner: String, reason: String)
@@ -58,6 +64,7 @@ func start_match() -> void:
 	round_no = 0
 	score = { "A": 0, "B": 0 }
 	attack_team = "A" if randi() % 2 == 0 else "B"
+	loss_streak = { "A": 0, "B": 0 }
 	for c in _combatants():
 		c.set("credits", int(Balance.RULES["START_CREDITS"]))
 		c.set("kills", 0)
@@ -77,6 +84,7 @@ func start_round() -> void:
 	defuse_accum = 0.0
 	_defuser = null
 	corpses.clear()
+	get_node("/root/Fx").call("clear_world")  # мусор прошлого раунда с карты долой
 	var sw := get_node("/root/Smokes")
 	(sw.get("smokes") as Array).clear()
 	(sw.get("no_smoke_zones") as Array).clear()
@@ -301,9 +309,15 @@ func end_round(winner: String, reason: String) -> void:
 	phase = Phase.ROUND_END
 	deadline = now() + float(Balance.RULES["ROUND_END_TIME"])
 	score[winner] = int(score[winner]) + 1
+	# проигравшая команда копит серию: чем дольше проигрывает, тем больше компенсация
+	var loser := "B" if winner == "A" else "A"
+	loss_streak[winner] = 0
+	loss_streak[loser] = mini(3, int(loss_streak[loser]) + 1)
+	var loss_reward: int = LOSS_STREAK_REWARD[int(loss_streak[loser])]
 	for c in _combatants():
 		var win := String(c.get("team")) == winner
-		_give_credits(c, int(Balance.RULES["WIN_REWARD"]) if win else int(Balance.RULES["LOSS_REWARD"]))
+		_give_credits(c, int(Balance.RULES["WIN_REWARD"]) if win else loss_reward)
+	NetHub.push_all_combat()  # кредиты изменились — клиенты должны увидеть
 	round_ended.emit(winner, reason)
 	score_changed.emit(int(score["A"]), int(score["B"]), attack_team)
 	_broadcast_state()

@@ -188,6 +188,12 @@ func _on_hp(hp: int) -> void:
 var _match_label: Label
 var _feed: VBoxContainer
 var _buy_panel: PanelContainer
+var _bar_bg: ColorRect
+var _bar_fill: ColorRect
+var _bar_label: Label
+var _board: PanelContainer
+var _board_grid: GridContainer
+var _snd := {}
 var _mt: Match
 
 
@@ -213,10 +219,97 @@ func _setup_match_ui() -> void:
 	_feed.offset_top = 8.0
 	_feed.offset_right = -12.0
 	add_child(_feed)
+	# полоса планта/дефуза: без неё о работе у шипа сообщал только текст (правило 7)
+	_bar_bg = ColorRect.new()
+	_bar_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_bar_bg.offset_left = -170.0
+	_bar_bg.offset_right = 170.0
+	_bar_bg.offset_top = -190.0
+	_bar_bg.offset_bottom = -172.0
+	_bar_bg.color = Color(0, 0, 0, 0.55)
+	_bar_bg.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bar_bg.visible = false
+	add_child(_bar_bg)
+	_bar_fill = ColorRect.new()
+	_bar_fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bar_bg.add_child(_bar_fill)
+	_bar_label = Label.new()
+	_bar_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_bar_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_bar_label.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_bar_bg.add_child(_bar_label)
 	_mt.killfeed.connect(_on_kill)
 	_mt.round_ended.connect(func(w: String, r: String) -> void: _announce("Раунд: победа %s (%s)" % [w, r]))
 	_mt.match_ended.connect(func(w: String) -> void: _announce("МАТЧ ОКОНЧЕН — ПОБЕДА %s" % w))
+	_build_scoreboard()
+	_mt.round_ended.connect(func(w: String, _r: String) -> void:
+		_snd_play("confirm" if w == player.team else "hurt", 0.0, 1.0 if w == player.team else 0.8))
+	_mt.match_ended.connect(func(_w: String) -> void: _board.visible = true)
+	_mt.phase_changed.connect(func(ph: int, _d: float) -> void:
+		if ph == Match.Phase.LIVE:
+			_snd_play("ting", -4.0, 0.7)   # раунд пошёл — сигнал на слух, а не надписью
+		elif ph == Match.Phase.BUY:
+			_board.visible = false)
 	_build_buy_menu()
+
+
+# Таб-скорборд: счёт, киллы/смерти, деньги. Показывается по удержанию Tab и сам всплывает
+# на конце матча — раньше итог матча вообще негде было посмотреть.
+func _build_scoreboard() -> void:
+	_board = PanelContainer.new()
+	_board.set_anchors_preset(Control.PRESET_CENTER)
+	_board.offset_left = -330.0
+	_board.offset_right = 330.0
+	_board.offset_top = -190.0
+	_board.offset_bottom = 190.0
+	_board.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_board.visible = false
+	_board_grid = GridContainer.new()
+	_board_grid.columns = 5
+	_board_grid.add_theme_constant_override("h_separation", 18)
+	_board.add_child(_board_grid)
+	add_child(_board)
+
+
+func _refresh_scoreboard() -> void:
+	if _board == null or not _board.visible or _mt == null:
+		return
+	for c in _board_grid.get_children():
+		c.queue_free()
+	var head := ["БОЕЦ", "АГЕНТ", "К", "С", "$"]
+	for h: String in head:
+		var hl := Label.new()
+		hl.text = h
+		hl.modulate = Color(0.7, 0.75, 0.8)
+		_board_grid.add_child(hl)
+	var rows: Array = _mt._combatants().duplicate()
+	rows.sort_custom(func(a: Node, b: Node) -> bool:
+		if String(a.get("team")) != String(b.get("team")):
+			return String(a.get("team")) < String(b.get("team"))
+		return int(a.get("kills")) > int(b.get("kills")))
+	for c in rows:
+		var ch: Dictionary = Balance.CHARACTERS.get(String(c.get("char_id")), {})
+		var tint := Color(0.45, 0.75, 1.0) if String(c.get("team")) == player.team else Color(1.0, 0.55, 0.45)
+		var cells := [String((c as Node).name), String(ch.get("name", "?")),
+			str(int(c.get("kills"))), str(int(c.get("deaths"))), "$" + str(int(c.get("credits")))]
+		for cell: String in cells:
+			var l := Label.new()
+			l.text = cell
+			l.modulate = tint
+			_board_grid.add_child(l)
+
+
+func _snd_play(nm: String, vol := 0.0, pitch := 1.0) -> void:
+	if not _snd.has(nm):
+		_snd[nm] = load("res://assets/audio/%s.ogg" % nm)
+	var pl := AudioStreamPlayer.new()
+	pl.stream = _snd[nm]
+	pl.volume_db = vol
+	pl.pitch_scale = pitch
+	pl.bus = "UI"
+	add_child(pl)
+	pl.finished.connect(pl.queue_free)
+	pl.play()
 
 
 func _announce(txt: String) -> void:
@@ -276,17 +369,53 @@ func _process_match(_dt: float) -> void:
 	if _mt == null or _match_label == null:
 		return
 	var left := maxf(0.0, _mt.deadline - _mt.now())
-	_match_label.text = "Раунд %d · A %d : %d B · %s · %d:%02d · $%d" % [
+	_match_label.text = "Раунд %d · A %d : %d B · %s · ТЫ: %s · %d:%02d · $%d" % [
 		_mt.round_no, int(_mt.score["A"]), int(_mt.score["B"]), _phase_name(_mt.phase),
-		int(left) / 60, int(left) % 60, player.credits]
+		_side_name(), int(left) / 60, int(left) % 60, player.credits]
 	if _mt.spike_carrier == player and _mt.phase == Match.Phase.LIVE:
 		_match_label.text += "  ·  ТЫ НЕСЁШЬ ШИП (4 — плант в сайте)"
+	_update_bar()
+	if _board:
+		if _mt.phase != Match.Phase.MATCH_END:
+			_board.visible = Input.is_action_pressed("scoreboard")
+		_refresh_scoreboard()
 	if Input.is_action_just_pressed("buy") and _mt.phase == Match.Phase.BUY:
 		_buy_panel.visible = not _buy_panel.visible
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE if _buy_panel.visible else Input.MOUSE_MODE_CAPTURED
 	if _mt.phase != Match.Phase.BUY and _buy_panel.visible:
 		_buy_panel.visible = false
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+# Полоса планта/дефуза — показывается ТОЛЬКО пока работа реально идёт.
+func _update_bar() -> void:
+	if _bar_bg == null or _mt == null:
+		return
+	var frac := 0.0
+	var caption := ""
+	var col := Color(0.95, 0.75, 0.2)
+	if _mt.phase == Match.Phase.LIVE and _mt.plant_progress > 0.0:
+		frac = clampf(_mt.plant_progress / float(Balance.RULES["PLANT_TIME"]), 0.0, 1.0)
+		caption = "УСТАНОВКА"
+	elif _mt.phase == Match.Phase.PLANTED and _mt.defuse_accum > 0.0:
+		frac = clampf(_mt.defuse_accum / float(Balance.RULES["DEFUSE_TIME"]), 0.0, 1.0)
+		caption = "РАЗМИНИРОВАНИЕ"
+		col = Color(0.35, 0.85, 1.0)
+	if frac <= 0.0:
+		_bar_bg.visible = false
+		return
+	_bar_bg.visible = true
+	_bar_fill.color = col
+	_bar_fill.position = Vector2(2, 2)
+	_bar_fill.size = Vector2((_bar_bg.size.x - 4) * frac, _bar_bg.size.y - 4)
+	_bar_label.text = caption
+
+
+# «за какую сторону играю» — без этого непонятно, ставить шип или защищать
+func _side_name() -> String:
+	if _mt == null or player == null:
+		return ""
+	return "АТАКА" if player.team == _mt.attack_team else "ЗАЩИТА"
 
 
 func _on_hit(part: String, dmg: int) -> void:

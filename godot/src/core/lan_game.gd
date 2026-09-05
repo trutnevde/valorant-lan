@@ -24,6 +24,10 @@ func _ready() -> void:
 	match_node = Match.new()
 	match_node.name = "Match"
 	add_child(match_node)
+	# звук и визуал шипа (правило 7: информация — звуком, а не надписью)
+	var spike_fx: Node3D = (load("res://src/agents/spike_fx.gd") as GDScript).new()
+	spike_fx.name = "SpikeFx"
+	add_child(spike_fx)
 
 	var atk := get_tree().get_nodes_in_group("spawn_attack")
 	var def := get_tree().get_nodes_in_group("spawn_defend")

@@ -50,12 +50,12 @@ func _spawn_logic(kind: String, data: Dictionary) -> bool:
 		"flash":
 			var orb: Node = (load("res://src/agents/effects/flash_orb.gd") as GDScript).new()
 			orb.set("data", data)
-			get_tree().current_scene.add_child(orb)
+			_attach(orb)
 		"fire_zone", "fire_wall":
 			var z: Node = (load("res://src/agents/effects/fire_zone.gd") as GDScript).new()
 			z.set("data", data)
 			z.set("is_wall", kind == "fire_wall")
-			get_tree().current_scene.add_child(z)
+			_attach(z)
 		"ult_mark":
 			# метка живёт на ХОСТОВОЙ копии игрока — смерть решает хост (try_second_wind)
 			var p := get_node_or_null(NodePath(String(data.get("owner_path", ""))))
@@ -77,16 +77,16 @@ func _spawn_logic(kind: String, data: Dictionary) -> bool:
 			g.set("data", data)
 			if data.has("cname"):
 				g.name = String(data["cname"]) + "_logic"
-			get_tree().current_scene.add_child(g)
+			_attach(g)
 		"cocoon":
 			var cl: Node = (load("res://src/agents/effects/cocoon.gd") as GDScript).new()
 			cl.set("data", data)
 			cl.name = String(data["cname"]) + "_logic"
-			get_tree().current_scene.add_child(cl)
+			_attach(cl)
 		"levit":
 			var lv: Node = (load("res://src/agents/effects/levit.gd") as GDScript).new()
 			lv.set("data", data)
-			get_tree().current_scene.add_child(lv)
+			_attach(lv)
 		_:
 			pass
 	return true
@@ -105,7 +105,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 			var c: Node = (load("res://src/agents/effects/clone_decoy.gd") as GDScript).new()
 			c.set("data", data)
 			c.name = String(data.get("cname", "Clone_x"))
-			get_tree().current_scene.add_child(c)
+			_attach(c)
 		"clone_gone", "clone_gone_req":
 			# клон исчез (лопнул/истёк/отозван) — убрать копию у всех
 			var gone := get_tree().current_scene.get_node_or_null(String(data["cname"]))
@@ -155,7 +155,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 			var tb := TurretBody.new()
 			tb.name = String(data["cname"])
 			tb.cname = String(data["cname"])
-			get_tree().current_scene.add_child(tb)
+			_attach(tb)
 			tb.global_position = Vector3(data["x"], 0, data["z"])
 		"trap_vis":
 			# сигналку видит только СВОЯ команда (врагам — сюрприз)
@@ -173,7 +173,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 				tmat.emission_enabled = true
 				tmat.emission = Color(0.9, 0.8, 0.3)
 				tm.material_override = tmat
-				get_tree().current_scene.add_child(tm)
+				_attach(tm)
 				tm.global_position = Vector3(data["x"], 0.05, data["z"])
 		"chicken":
 			var ch := MeshInstance3D.new()
@@ -184,7 +184,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 			var cmat := StandardMaterial3D.new()
 			cmat.albedo_color = Color(1.0, 0.85, 0.2)
 			ch.material_override = cmat
-			get_tree().current_scene.add_child(ch)
+			_attach(ch)
 			ch.global_position = Vector3(data["x"], 0.2, data["z"])
 		"chicken_move":
 			var chm := get_tree().current_scene.get_node_or_null(String(data["cname"])) as Node3D
@@ -209,7 +209,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 			var sh := CocoonShield.new()
 			sh.name = String(data["cname"])
 			sh.cname = String(data["cname"])
-			get_tree().current_scene.add_child(sh)
+			_attach(sh)
 			var v := get_node_or_null(NodePath(String(data["victim_path"]))) as Node3D
 			if v:
 				sh.global_position = v.global_position + Vector3(0, 1.1, 0)
@@ -226,7 +226,7 @@ func _fx(kind: String, data: Dictionary) -> void:
 					var ab := ArrowBody.new()
 					ab.name = String(data["cname"])
 					ab.cname = String(data["cname"])
-					get_tree().current_scene.add_child(ab)
+					_attach(ab)
 					var afrom := Vector3(data["fx"], data["fy"], data["fz"])
 					var ato := Vector3(data["tx"], data["ty"], data["tz"])
 					ab.global_position = afrom
@@ -367,7 +367,7 @@ func _vis_orb(data: Dictionary, color: Color) -> void:
 	mat.emission = color
 	mat.albedo_color = color
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	var from := Vector3(data["fx"], data["fy"], data["fz"])
 	var dir := Vector3(data["dx"], data["dy"], data["dz"])
 	m.global_position = from
@@ -388,7 +388,7 @@ func _vis_ring(pos: Vector3, r: float, color: Color, dur: float) -> void:
 	mat.emission = color
 	mat.albedo_color = color
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	m.global_position = pos
 	var tw := m.create_tween()
 	tw.tween_interval(dur)
@@ -426,7 +426,7 @@ func _vis_smoke(id: int, pos: Vector3, stink: bool) -> void:
 		m.material_override = mat
 		root.add_child(m)
 		m.position = lobe["off"]
-	get_tree().current_scene.add_child(root)
+	_attach(root)
 	root.global_position = pos + Vector3(0, r * 0.55, 0)
 	# распускание: за 0.35с из точки в полный объём (в вебе так же — дым «набухает»)
 	root.scale = Vector3.ONE * 0.15
@@ -449,7 +449,7 @@ func _vis_dome(pos: Vector3) -> void:
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	m.global_position = pos + Vector3(0, r * 0.4, 0)
 	var tw := m.create_tween()
 	tw.tween_interval(float(Balance.ABILITY["GERA_ULT_TIME"]))
@@ -470,7 +470,7 @@ func _vis_arrow(data: Dictionary) -> void:
 	mat.emission = Color(0.62, 0.91, 1.0)
 	mat.albedo_color = Color(0.62, 0.91, 1.0)
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	m.global_position = from
 	if from.distance_to(to) > 0.01:
 		m.look_at(to, Vector3.UP)
@@ -491,7 +491,7 @@ func _vis_corpse(pos: Vector3) -> void:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = Color(0.25, 0.1, 0.1)
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	m.global_position = pos + Vector3(0, 0.3, 0)
 	m.rotation.x = PI / 2
 	var tw := m.create_tween()
@@ -531,9 +531,27 @@ func _vis_wall(data: Dictionary, color: Color, dur: float) -> void:
 	mat.albedo_color = Color(color.r, color.g, color.b, 0.55)
 	mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.material_override = mat
-	get_tree().current_scene.add_child(m)
+	_attach(m)
 	m.global_position = (a + b) * 0.5 + Vector3(0, 1.2, 0)
 	m.look_at(m.global_position + (b - a).cross(Vector3.UP), Vector3.UP)
 	var tw := m.create_tween()
 	tw.tween_interval(dur)
 	tw.tween_callback(m.queue_free)
+
+
+# Мировые эффекты помечаем группой: без неё дымы, зоны, турели, сигналки, клоны и коконы
+# переживали смену раунда — новый раунд начинался с чужим мусором на карте.
+func _attach(n: Node) -> void:
+	var scene := get_tree().current_scene
+	if scene == null:
+		n.queue_free()  # headless-тесты без сцены: вешать некуда, узел не бросаем висеть
+		return
+	scene.add_child(n)
+	n.add_to_group("world_fx")
+
+
+# убрать всё, что наставили за раунд (зовёт Match.start_round)
+func clear_world() -> void:
+	for n in get_tree().get_nodes_in_group("world_fx"):
+		if is_instance_valid(n):
+			n.queue_free()

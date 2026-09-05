@@ -46,9 +46,10 @@ func test_elimination_and_economy() -> void:
 	m.advance(0.05)
 	assert_eq(m.phase, Match.Phase.ROUND_END, "элиминация закрыла раунд")
 	assert_eq(int(m.score["A"]), 1)
-	# деньги: киллер 800 + 200(килл) + 3000(победа); жертва 800 + 2400(поражение)
+	# деньги: киллер 800 + 200(килл) + 3000(победа); жертва 800 + 1900 (ПЕРВЫЙ проигрыш
+	# в серии — паритет web server.js:245, где lossReward = [1900,1900,2400,2900][streak])
 	assert_eq(int(a.get("credits")), 4000)
-	assert_eq(int(b.get("credits")), 3200)
+	assert_eq(int(b.get("credits")), 2700)
 	assert_eq(int(a.get("kills")), 1)
 	assert_eq(int(a.get("ult")), 1, "ульта только за килл")
 
@@ -59,13 +60,16 @@ func test_loss_then_buy_scenario() -> void:
 	a.set("hp", 0)  # A проиграла элиминацией
 	m.on_death(a, b, "classic", false)
 	m.advance(0.05)
-	assert_eq(int(a.get("credits")), 800 + 2400, "лузер: 800+2400")
+	assert_eq(int(a.get("credits")), 800 + 1900, "лузер: 800 + первая ступень эко-серии")
 	# следующий раунд: закупка вандала
 	m.advance(float(Balance.RULES["ROUND_END_TIME"]) + 0.1)
 	assert_eq(m.phase, Match.Phase.BUY, "второй раунд — закупка")
-	assert_true(m.try_buy(a, "vandal"), "3200 хватает на вандал 2900")
-	assert_eq(int(a.get("credits")), 3200 - 2900)
-	assert_eq(String(a.get("last_weapon")), "vandal")
+	# 2700 на вандал 2900 НЕ хватает — это и есть смысл эко-серии: после проигрыша
+	# приходится экономить. Берём то, что по карману.
+	assert_false(m.try_buy(a, "vandal"), "2700 на вандал 2900 не хватает")
+	assert_true(m.try_buy(a, "spectre"), "на спектр хватает")
+	assert_eq(int(a.get("credits")), 2700 - int(Balance.WEAPONS["spectre"]["price"]))
+	assert_eq(String(a.get("last_weapon")), "spectre")
 	assert_false(m.try_buy(a, "operator"), "на Оператор 4700 уже не хватает")
 
 

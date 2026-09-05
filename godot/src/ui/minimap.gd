@@ -130,8 +130,11 @@ func _draw() -> void:
 		if sp != Vector3.INF:
 			draw_circle(_w2m(sp.x, sp.z), 4.0, Color(1.0, 0.3, 0.2))
 		elif mt.spike_carrier and is_instance_valid(mt.spike_carrier):
-			var cp: Vector3 = (mt.spike_carrier as Node3D).global_position
-			draw_circle(_w2m(cp.x, cp.z), 3.0, Color(0.9, 0.7, 0.2))
+			# носителя шипа видит ТОЛЬКО своя команда — иначе защита бесплатно знает,
+			# кто несёт шип, и весь смысл разведки пропадает
+			if String(mt.spike_carrier.get("team")) == player.team:
+				var cp: Vector3 = (mt.spike_carrier as Node3D).global_position
+				draw_circle(_w2m(cp.x, cp.z), 3.0, Color(0.9, 0.7, 0.2))
 	# союзники
 	for c in get_tree().get_nodes_in_group("combatants"):
 		var n := c as Node3D
