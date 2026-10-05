@@ -61,14 +61,17 @@ shape = SubResource("${shapeId}")`);
 }
 
 const wallsAabb = [];
+const solidsAabb = [];   // ВСЕ боксы, через которые тело не перелезет (h > STEP_UP) — для navcheck
 (m.walls || []).forEach((wl, i) => {
   const [cx, cz, w, d, h, ci, yb] = wl;
   box(`Wall${i}`, cx, cz, w, d, h, ci ?? 1, yb || 0);
   if (h >= 2.9 && (yb || 0) < 1.5) wallsAabb.push([cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2]);
+  if (h > 0.45 && (yb || 0) < 0.5) solidsAabb.push([cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, h]);
 });
 (m.crates || []).forEach((cr, i) => {
   const [cx, cz, w, d, h, ci, yb] = cr;
   box(`Crate${i}`, cx, cz, w, d, h, ci ?? 4, yb || 0);
+  if (h > 0.45 && (yb || 0) < 0.5) solidsAabb.push([cx - w / 2, cz - d / 2, cx + w / 2, cz + d / 2, h]);
 });
 // лестницы: каждая ступень — бокс
 (m.stairs || []).forEach((st, i) => {
@@ -109,7 +112,7 @@ nodes.push(`[node name="Nav" type="NavigationRegion3D" parent="."]`);
 
 const meta = {
   map_id: m.id, size_w: m.SIZE.w, size_d: m.SIZE.d,
-  walls_aabb: wallsAabb,
+  walls_aabb: wallsAabb, solids_aabb: solidsAabb,
   site_a: [m.sites.A.x, m.sites.A.z], site_b: [m.sites.B.x, m.sites.B.z],
 };
 

@@ -268,423 +268,423 @@ size = Vector3(13, 4, 11)
 [sub_resource type="BoxShape3D" id="siteshape79"]
 size = Vector3(13, 4, 11)
 
-[node name="Map_duel" type="Node3D" unique_id=2091573859]
-metadata/map_meta = "{\"map_id\":\"duel\",\"size_w\":62,\"size_d\":46,\"walls_aabb\":[[-32,-23.6,32,-22.4],[-32,22.4,32,23.6],[-31.6,-24,-30.4,24],[30.4,-24,31.6,24],[-9.6,-8,-8.4,12],[8.4,-8,9.6,12],[-24.5,-2.6,-15.5,-1.4],[15.5,-2.6,24.5,-1.4],[-3.5,-14.6,3.5,-13.4],[-30,-14.6,-20,-13.4],[20,-14.6,30,-13.4],[-14.6,4,-13.4,12],[13.4,4,14.6,12]],\"site_a\":[-19,-9],\"site_b\":[19,-9]}"
+[node name="Map_duel" type="Node3D" unique_id=73747336]
+metadata/map_meta = "{\"map_id\":\"duel\",\"size_w\":62,\"size_d\":46,\"walls_aabb\":[[-32,-23.6,32,-22.4],[-32,22.4,32,23.6],[-31.6,-24,-30.4,24],[30.4,-24,31.6,24],[-9.6,-8,-8.4,12],[8.4,-8,9.6,12],[-24.5,-2.6,-15.5,-1.4],[15.5,-2.6,24.5,-1.4],[-3.5,-14.6,3.5,-13.4],[-30,-14.6,-20,-13.4],[20,-14.6,30,-13.4],[-14.6,4,-13.4,12],[13.4,4,14.6,12]],\"solids_aabb\":[[-32,-23.6,32,-22.4,5],[-32,22.4,32,23.6,5],[-31.6,-24,-30.4,24,5],[30.4,-24,31.6,24,5],[-9.6,-8,-8.4,12,3.6],[8.4,-8,9.6,12,3.6],[-24.5,-2.6,-15.5,-1.4,3.6],[15.5,-2.6,24.5,-1.4,3.6],[-3.5,-14.6,3.5,-13.4,3.6],[-30,-14.6,-20,-13.4,3.6],[20,-14.6,30,-13.4,3.6],[-14.6,4,-13.4,12,3.6],[13.4,4,14.6,12,3.6],[-21.1,-9.1,-18.9,-6.9,0.9],[-17.1,-12.1,-14.9,-9.9,0.9],[-19.3,-10.3,-17.7,-8.7,1.9],[-24,-6,-22,-4,1.9],[-14,-8,-12,-6,0.9],[18.9,-9.1,21.1,-6.9,0.9],[14.9,-12.1,17.1,-9.9,0.9],[17.7,-10.3,19.3,-8.7,1.9],[22,-6,24,-4,1.9],[12,-8,14,-6,0.9],[-1.5,0.5,1.5,3.5,1.2],[-0.8,1.2,0.8,2.8,2.4],[-5,-5,-3,-3,0.9],[3,6,5,8,0.9],[-14.2,10.8,-11.8,13.2,2.6],[11.8,10.8,14.2,13.2,2.6],[-27.2,4.8,-24.8,7.2,2.6],[24.8,4.8,27.2,7.2,2.6],[-8,-18,-6,-16,0.9],[6,-18,8,-16,0.9],[-14,13.5,-12,15.5,1.3],[12,13.5,14,15.5,1.3]],\"site_a\":[-19,-9],\"site_b\":[19,-9]}"
 
-[node name="Env" type="WorldEnvironment" parent="." unique_id=555110248]
+[node name="Env" type="WorldEnvironment" parent="." unique_id=202255892]
 environment = SubResource("env")
 
-[node name="Sun" type="DirectionalLight3D" parent="." unique_id=345574532]
+[node name="Sun" type="DirectionalLight3D" parent="." unique_id=1319279712]
 transform = Transform3D(0.866025, -0.353553, 0.353553, 0, 0.707107, 0.707107, -0.5, -0.612372, 0.612372, 0, 14, 0)
 shadow_enabled = true
 
-[node name="Geometry" type="Node3D" parent="." unique_id=614376801]
+[node name="Geometry" type="Node3D" parent="." unique_id=1783030964]
 
-[node name="Floor" type="StaticBody3D" parent="Geometry" unique_id=974226615 groups=["map_solid"]]
+[node name="Floor" type="StaticBody3D" parent="Geometry" unique_id=374351863 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, -0.5, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Floor" unique_id=1103745493]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Floor" unique_id=312706001]
 mesh = SubResource("mesh0")
 surface_material_override/0 = SubResource("floormat")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Floor" unique_id=1962763998]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Floor" unique_id=1863743757]
 shape = SubResource("shape1")
 
-[node name="Wall0" type="StaticBody3D" parent="Geometry" unique_id=86823370 groups=["map_solid"]]
+[node name="Wall0" type="StaticBody3D" parent="Geometry" unique_id=1045726424 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, -23)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall0" unique_id=1241297816]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall0" unique_id=1998865436]
 mesh = SubResource("mesh2")
 surface_material_override/0 = SubResource("mat4")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall0" unique_id=1747582888]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall0" unique_id=1284123257]
 shape = SubResource("shape3")
 
-[node name="Wall1" type="StaticBody3D" parent="Geometry" unique_id=206632937 groups=["map_solid"]]
+[node name="Wall1" type="StaticBody3D" parent="Geometry" unique_id=1170117761 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.5, 23)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall1" unique_id=1561132074]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall1" unique_id=2051584675]
 mesh = SubResource("mesh5")
 surface_material_override/0 = SubResource("mat4")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall1" unique_id=802068031]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall1" unique_id=1276969099]
 shape = SubResource("shape6")
 
-[node name="Wall2" type="StaticBody3D" parent="Geometry" unique_id=1940804872 groups=["map_solid"]]
+[node name="Wall2" type="StaticBody3D" parent="Geometry" unique_id=2069002830 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -31, 2.5, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall2" unique_id=1084110960]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall2" unique_id=421424538]
 mesh = SubResource("mesh7")
 surface_material_override/0 = SubResource("mat4")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall2" unique_id=1585752006]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall2" unique_id=1608252240]
 shape = SubResource("shape8")
 
-[node name="Wall3" type="StaticBody3D" parent="Geometry" unique_id=2021739227 groups=["map_solid"]]
+[node name="Wall3" type="StaticBody3D" parent="Geometry" unique_id=309187299 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 31, 2.5, 0)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall3" unique_id=652258064]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall3" unique_id=865932026]
 mesh = SubResource("mesh9")
 surface_material_override/0 = SubResource("mat4")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall3" unique_id=355331981]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall3" unique_id=246768006]
 shape = SubResource("shape10")
 
-[node name="Wall4" type="StaticBody3D" parent="Geometry" unique_id=201057698 groups=["map_solid"]]
+[node name="Wall4" type="StaticBody3D" parent="Geometry" unique_id=1912065814 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -9, 1.8, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall4" unique_id=1056588044]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall4" unique_id=1999609544]
 mesh = SubResource("mesh11")
 surface_material_override/0 = SubResource("mat13")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall4" unique_id=1412905419]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall4" unique_id=617346950]
 shape = SubResource("shape12")
 
-[node name="Wall5" type="StaticBody3D" parent="Geometry" unique_id=1068770779 groups=["map_solid"]]
+[node name="Wall5" type="StaticBody3D" parent="Geometry" unique_id=1572775821 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 9, 1.8, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall5" unique_id=343504795]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall5" unique_id=170727126]
 mesh = SubResource("mesh14")
 surface_material_override/0 = SubResource("mat13")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall5" unique_id=774695042]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall5" unique_id=597709449]
 shape = SubResource("shape15")
 
-[node name="Wall6" type="StaticBody3D" parent="Geometry" unique_id=1421051583 groups=["map_solid"]]
+[node name="Wall6" type="StaticBody3D" parent="Geometry" unique_id=1767108609 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 1.8, -2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall6" unique_id=1983528244]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall6" unique_id=371790887]
 mesh = SubResource("mesh16")
 surface_material_override/0 = SubResource("mat18")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall6" unique_id=1686267057]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall6" unique_id=878951023]
 shape = SubResource("shape17")
 
-[node name="Wall7" type="StaticBody3D" parent="Geometry" unique_id=2009177108 groups=["map_solid"]]
+[node name="Wall7" type="StaticBody3D" parent="Geometry" unique_id=566676221 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 1.8, -2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall7" unique_id=877789258]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall7" unique_id=1060840713]
 mesh = SubResource("mesh19")
 surface_material_override/0 = SubResource("mat18")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall7" unique_id=1475316301]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall7" unique_id=1993491955]
 shape = SubResource("shape20")
 
-[node name="Wall8" type="StaticBody3D" parent="Geometry" unique_id=1047088683 groups=["map_solid"]]
+[node name="Wall8" type="StaticBody3D" parent="Geometry" unique_id=871934629 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, -14)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall8" unique_id=1556511201]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall8" unique_id=586466737]
 mesh = SubResource("mesh21")
 surface_material_override/0 = SubResource("mat18")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall8" unique_id=814410286]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall8" unique_id=1919862018]
 shape = SubResource("shape22")
 
-[node name="Wall9" type="StaticBody3D" parent="Geometry" unique_id=2128820241 groups=["map_solid"]]
+[node name="Wall9" type="StaticBody3D" parent="Geometry" unique_id=91392709 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -25, 1.8, -14)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall9" unique_id=1313466013]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall9" unique_id=756573290]
 mesh = SubResource("mesh23")
 surface_material_override/0 = SubResource("mat25")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall9" unique_id=835292545]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall9" unique_id=543514665]
 shape = SubResource("shape24")
 
-[node name="Wall10" type="StaticBody3D" parent="Geometry" unique_id=1685468680 groups=["map_solid"]]
+[node name="Wall10" type="StaticBody3D" parent="Geometry" unique_id=492636581 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 25, 1.8, -14)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall10" unique_id=929860565]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall10" unique_id=1135007474]
 mesh = SubResource("mesh26")
 surface_material_override/0 = SubResource("mat25")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall10" unique_id=951193536]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall10" unique_id=1759449041]
 shape = SubResource("shape27")
 
-[node name="Wall11" type="StaticBody3D" parent="Geometry" unique_id=2092429826 groups=["map_solid"]]
+[node name="Wall11" type="StaticBody3D" parent="Geometry" unique_id=1107875862 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -14, 1.8, 8)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall11" unique_id=801888239]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall11" unique_id=301483486]
 mesh = SubResource("mesh28")
 surface_material_override/0 = SubResource("mat13")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall11" unique_id=2086444921]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall11" unique_id=336323702]
 shape = SubResource("shape29")
 
-[node name="Wall12" type="StaticBody3D" parent="Geometry" unique_id=1380664693 groups=["map_solid"]]
+[node name="Wall12" type="StaticBody3D" parent="Geometry" unique_id=1537078251 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 14, 1.8, 8)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall12" unique_id=1276670449]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Wall12" unique_id=2115388017]
 mesh = SubResource("mesh30")
 surface_material_override/0 = SubResource("mat13")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Wall12" unique_id=820072073]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Wall12" unique_id=272793240]
 shape = SubResource("shape31")
 
-[node name="Crate0" type="StaticBody3D" parent="Geometry" unique_id=712376589 groups=["map_solid"]]
+[node name="Crate0" type="StaticBody3D" parent="Geometry" unique_id=560764366 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -20, 0.45, -8)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate0" unique_id=1564265]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate0" unique_id=146031852]
 mesh = SubResource("mesh32")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate0" unique_id=790017201]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate0" unique_id=1675678191]
 shape = SubResource("shape33")
 
-[node name="Crate1" type="StaticBody3D" parent="Geometry" unique_id=1914724177 groups=["map_solid"]]
+[node name="Crate1" type="StaticBody3D" parent="Geometry" unique_id=1081717749 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -16, 0.45, -11)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate1" unique_id=280660342]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate1" unique_id=273009208]
 mesh = SubResource("mesh35")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate1" unique_id=82651470]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate1" unique_id=573734224]
 shape = SubResource("shape36")
 
-[node name="Crate2" type="StaticBody3D" parent="Geometry" unique_id=2000620215 groups=["map_solid"]]
+[node name="Crate2" type="StaticBody3D" parent="Geometry" unique_id=1004132143 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -18.5, 0.95, -9.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate2" unique_id=1720354140]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate2" unique_id=287718421]
 mesh = SubResource("mesh37")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate2" unique_id=1260039338]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate2" unique_id=1824671874]
 shape = SubResource("shape38")
 
-[node name="Crate3" type="StaticBody3D" parent="Geometry" unique_id=374754463 groups=["map_solid"]]
+[node name="Crate3" type="StaticBody3D" parent="Geometry" unique_id=1871556952 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -23, 0.95, -5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate3" unique_id=1037898371]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate3" unique_id=281923834]
 mesh = SubResource("mesh40")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate3" unique_id=1056026251]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate3" unique_id=93255467]
 shape = SubResource("shape41")
 
-[node name="Crate4" type="StaticBody3D" parent="Geometry" unique_id=388920570 groups=["map_solid"]]
+[node name="Crate4" type="StaticBody3D" parent="Geometry" unique_id=360718792 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0.45, -7)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate4" unique_id=842694830]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate4" unique_id=983765518]
 mesh = SubResource("mesh42")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate4" unique_id=986361960]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate4" unique_id=1595071369]
 shape = SubResource("shape43")
 
-[node name="Crate5" type="StaticBody3D" parent="Geometry" unique_id=683680836 groups=["map_solid"]]
+[node name="Crate5" type="StaticBody3D" parent="Geometry" unique_id=1942687977 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 20, 0.45, -8)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate5" unique_id=126540617]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate5" unique_id=1673382284]
 mesh = SubResource("mesh44")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate5" unique_id=997266748]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate5" unique_id=381924889]
 shape = SubResource("shape45")
 
-[node name="Crate6" type="StaticBody3D" parent="Geometry" unique_id=608975831 groups=["map_solid"]]
+[node name="Crate6" type="StaticBody3D" parent="Geometry" unique_id=1097227151 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 16, 0.45, -11)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate6" unique_id=579992049]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate6" unique_id=1741036171]
 mesh = SubResource("mesh46")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate6" unique_id=493412498]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate6" unique_id=1903983001]
 shape = SubResource("shape47")
 
-[node name="Crate7" type="StaticBody3D" parent="Geometry" unique_id=1327914769 groups=["map_solid"]]
+[node name="Crate7" type="StaticBody3D" parent="Geometry" unique_id=873501536 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 18.5, 0.95, -9.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate7" unique_id=920304440]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate7" unique_id=98085338]
 mesh = SubResource("mesh48")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate7" unique_id=880295903]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate7" unique_id=966231447]
 shape = SubResource("shape49")
 
-[node name="Crate8" type="StaticBody3D" parent="Geometry" unique_id=1608640653 groups=["map_solid"]]
+[node name="Crate8" type="StaticBody3D" parent="Geometry" unique_id=651059143 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 23, 0.95, -5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate8" unique_id=290724670]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate8" unique_id=1717120649]
 mesh = SubResource("mesh50")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate8" unique_id=1778101431]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate8" unique_id=953330563]
 shape = SubResource("shape51")
 
-[node name="Crate9" type="StaticBody3D" parent="Geometry" unique_id=1439132755 groups=["map_solid"]]
+[node name="Crate9" type="StaticBody3D" parent="Geometry" unique_id=494154492 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0.45, -7)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate9" unique_id=1845324310]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate9" unique_id=47578931]
 mesh = SubResource("mesh52")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate9" unique_id=68160524]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate9" unique_id=2140749203]
 shape = SubResource("shape53")
 
-[node name="Crate10" type="StaticBody3D" parent="Geometry" unique_id=370090326 groups=["map_solid"]]
+[node name="Crate10" type="StaticBody3D" parent="Geometry" unique_id=925985136 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.6, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate10" unique_id=1048954320]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate10" unique_id=358902162]
 mesh = SubResource("mesh54")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate10" unique_id=755317261]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate10" unique_id=552212603]
 shape = SubResource("shape55")
 
-[node name="Crate11" type="StaticBody3D" parent="Geometry" unique_id=241563770 groups=["map_solid"]]
+[node name="Crate11" type="StaticBody3D" parent="Geometry" unique_id=1227889893 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.2, 2)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate11" unique_id=2132470381]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate11" unique_id=455620888]
 mesh = SubResource("mesh56")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate11" unique_id=305391460]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate11" unique_id=1017650769]
 shape = SubResource("shape57")
 
-[node name="Crate12" type="StaticBody3D" parent="Geometry" unique_id=1002717829 groups=["map_solid"]]
+[node name="Crate12" type="StaticBody3D" parent="Geometry" unique_id=1772857256 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0.45, -4)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate12" unique_id=871632260]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate12" unique_id=529971432]
 mesh = SubResource("mesh58")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate12" unique_id=1924313972]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate12" unique_id=984829703]
 shape = SubResource("shape59")
 
-[node name="Crate13" type="StaticBody3D" parent="Geometry" unique_id=391172911 groups=["map_solid"]]
+[node name="Crate13" type="StaticBody3D" parent="Geometry" unique_id=369752182 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0.45, 7)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate13" unique_id=1988372451]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate13" unique_id=2104572783]
 mesh = SubResource("mesh60")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate13" unique_id=525720048]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate13" unique_id=569109022]
 shape = SubResource("shape61")
 
-[node name="Crate14" type="StaticBody3D" parent="Geometry" unique_id=760612827 groups=["map_solid"]]
+[node name="Crate14" type="StaticBody3D" parent="Geometry" unique_id=1721755592 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 1.3, 12)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate14" unique_id=1930739110]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate14" unique_id=996696983]
 mesh = SubResource("mesh62")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate14" unique_id=1998829483]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate14" unique_id=140455743]
 shape = SubResource("shape63")
 
-[node name="Crate15" type="StaticBody3D" parent="Geometry" unique_id=1780896634 groups=["map_solid"]]
+[node name="Crate15" type="StaticBody3D" parent="Geometry" unique_id=223246295 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 1.3, 12)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate15" unique_id=685429428]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate15" unique_id=1055240939]
 mesh = SubResource("mesh64")
 surface_material_override/0 = SubResource("mat39")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate15" unique_id=585430902]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate15" unique_id=226957324]
 shape = SubResource("shape65")
 
-[node name="Crate16" type="StaticBody3D" parent="Geometry" unique_id=2009168210 groups=["map_solid"]]
+[node name="Crate16" type="StaticBody3D" parent="Geometry" unique_id=1041588708 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -26, 1.3, 6)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate16" unique_id=1754197400]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate16" unique_id=1124750925]
 mesh = SubResource("mesh66")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate16" unique_id=847451595]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate16" unique_id=1040386603]
 shape = SubResource("shape67")
 
-[node name="Crate17" type="StaticBody3D" parent="Geometry" unique_id=1030436968 groups=["map_solid"]]
+[node name="Crate17" type="StaticBody3D" parent="Geometry" unique_id=1964539550 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 26, 1.3, 6)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate17" unique_id=559083148]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate17" unique_id=1556680114]
 mesh = SubResource("mesh68")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate17" unique_id=1953139895]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate17" unique_id=2132458941]
 shape = SubResource("shape69")
 
-[node name="Crate18" type="StaticBody3D" parent="Geometry" unique_id=2134436506 groups=["map_solid"]]
+[node name="Crate18" type="StaticBody3D" parent="Geometry" unique_id=858163325 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -7, 0.45, -17)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate18" unique_id=785369726]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate18" unique_id=1905665814]
 mesh = SubResource("mesh70")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate18" unique_id=1972913694]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate18" unique_id=1032003671]
 shape = SubResource("shape71")
 
-[node name="Crate19" type="StaticBody3D" parent="Geometry" unique_id=36970226 groups=["map_solid"]]
+[node name="Crate19" type="StaticBody3D" parent="Geometry" unique_id=1084531710 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 7, 0.45, -17)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate19" unique_id=1070349209]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate19" unique_id=546528672]
 mesh = SubResource("mesh72")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate19" unique_id=1101021101]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate19" unique_id=1093451907]
 shape = SubResource("shape73")
 
-[node name="Crate20" type="StaticBody3D" parent="Geometry" unique_id=2074975418 groups=["map_solid"]]
+[node name="Crate20" type="StaticBody3D" parent="Geometry" unique_id=1679533068 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -13, 0.65, 14.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate20" unique_id=1821434794]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate20" unique_id=361452591]
 mesh = SubResource("mesh74")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate20" unique_id=1940490450]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate20" unique_id=1892637068]
 shape = SubResource("shape75")
 
-[node name="Crate21" type="StaticBody3D" parent="Geometry" unique_id=1352494317 groups=["map_solid"]]
+[node name="Crate21" type="StaticBody3D" parent="Geometry" unique_id=624806048 groups=["map_solid"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 13, 0.65, 14.5)
 
-[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate21" unique_id=839438930]
+[node name="Mesh" type="MeshInstance3D" parent="Geometry/Crate21" unique_id=388081666]
 mesh = SubResource("mesh76")
 surface_material_override/0 = SubResource("mat34")
 
-[node name="Col" type="CollisionShape3D" parent="Geometry/Crate21" unique_id=1336530505]
+[node name="Col" type="CollisionShape3D" parent="Geometry/Crate21" unique_id=1208708531]
 shape = SubResource("shape77")
 
-[node name="Spawns" type="Node3D" parent="." unique_id=244201356]
+[node name="Spawns" type="Node3D" parent="." unique_id=678671055]
 
-[node name="Spawn_attack_0" type="Marker3D" parent="Spawns" unique_id=1004448078 groups=["spawn_attack"]]
+[node name="Spawn_attack_0" type="Marker3D" parent="Spawns" unique_id=580464916 groups=["spawn_attack"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 19.5)
 
-[node name="Spawn_attack_1" type="Marker3D" parent="Spawns" unique_id=1311540899 groups=["spawn_attack"]]
+[node name="Spawn_attack_1" type="Marker3D" parent="Spawns" unique_id=217722170 groups=["spawn_attack"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, 20)
 
-[node name="Spawn_attack_2" type="Marker3D" parent="Spawns" unique_id=491127270 groups=["spawn_attack"]]
+[node name="Spawn_attack_2" type="Marker3D" parent="Spawns" unique_id=1393438078 groups=["spawn_attack"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, 20)
 
-[node name="Spawn_attack_3" type="Marker3D" parent="Spawns" unique_id=288437516 groups=["spawn_attack"]]
+[node name="Spawn_attack_3" type="Marker3D" parent="Spawns" unique_id=1254566968 groups=["spawn_attack"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, 20.5)
 
-[node name="Spawn_attack_4" type="Marker3D" parent="Spawns" unique_id=1771888285 groups=["spawn_attack"]]
+[node name="Spawn_attack_4" type="Marker3D" parent="Spawns" unique_id=369287657 groups=["spawn_attack"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, 20.5)
 
-[node name="Spawn_defend_0" type="Marker3D" parent="Spawns" unique_id=456073527 groups=["spawn_defend"]]
+[node name="Spawn_defend_0" type="Marker3D" parent="Spawns" unique_id=1400332409 groups=["spawn_defend"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -19.5)
 
-[node name="Spawn_defend_1" type="Marker3D" parent="Spawns" unique_id=706295067 groups=["spawn_defend"]]
+[node name="Spawn_defend_1" type="Marker3D" parent="Spawns" unique_id=1910715647 groups=["spawn_defend"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -4, 0, -20)
 
-[node name="Spawn_defend_2" type="Marker3D" parent="Spawns" unique_id=116618234 groups=["spawn_defend"]]
+[node name="Spawn_defend_2" type="Marker3D" parent="Spawns" unique_id=342561107 groups=["spawn_defend"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 4, 0, -20)
 
-[node name="Spawn_defend_3" type="Marker3D" parent="Spawns" unique_id=1111813088 groups=["spawn_defend"]]
+[node name="Spawn_defend_3" type="Marker3D" parent="Spawns" unique_id=1361955340 groups=["spawn_defend"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -8, 0, -20.5)
 
-[node name="Spawn_defend_4" type="Marker3D" parent="Spawns" unique_id=199171889 groups=["spawn_defend"]]
+[node name="Spawn_defend_4" type="Marker3D" parent="Spawns" unique_id=525022876 groups=["spawn_defend"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8, 0, -20.5)
 
-[node name="Sites" type="Node3D" parent="." unique_id=1493393590]
+[node name="Sites" type="Node3D" parent="." unique_id=193177906]
 
-[node name="SiteA" type="Area3D" parent="Sites" unique_id=933765171 groups=["site"]]
+[node name="SiteA" type="Area3D" parent="Sites" unique_id=857659175 groups=["site"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, -19, 2, -9)
 
-[node name="Col" type="CollisionShape3D" parent="Sites/SiteA" unique_id=46703954]
+[node name="Col" type="CollisionShape3D" parent="Sites/SiteA" unique_id=2001060082]
 shape = SubResource("siteshape78")
 
-[node name="SiteB" type="Area3D" parent="Sites" unique_id=1239461729 groups=["site"]]
+[node name="SiteB" type="Area3D" parent="Sites" unique_id=1466017481 groups=["site"]]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 19, 2, -9)
 
-[node name="Col" type="CollisionShape3D" parent="Sites/SiteB" unique_id=2070524322]
+[node name="Col" type="CollisionShape3D" parent="Sites/SiteB" unique_id=111191015]
 shape = SubResource("siteshape79")
 
-[node name="Nav" type="NavigationRegion3D" parent="." unique_id=483408817]
+[node name="Nav" type="NavigationRegion3D" parent="." unique_id=649217177]
 navigation_mesh = ExtResource("1_wk7bh")

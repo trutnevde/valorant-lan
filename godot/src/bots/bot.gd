@@ -52,6 +52,7 @@ var heard_pos := Vector3.INF
 var heard_until := -99.0
 var _ai_acc := 0.0
 var _stuck_t := 0.0
+
 var _last_pos := Vector3.ZERO
 var _spawn_pos := Vector3.ZERO
 
@@ -160,7 +161,7 @@ func _think() -> void:
 	if mt and _objective(mt, t):
 		return
 	if heard_until > t and heard_pos != Vector3.INF:
-		agent.target_position = heard_pos
+		_go(heard_pos)
 	elif agent.is_navigation_finished():
 		_pick_patrol_point()
 
@@ -187,7 +188,7 @@ func _objective(mt: Match, _t: float) -> bool:
 					agent.target_position = global_position  # стоим — путь чистим (watchdog молчит)
 					mt.try_plant(self, true, true, AI_TICK)
 					return true
-				agent.target_position = site_pos
+				_go(site_pos)
 				return true
 			elif carrier != null and is_instance_valid(carrier) and int(carrier.get("hp")) > 0:
 				# эскорт: СТАБИЛЬНАЯ точка у сайта (рандом каждый тик дёргал навигацию → стаки)
@@ -195,7 +196,7 @@ func _objective(mt: Match, _t: float) -> bool:
 					var ang0 := rng.randf() * TAU
 					_hold_spot = _snap_nav(_site_pos(meta, _my_site(mt)) + Vector3(cos(ang0) * 3.0, 0, sin(ang0) * 3.0))
 				if Vector2(global_position.x - _hold_spot.x, global_position.z - _hold_spot.z).length() > 1.2:
-					agent.target_position = _hold_spot
+					_go(_hold_spot)
 				else:
 					agent.target_position = global_position
 					rotation.y += 0.03
@@ -209,7 +210,7 @@ func _objective(mt: Match, _t: float) -> bool:
 				var ang := rng.randf() * TAU
 				_hold_spot = _snap_nav(base + Vector3(cos(ang) * 3.5, 0, sin(ang) * 3.5))
 			if Vector2(global_position.x - _hold_spot.x, global_position.z - _hold_spot.z).length() > 1.2:
-				agent.target_position = _hold_spot
+				_go(_hold_spot)
 			else:
 				agent.target_position = global_position  # на месте — путь чистим
 				rotation.y += 0.03  # держим позицию, сканируем
@@ -224,7 +225,7 @@ func _objective(mt: Match, _t: float) -> bool:
 				_guard_ang = rng.randf() * TAU
 			var guard := _snap_nav(spike + Vector3(cos(_guard_ang) * 4.0, 0, sin(_guard_ang) * 4.0))
 			if Vector2(global_position.x - guard.x, global_position.z - guard.z).length() > 1.2:
-				agent.target_position = guard
+				_go(guard)
 			else:
 				agent.target_position = global_position
 				rotation.y += 0.03
@@ -239,7 +240,7 @@ func _objective(mt: Match, _t: float) -> bool:
 				agent.target_position = global_position
 				mt.try_defuse(self, true, AI_TICK)
 				return true
-			agent.target_position = dspot
+			_go(dspot)
 			return true
 	return false
 
@@ -275,6 +276,24 @@ func _site_pos(meta: Dictionary, site: String) -> Vector3:
 # снап точки к навмешу: спот никогда не окажется в ящике/стене (NavigationServer, не самопал)
 func _snap_nav(p: Vector3) -> Vector3:
 	return NavigationServer3D.map_get_closest_point(agent.get_navigation_map(), p)
+
+
+# ЕДИНСТВЕННАЯ точка назначения цели. Цель вне навмеша => путь пустой => движок отдаёт
+# мусорную next-точку (ближайшую к началу координат — часто крыша центрального блока),
+# и бот упирается в стену. Поэтому снапим ВСЁ, что назначаем.
+func _go(p: Vector3) -> void:
+	var snapped := _snap_nav(p)
+	# Снап ищет ближайшую точку в 3D: для точки НАД сплошным блоком ближайшей окажется его
+	# КРЫША. Туда бот не залезет — он упрётся в стену на полном ходу. Цели с чужого яруса
+	# отвергаем и берём запасную рядом с собой. (Верхние площадки для ботов — задел на потом.)
+	if absf(snapped.y - global_position.y) > 1.2:
+		for i in 4:
+			var alt := _snap_nav(global_position + Vector3(rng.randf_range(-9.0, 9.0), 0.0, rng.randf_range(-9.0, 9.0)))
+			if absf(alt.y - global_position.y) <= 1.2:
+				agent.target_position = alt
+				return
+		return   # не нашли — оставляем прежнюю цель, чем ехать в стену
+	agent.target_position = snapped
 
 
 # ===== скиллы по простым правилам (G7), кулдаун × abilityMul пресета =====
@@ -439,12 +458,24 @@ func _aim_and_shoot(t: float) -> void:
 
 func _move(dt: float) -> void:
 	var t := _now()
+	# ВОЗВРАТ НА НАВМЕШ. Навмеш эродирован на agent_radius (0.38+0.14 запаса), а тело —
+	# 0.38: у стен есть полоса, где бот стоять может, а навмеша нет. Из такой точки путь
+	# не строится, агент отдаёт мусорную next-точку, и бот упирается в стену насмерть.
+	var onmesh := _snap_nav(global_position)
+	var off := Vector2(onmesh.x - global_position.x, onmesh.z - global_position.z)
+	if off.length() > 0.12:
+		var back := off.normalized() * SPEED_CALM
+		velocity.x = back.x
+		velocity.z = back.y
+		velocity.y -= float(Balance.MOVE["GRAVITY"]) * dt
+		StepMove.slide(self)
+		return
 	var combat := t < engaging_until and target != null
 	if agent.is_navigation_finished():
 		velocity.x = move_toward(velocity.x, 0.0, 20.0 * dt)
 		velocity.z = move_toward(velocity.z, 0.0, 20.0 * dt)
 		velocity.y -= float(Balance.MOVE["GRAVITY"]) * dt
-		move_and_slide()
+		StepMove.slide(self)
 		return
 	var next := agent.get_next_path_position()
 	var dir := (next - global_position)
@@ -468,7 +499,7 @@ func _move(dt: float) -> void:
 func _on_safe_velocity(safe: Vector3) -> void:
 	velocity.x = safe.x
 	velocity.z = safe.z
-	move_and_slide()
+	StepMove.slide(self)   # бот переступает ступени так же, как игрок (иначе вязнет)
 	_bot_steps()
 
 
@@ -502,6 +533,14 @@ func _watchdog(dt: float) -> void:
 	if _stuck_t > 2.0:
 		_stuck_t = 0.0
 		stat_stuck_events += 1
+		if OS.get_environment("STUCKDBG") == "1":
+			var mtd := Match.find(get_tree())
+			var np := agent.get_next_path_position()
+			print("STUCKDBG char=%s pos=(%.1f,%.1f,y=%.2f) tgt=(%.1f,%.1f) next=(%.1f,%.1f,y=%.2f) floor=%s navfin=%s vel=%.2f phase=%s" % [
+				char_id, global_position.x, global_position.z, global_position.y,
+				agent.target_position.x, agent.target_position.z, np.x, np.z, np.y,
+				str(is_on_floor()), str(agent.is_navigation_finished()),
+				Vector2(velocity.x, velocity.z).length(), str(mtd.phase) if mtd else "-"])
 		_hold_spot = Vector3.INF  # спот был плохой (в ящике/за стеной) — выберем другой
 		_pick_patrol_point()
 
@@ -516,7 +555,7 @@ func _pick_patrol_point() -> void:
 		pts.append(Vector3(float(meta["site_a"][0]), 0, float(meta["site_a"][1])))
 		pts.append(Vector3(float(meta["site_b"][0]), 0, float(meta["site_b"][1])))
 	pts.append(Vector3(0, 0, 0))
-	agent.target_position = pts[rng.randi() % pts.size()]
+	_go(pts[rng.randi() % pts.size()])
 
 
 # ===== получение урона (тот же утиный интерфейс, что у мишени) =====
